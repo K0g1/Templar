@@ -1,0 +1,127 @@
+import type { NotePageOptions, TemplarSettings, TemplarTemplate } from '../types';
+
+export const DEFAULT_PAGE_OPTIONS: NotePageOptions = {
+  mode: 'pageless',
+  size: 'a4',
+  width: 794,
+  height: 1123,
+  gap: 32,
+  scaleToFit: true,
+};
+
+const serif = 'Georgia, "Times New Roman", serif';
+
+export const DEFAULT_TEMPLATE: TemplarTemplate = {
+  version: 1,
+  id: 'untitled-style',
+  name: 'Untitled style',
+  metadata: {
+    author: 'Templar user',
+    description: 'A custom Templar style.',
+    tags: [],
+  },
+  paper: {
+    color: '#fffdf7',
+    pattern: 'blank',
+    patternColor: '#c7d8e5',
+    majorPatternColor: '#9fb8ca',
+    marginLine: false,
+    marginColor: '#df8a8a',
+    marginOffset: 72,
+  },
+  baseline: {
+    enabled: true,
+    mode: 'balanced',
+    unit: 30,
+    snapImages: true,
+  },
+  typography: {
+    bodyFont: serif,
+    bodySize: 18,
+    bodyWeight: 400,
+    textColor: '#302e2b',
+    mutedColor: '#706c66',
+  },
+  headings: {
+    h1: {
+      font: serif,
+      size: 42,
+      weight: 700,
+      color: '#302e2b',
+      decoration: 'none',
+    },
+    h2: {
+      font: serif,
+      size: 31,
+      weight: 700,
+      color: '#393631',
+      decoration: 'none',
+    },
+    h3: {
+      font: serif,
+      size: 24,
+      weight: 700,
+      color: '#46413b',
+      decoration: 'none',
+    },
+    h4: {
+      font: serif,
+      size: 20,
+      weight: 700,
+      color: '#514b44',
+      decoration: 'none',
+    },
+  },
+  layout: {
+    maxWidth: 820,
+    paddingTop: 60,
+    paddingRight: 72,
+    paddingBottom: 120,
+    paddingLeft: 96,
+    pageRadius: 0,
+    pageShadow: 'none',
+  },
+  images: {
+    frame: 'none',
+    borderWidth: 0,
+    borderColor: '#ffffff',
+    bottomBorderWidth: 0,
+    cornerRadius: 0,
+    rotation: 0,
+    shadow: 'none',
+    maxWidth: 100,
+    topSpacing: 30,
+    bottomSpacing: 30,
+    opacity: 1,
+    sepia: 0,
+    grayscale: 0,
+    saturation: 1,
+    contrast: 1,
+  },
+  blocks: {
+    linkColor: '#315f86',
+    highlightBackground: 'rgba(246, 210, 74, 0.52)',
+    highlightTextColor: '#302e2b',
+    quoteAccent: '#9fb8ca',
+    quoteBackground: 'rgba(159, 184, 202, 0.12)',
+    quoteTextColor: '#302e2b',
+    codeBackground: 'rgba(48, 46, 43, 0.08)',
+    codeTextColor: '#302e2b',
+    codeFont: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    codeSize: 16,
+    tableBorder: 'rgba(48, 46, 43, 0.24)',
+    tableHeaderBackground: 'rgba(48, 46, 43, 0.07)',
+    checkboxAccent: '#507b5c',
+  },
+  css: '',
+};
+
+export const DEFAULT_SETTINGS: TemplarSettings = {
+  enableReadingView: true,
+  enableLivePreview: true,
+  hideStyleMetadata: true,
+  defaultTemplateId: 'classic-ruled',
+  defaultGridUnit: 30,
+  fontCacheSize: 64,
+  userTemplates: [],
+};

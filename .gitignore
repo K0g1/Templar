@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+*.log
+.DS_Store
+
+# main.js is required in a GitHub release and for local installation, but the
+# Obsidian review checklist recommends omitting generated bundles from source.
+main.js
+
+# Per-vault plugin settings and local user data.
+data.json
