@@ -120,15 +120,23 @@ The rhythm compiler never emits a fractional-grid block offset in a gridded mode
 
 Heading padding makes the heading baseline congruent with the body baseline modulo the grid and adds complementary padding so the total remains a grid multiple. Structured block colors also compile explicit background and foreground colors for Markdown highlights, covering Reading View's `mark` and Live Preview's highlight spans without inheriting theme defaults.
 
-Reading code blocks use the same complementary baseline-padding calculation as headings, but retain a configurable monospace font. `reading-whitespace.ts` inserts owned spacer elements for source blank lines that standard Markdown normally collapses. Obsidian's metadata-cache `SectionCache` is the authoritative map between top-level rendered blocks and exact source line ranges; the Markdown postprocessor supplies an incremental fast path. This also covers cached Reading Views for which Obsidian does not invoke postprocessors again. Reconciliation is deliberately deferred to the next animation frame: postprocessors can run before the Reading View section commit is complete, so inserting in a microtask would let that commit discard the spacers. Spacers are grid-sized, participate in pagination, and are removed during leaf cleanup.
+Reading code blocks use the same complementary baseline-padding calculation as headings, but retain a configurable monospace font. `reading-whitespace.ts` provides the pure helpers for source blank lines that standard Markdown normally collapses: `internalBlankLineRuns` counts runs inside a section while ignoring fenced-code bodies, `blankLinesBetweenSections` derives the inter-section gap from exact line ranges, and `createBlankLineSpacer` builds the owned grid-sized element. `PageRenderer` owns the reconciliation policy:
+
+- **Synchronous insertion inside the post-processor.** Obsidian's Reading View renders a section, runs post-processors, attaches the section to the sizer, measures its height, and paints — all within one task. Inserting spacers during the post-processor therefore puts them in the DOM before the first paint (no flash) and before the height measurement (the virtual scroller's stored heights always include the spacers, so its layout model never drifts).
+- **Spacers live inside section elements, never in the sizer.** Obsidian's virtual scroller owns the sizer's direct children: it calls `setChildrenInPlace` on every render pass and scroll and *removes* any child it does not list. A spacer that is the first child of the section below its gap is invisible to that bookkeeping, survives scrolling (detach/attach cycles travel with the section), and survives cached-view reuse.
+- **Fresh ranges from the renderer, not from stale registries.** `context.getSectionInfo(element)` resolves any element — attached or detached — against Obsidian's live section objects, which are updated at every parse. The Reading root stashes the last post-processor context so deferred passes get the same fresh lookups. The function returns the whole note text; `PageRenderer` slices the section's own line range for internal blank-line runs.
+- **One deferred pass remains.** Style changes and cached Reading Views do not re-run post-processors, so `refreshFile` schedules a single animation-frame reconcile for those paths. Because spacers are inside section elements, this pass cannot be wiped and does not flicker.
+
+Two residual behaviors follow from Obsidian's measurement model (heights are re-measured only when a section re-renders): a gap count that changes while both adjacent sections stay rendered (for example, adding a blank line without touching either section's content) converges on the next re-render of either section, and a section measured before such a change drifts by at most the gap delta until then. Spacers are grid-sized, participate in pagination, and are removed during leaf cleanup.
 
 ### PageRenderer
 
 - Enumerates current Markdown leaves rather than holding view instances.
 - Uses a per-leaf generation number to prevent an old async font measurement from overwriting a newer render.
 - Adds/removes classes and the owned style element.
-- configures image and page-layout observers;
+- Configures image and page-layout observers.
 - records validation issues per file for settings diagnostics.
+- Per Reading root, tracks the post-processor context and a source-ordered section list (including detached elements) that feeds the blank-line reconciliation; stale elements are pruned via `getSectionInfo` so discarded sections never join gap chains.
 
 ### Image compensation
 
@@ -149,15 +157,16 @@ It does not mutate the editor document. The raw style command edits a normalized
 `TemplateLibrary` combines immutable built-ins and settings-backed custom templates. Returned objects are deep clones to prevent accidental shared mutation.
 
 - Saving normalizes and validates.
-- Editing a built-in first duplicates it.
+- Editing a built-in first duplicates it; customizing always writes a new `-custom` id, which is what "reset to default" removes.
+- Favorites are a settings-level list of template IDs; `remove()` also prunes them.
 - IDs are stable, slugged, and uniquified.
 - Deleting a library entry does not touch notes because notes contain full copies.
 
 ## UI modules
 
-- `styles-view.ts`: sidebar library and active-note controls.
-- `settings-tab.ts`: global behavior, library/creator entry points, baseline diagnostics, authoring kit, selector reference.
-- `modals.ts`: selection, application, page mode, new note, creator, raw YAML, import, batch, and confirmation flows.
+- `styles-view.ts`: sidebar library organized into Favorites / Built-in styles / My custom styles pages with a tab header, plus active-note controls.
+- `settings-tab.ts`: global behavior, library/creator entry points, baseline diagnostics, authoring kit, selector reference, and the reset-all-settings flow.
+- `modals.ts`: selection, application, page mode, new note, creator (including reset-to-default for built-ins), raw YAML, import, batch, and confirmation flows.
 - `template-preview.ts`: isolated sample document that uses the production compiler.
 - `issues.ts`: consistent human-readable validation output.
 
@@ -177,7 +186,10 @@ Current settings:
 - default template ID;
 - default creator grid unit;
 - font cache capacity;
+- favorite template IDs;
 - custom templates.
+
+`loadSettings` merges defaults with persisted data and normalizes arrays, so new fields (such as favorites) migrate without a settings migration step. Resetting all settings mutates the settings object in place — the `TemplateLibrary` holds a reference to it — while preserving `userTemplates`.
 
 ## Adding a feature
 

@@ -13,6 +13,7 @@ Technical documentation for the Templar Obsidian plugin.
 - [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md) — the fixed-canvas invariant, whole-page scaling, page-break fitting, and mobile behavior for paged notes.
 - [`SECURITY.md`](SECURITY.md) — trust boundaries, CSS validation model, privacy, and denial-of-service considerations.
 - [`MAINTAINER_GUIDE.md`](MAINTAINER_GUIDE.md) — test layout, manual smoke tests, the mobile release gate, schema change recipe, and release steps.
+- [`releases/`](releases/) — versioned GitHub release notes, including validation status and known alpha limitations.
 
 ## Reading order
 

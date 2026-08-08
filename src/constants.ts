@@ -15,6 +15,8 @@ export const VIRTUAL_SELECTORS = [
   '.page h2',
   '.page h3',
   '.page h4',
+  '.page h5',
+  '.page h6',
   '.page p',
   '.page ul',
   '.page ol',

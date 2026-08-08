@@ -18,6 +18,15 @@ describe('safe CSS compiler', () => {
     expect(transformVirtualSelector('.page h4', scope)).toContain(
       ':is(h4, .HyperMD-header-4)',
     );
+    expect(transformVirtualSelector('.page h5', scope)).toContain(
+      ':is(h5, .HyperMD-header-5)',
+    );
+    expect(transformVirtualSelector('.page h6', scope)).toContain(
+      ':is(h6, .HyperMD-header-6)',
+    );
+    expect(transformVirtualSelector('.page h1, .page h6', scope)).toContain(
+      ':is(h6, .HyperMD-header-6)',
+    );
   });
 
   it('prefixes every ordinary selector with the note scope', () => {

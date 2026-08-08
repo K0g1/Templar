@@ -2,6 +2,26 @@
 
 All notable changes follow semantic versioning.
 
+## Unreleased
+
+## 1.1.0-alpha.1 — 2026-08-08
+
+- Added headings through H6 with per-level letter spacing and text transform, plus optional drop caps and first-line indents (reading view only for indents).
+- Added five paper patterns — ledger, cross-hatch, diagonal, hex, scallop — and per-pattern opacity, scale, dot radius, and major-grid interval controls.
+- Added a lists section: unordered marker style and color, indentation guides, and reading-view nested-list indentation.
+- Added divider styling (color, width, and solid/dashed/dotted/double/fade styles) for `---` rules.
+- Expanded table styling: border width, font size, text and header text colors, cell padding, and optional striped rows.
+- Added callout styling with accent, background, text, title, and icon colors, border width, corner radius, and per-type `callout-variants` overrides.
+- Added embed background, accent, and corner radius styling.
+- Added image float, object-fit, and duotone treatments.
+- Added an optional per-note watermark with text, color, size, rotation, and opacity.
+- Aligned Template Creator slider limits with schema limits (heading size 144, saturation/contrast 4, code size 48, page radius 80, margin offset 400).
+- Fixed the Reading View flash where blank-line spacing appeared a frame or two after switching views: spacers are now inserted synchronously inside the post-processor and live inside section elements, so Obsidian's virtual scroller can no longer discard them between render passes or while scrolling.
+- Sidebar library now has three pages — Favorites, Built-in styles, and My custom styles — switched with a tab row, with a ★ favorite toggle on every card.
+- Added **Reset to default** to the Customize dialog for built-in styles: restores the original definition and removes any saved customization from the library.
+- Added **Reset all settings** to the settings page: restores every option to its default value while keeping custom styles.
+- Published the first public alpha with release metadata, prerelease-aware automation, and synchronized user, schema, architecture, security, and maintainer documentation.
+
 ## 1.0.0 — 2026-08-08
 
 - Initial Templar v1 implementation.

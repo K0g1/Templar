@@ -6,8 +6,11 @@ Templar is an [Obsidian](https://obsidian.md) plugin that styles Markdown notes 
 
 Templar works on desktop and mobile. It makes no network requests, needs no account or API key, collects no telemetry, and never reads or writes outside the vault.
 
-[![Release](https://img.shields.io/github/v/release/K0g1/Templar?sort=semver&style=for-the-badge)](https://github.com/K0g1/Templar/releases)
+[![Release](https://img.shields.io/github/v/release/K0g1/Templar?include_prereleases&sort=semver&style=for-the-badge)](https://github.com/K0g1/Templar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+
+> [!IMPORTANT]
+> Templar is currently available as an alpha release for manual testing. Back up your vault and test it in a dedicated vault before relying on it for important notes. Physical iOS and Android release-gate testing is still pending.
 
 ## Features
 
@@ -17,6 +20,11 @@ Templar works on desktop and mobile. It makes no network requests, needs no acco
 - Fits headings to whole grid units and returns images to the next baseline.
 - Keeps intentional blank lines in Reading View and aligns lists and fenced code the same way in both views.
 - Every template sets its own background and foreground colors for `==highlighted text==`.
+- Nine paper patterns (ruled, ledger, dot grid, graph, cross-hatch, diagonal, hex, scallop, blank) with adjustable opacity, scale, dot radius, and major-grid interval.
+- Full heading stack through H6 with per-level letter spacing and text transform, plus optional drop caps and first-line indents.
+- Styles unordered list markers, indentation guides, horizontal dividers, tables (borders, stripes, typography), callouts (with per-type variants), and embedded notes.
+- Image frames, floats, object-fit, duotone, sepia/contrast, and baseline snapping.
+- Optional per-note watermark text with size, rotation, and opacity.
 - Pageless notes reflow like normal notes. Paged notes use a fixed A4, Letter, or custom canvas that scales as a whole on narrow panes and phones.
 - Comes with 28 built-in styles, from classic journals and botanical paper to blueprint grids, pastel study pages, and terminal dark modes.
 - Create a new styled note or apply a style to an existing note without touching its body.
@@ -31,12 +39,13 @@ Templar works on desktop and mobile. It makes no network requests, needs no acco
 Once Templar is listed in the Obsidian community plugins directory:
 
 1. Open **Settings → Community plugins** in Obsidian.
-2. Turn off **Safe mode**, browse to **Templar**, and install it.
-3. Enable the plugin.
+2. Select **Turn on community plugins** if Restricted Mode is enabled.
+3. Select **Browse**, search for **Templar**, and install it.
+4. Enable the plugin under **Installed plugins**.
 
 ### Manual installation
 
-1. Download the latest `main.js`, `manifest.json`, and `styles.css` from the [releases page](https://github.com/K0g1/Templar/releases).
+1. Download `main.js`, `manifest.json`, and `styles.css` from the desired entry on the [releases page](https://github.com/K0g1/Templar/releases). Prereleases are intended for testing.
 2. Create a folder named `templar` inside `<vault>/.obsidian/plugins/`.
 3. Place the three files in that folder.
 4. Reload Obsidian and enable **Templar** under Settings → Community plugins.
@@ -131,9 +140,13 @@ Applying another library template replaces only the `templar` property. Removing
 
 ## Template library behavior
 
-Built-in styles are immutable. **Customize** duplicates a built-in style before editing it. Custom styles can be edited, duplicated, exported, or deleted.
+The sidebar library is organized into three pages — **Favorites**, **Built-in styles**, and **My custom styles** — switched with the tab row at the top. The ★ button on any card adds or removes it from Favorites.
+
+Built-in styles are immutable. **Customize** duplicates a built-in style before editing it; **Reset to default** (in the Customize dialog) restores the built-in's original definition and removes any saved customization of it from your library. Custom styles can be edited, duplicated, exported, or deleted.
 
 Applying a style copies its entire normalized design into the note. A note therefore does not depend on the library entry continuing to exist. Deleting a library entry never changes notes that already use it.
+
+The settings page's **Reset all settings** restores every option to its default value while keeping your custom styles.
 
 Exports are written as `.templar` YAML files in `Templar Templates/`. The authoring kit can be copied or exported as `Templar Template Authoring Skill.md`.
 

@@ -46,4 +46,4 @@ The source repository may omit generated `main.js`, but every GitHub release and
 - `manifest.json`
 - `styles.css`
 
-Release tags exactly match the manifest version and do not use a `v` prefix.
+Release tags exactly match the manifest version and do not use a `v` prefix. Prerelease versions use SemVer suffixes such as `1.1.0-alpha.1`; their GitHub releases must be marked as prereleases. Each tag also needs a matching `docs/releases/<version>.md` release-notes file.

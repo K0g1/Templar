@@ -44,8 +44,12 @@ Pseudo-classes, pseudo-elements, attribute selectors, and descendant selectors m
 
 \`paper\`:
 - \`color\`: CSS color.
-- \`pattern\`: blank, ruled, dot-grid, or graph.
+- \`pattern\`: blank, ruled, ledger, dot-grid, graph, cross-hatch, diagonal, hex, or scallop.
 - \`pattern-color\` and \`major-pattern-color\`: CSS colors.
+- \`pattern-opacity\`: 0–1.
+- \`pattern-scale\`: 0.25–4 times the vertical rhythm.
+- \`dot-radius\`: 0.5–6 pixels (dot-grid only).
+- \`graph-major-interval\`: 2–10 cells per major line (graph only).
 - \`margin-line\`: boolean.
 - \`margin-color\`: CSS color.
 - \`margin-offset\`: 0–400 pixels.
@@ -60,15 +64,27 @@ Pseudo-classes, pseudo-elements, attribute selectors, and descendant selectors m
 - \`body-font\`: complete CSS font stack.
 - \`body-size\`: 8–72 pixels.
 - \`body-weight\`: 100–900.
+- \`body-line-height\`: 16–120 pixels, or 0 for automatic rhythm.
+- \`first-line-indent\`: 0–120 pixels (reading view only).
+- \`drop-cap\`: boolean; enlarges the first letter after a heading.
 - \`text-color\` and \`muted-color\`: CSS colors.
 
-\`headings.h1\`, \`h2\`, \`h3\`, and \`h4\` each use \`font\`, \`size\`, \`weight\`, \`color\`, and \`decoration\`. Decoration is none, underline, rule, or highlight.
+\`headings.h1\` through \`h6\` each use \`font\`, \`size\`, \`weight\`, \`color\`, and \`decoration\`. Decoration is none, underline, rule, or highlight. \`letter-spacing\` (0–10 pixels) and \`text-transform\` (none, uppercase, lowercase, capitalize) are optional per level.
+
+\`lists\`:
+- \`marker-style\`: disc, circle, square, or none (unordered lists).
+- \`marker-color\`: CSS color.
+- \`indent-guides\`: boolean.
+- \`indent-guide-color\`: CSS color.
+- \`nested-indent\`: 0–120 pixels (reading view only; 0 keeps Obsidian defaults).
 
 \`layout\`: \`max-width\`, four \`padding-*\` values, \`page-radius\`, and \`page-shadow\`.
 
-\`images\`: \`frame\` (none, thin, photo, polaroid, scrapbook, rounded, technical, dark, vintage), \`border-width\`, \`border-color\`, \`bottom-border-width\`, \`corner-radius\`, \`rotation\` (-15 to 15), \`shadow\`, \`max-width\` (10–100 percent), \`top-spacing\`, \`bottom-spacing\`, \`opacity\`, \`sepia\`, \`grayscale\`, \`saturation\`, and \`contrast\`.
+\`images\`: \`frame\` (none, thin, photo, polaroid, scrapbook, rounded, technical, dark, vintage), \`border-width\`, \`border-color\`, \`bottom-border-width\`, \`corner-radius\`, \`rotation\` (-15 to 15), \`shadow\`, \`max-width\` (10–100 percent), \`top-spacing\`, \`bottom-spacing\`, \`opacity\`, \`sepia\`, \`grayscale\`, \`saturation\`, and \`contrast\` (0–4). \`float\` (none, left, right), \`object-fit\` (contain, cover, fill, scale-down), and \`duotone\` (a hex color or \`none\`) are optional.
 
-\`blocks\`: link/highlight colors; quote accent, background, and text; code background, text, font, and size; table border and header background; and checkbox accent.
+\`blocks\`: link/highlight colors; quote accent, background, and text; code background, text, font, and size; table border, border width, font size, text colors, cell padding, striped rows, and stripe color; checkbox accent; divider color, width, and style (solid, dashed, dotted, double, fade); callout accent, background, text, title, and icon colors, border width, and corner radius; embed background, accent, and corner radius. \`callout-variants\` may add per-type overrides, e.g. \`warning: { accent: "#c77b3a" }\`.
+
+\`watermark\`: \`text\` (empty hides it), \`color\`, \`size\` (24–240), \`rotation\` (-45 to 45), and \`opacity\` (0.05–1).
 
 \`css\`: optional advanced CSS using only the virtual selector vocabulary.
 
@@ -88,6 +104,8 @@ templar-template:
     pattern: ruled
     pattern-color: "rgba(83, 119, 92, 0.24)"
     major-pattern-color: "rgba(83, 119, 92, 0.34)"
+    pattern-opacity: 1
+    pattern-scale: 1
     margin-line: true
     margin-color: "rgba(145, 91, 72, 0.48)"
     margin-offset: 74
@@ -100,6 +118,9 @@ templar-template:
     body-font: 'Georgia, "Times New Roman", serif'
     body-size: 17
     body-weight: 400
+    body-line-height: 0
+    first-line-indent: 0
+    drop-cap: false
     text-color: "#334137"
     muted-color: "#6d796d"
   headings:
@@ -107,6 +128,14 @@ templar-template:
     h2: { font: 'Georgia, serif', size: 30, weight: 700, color: "#43664d", decoration: none }
     h3: { font: 'Georgia, serif', size: 23, weight: 700, color: "#526f58", decoration: none }
     h4: { font: 'Georgia, serif', size: 19, weight: 700, color: "#5e7962", decoration: none }
+    h5: { font: 'Georgia, serif', size: 17, weight: 700, color: "#6a856e", decoration: none }
+    h6: { font: 'Georgia, serif', size: 15, weight: 700, color: "#75907a", decoration: none }
+  lists:
+    marker-style: disc
+    marker-color: "#556f5b"
+    indent-guides: true
+    indent-guide-color: "rgba(63, 87, 69, 0.22)"
+    nested-indent: 0
   layout:
     max-width: 820
     padding-top: 60
@@ -131,6 +160,9 @@ templar-template:
     grayscale: 0
     saturation: 0.92
     contrast: 1.04
+    float: none
+    object-fit: contain
+    duotone: none
   blocks:
     link-color: "#3e6b50"
     quote-accent: "#6f8d70"
@@ -141,10 +173,36 @@ templar-template:
     code-font: '"SFMono-Regular", Consolas, monospace'
     code-size: 15
     table-border: "rgba(63, 87, 69, 0.28)"
+    table-border-width: 1
+    table-font-size: 15
+    table-text-color: "#334137"
+    table-header-text-color: "#334137"
+    table-padding: 8
+    table-striped: false
+    table-stripe-color: "rgba(79, 112, 82, 0.05)"
     table-header-background: "rgba(79, 112, 82, 0.10)"
     checkbox-accent: "#4f7658"
+    divider-color: "rgba(63, 87, 69, 0.35)"
+    divider-width: 1
+    divider-style: solid
+    callout-accent: "#6f8d70"
+    callout-background: "rgba(79, 112, 82, 0.10)"
+    callout-text-color: "#334137"
+    callout-title-color: "#355b43"
+    callout-icon-color: "#6f8d70"
+    callout-border-width: 3
+    callout-radius: 8
+    embed-background: "rgba(49, 65, 54, 0.06)"
+    embed-accent: "#3e6b50"
+    embed-radius: 10
     highlight-background: "rgba(151, 191, 157, 0.42)"
     highlight-text-color: "#26352b"
+  watermark:
+    text: ""
+    color: "rgba(51, 65, 55, 0.10)"
+    size: 96
+    rotation: -30
+    opacity: 0.5
   css: |
     .page h1 {
       letter-spacing: -0.02em;

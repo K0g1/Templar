@@ -23,7 +23,7 @@ npm run check
 - `reading-whitespace.test.ts`: exact source-line gaps and fenced-code exclusion.
 - `schema.test.ts`: normalization, note/frontmatter round trips, built-in validity.
 - `css.test.ts`: virtual mapping, scope guarantees, keyframes, global/resource rejection, paged media-query rule.
-- `style-compiler.test.ts`: shared pattern origin, editor list normalization, measured Reading code padding, highlight palettes, injection containment, and fixed-page CSS.
+- `style-compiler.test.ts`: shared pattern origin, editor list normalization, measured Reading code padding, highlight palettes, injection containment, fixed-page CSS, extended headings, watermark/divider/table/list/callout declarations, duotone/float, and every pattern variant.
 
 Pure tests deliberately avoid importing Obsidian's Electron runtime. UI/runtime behavior needs an Obsidian smoke test.
 
@@ -56,11 +56,15 @@ console.log('code block');
 
 Check every built-in in Reading and Live Preview. Confirm ordinary source text and undo/redo remain unchanged.
 
-Add one, three, and five empty source lines between paragraphs; confirm Reading View preserves those exact counts. Test an already-styled note, applying a style while an unstyled note is open, and reloading the plugin while Reading View is already cached. These protect the metadata-cache fallback and post-render scheduling paths. Add a multi-line fenced code block with an internal blank line and confirm every code baseline follows the ruling without creating an external spacer.
+Add one, three, and five empty source lines between paragraphs; confirm Reading View preserves those exact counts. Test an already-styled note, applying a style while an unstyled note is open, and reloading the plugin while Reading View is already cached. These protect the section-registry and deferred-reconcile paths. Add a multi-line fenced code block with an internal blank line and confirm every code baseline follows the ruling without creating an external spacer.
+
+The blank-line spacers must appear on the very first frame, with no flash: switch a styled note between Reading View and Source/Live Preview repeatedly, and on first open, tab restore, and plugin reload. Scroll a long styled note to the bottom and back; spacer counts must persist (they are inside section elements, so the virtual scroller never discards them). Edit a paragraph's length, then add/remove a blank line between two paragraphs and confirm the spacing updates on save.
 
 For ruled, dot-grid, and graph templates, zoom in far enough to confirm that the ordinary glyph body sits immediately above the pattern anchor, the one-pixel rule extends downward, and descenders cross it naturally. Confirm consecutive bullets use the same line-height as ordinary text and that the block after a list still lands on the grid. Confirm each built-in supplies a readable highlight background and foreground in both views.
 
-Open the Template Creator's Simple, Detailed, and Advanced tabs. In Detailed mode exercise H2–H4 font controls, margin color/offset, code typography, table header color, image filters, and paged/pageless preview.
+Spot-check the extended features in both views: H5/H6 rendering, heading letter spacing/text transform and drop caps, list markers and indentation guides, divider styles, striped tables, callout variants (`!warning` etc.), image float/object-fit/duotone, and the watermark (confirm it sits behind the text and never intercepts pointer events). Verify the new patterns — ledger, cross-hatch, diagonal, hex, scallop — tile correctly at extreme `pattern-scale` values in pageless and paged modes.
+
+Open the Template Creator's Simple, Detailed, and Advanced tabs. In Detailed mode exercise H2–H6 font controls, pattern controls, margin color/offset, code typography, table/divider/callout/embed settings, lists, watermark, image float/object-fit/duotone, and paged/pageless preview.
 
 For paged mode, follow `docs/PAGED_LAYOUT.md`'s resize matrix. For per-note isolation, open at least three split leaves with different styles and modes.
 
@@ -126,11 +130,12 @@ When an Obsidian release changes DOM:
 ## Version and release
 
 1. Update `minAppVersion` only when API usage requires it.
-2. Run `npm version patch|minor|major`; the version script updates manifest and versions map.
-3. Update `CHANGELOG.md`.
-4. Run audit and check.
-5. Complete manual desktop/mobile verification.
-6. Create a GitHub release tagged exactly `x.y.z`.
-7. Attach production `main.js`, `manifest.json`, and `styles.css`.
+2. Run `npm version <exact-version> --no-git-tag-version`; the version script synchronizes `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`.
+3. Move the shipped entries from **Unreleased** to a dated changelog heading and add `docs/releases/<exact-version>.md`.
+4. Run `npm audit` and `npm run check`.
+5. Complete and record the manual desktop/mobile verification. A prerelease may ship with clearly documented manual gates still pending; a community-directory-ready stable release may not.
+6. Commit and push the release state.
+7. Create and push a tag that exactly matches `manifest.json`, without a `v` prefix (for example, `1.1.0` or `1.1.0-alpha.1`).
+8. Wait for the release workflow and verify that the GitHub release contains `main.js`, `manifest.json`, and `styles.css`.
 
-Tag the release with GitHub (`git tag 1.0.1` and push). The repository's release workflow builds the production bundle and attaches `main.js`, `manifest.json`, and `styles.css` automatically; before first community submission, verify those assets on the release.
+The release workflow uses `docs/releases/<tag>.md` as the release body and automatically marks any tag containing `-` as a GitHub prerelease. Never repoint or overwrite an existing release tag; increment the prerelease suffix instead.

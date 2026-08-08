@@ -8,6 +8,8 @@ Unknown fields are discarded during import. Missing fields receive defaults. Cur
 
 The highlight color pair was added compatibly within v1: older v1 styles that omit it receive the safe default pair, while every new export writes both fields.
 
+The 1.1 feature batch extends the same compatibility rule: h5/h6, heading letter spacing and text transform, the lists/watermark sections, the new paper patterns and pattern controls, image float/object-fit/duotone, and the expanded block palette are all optional v1 additions. Old styles import unchanged; new exports write the new fields explicitly.
+
 ## Template versus note data
 
 A reusable template does not contain `page`; the user chooses paged or pageless when creating/applying it. A note contains the full template copy plus:
@@ -41,6 +43,10 @@ templar-template:
     pattern: ruled
     pattern-color: "rgba(107, 155, 190, 0.43)"
     major-pattern-color: "rgba(79, 125, 160, 0.55)"
+    pattern-opacity: 1
+    pattern-scale: 1
+    dot-radius: 1
+    graph-major-interval: 5
     margin-line: true
     margin-color: "rgba(210, 92, 92, 0.62)"
     margin-offset: 72
@@ -53,6 +59,9 @@ templar-template:
     body-font: 'Georgia, "Times New Roman", serif'
     body-size: 18
     body-weight: 400
+    body-line-height: 0
+    first-line-indent: 0
+    drop-cap: false
     text-color: "#302e2b"
     muted-color: "#706c66"
   headings:
@@ -62,24 +71,54 @@ templar-template:
       weight: 700
       color: "#302e2b"
       decoration: none
+      letter-spacing: 0
+      text-transform: none
     h2:
       font: 'Georgia, "Times New Roman", serif'
       size: 31
       weight: 700
       color: "#393631"
       decoration: none
+      letter-spacing: 0
+      text-transform: none
     h3:
       font: 'Georgia, "Times New Roman", serif'
       size: 24
       weight: 700
       color: "#46413b"
       decoration: none
+      letter-spacing: 0
+      text-transform: none
     h4:
       font: 'Georgia, "Times New Roman", serif'
       size: 20
       weight: 700
       color: "#514b44"
       decoration: none
+      letter-spacing: 0
+      text-transform: none
+    h5:
+      font: 'Georgia, "Times New Roman", serif'
+      size: 17
+      weight: 700
+      color: "#5a534b"
+      decoration: none
+      letter-spacing: 0
+      text-transform: none
+    h6:
+      font: 'Georgia, "Times New Roman", serif'
+      size: 15
+      weight: 700
+      color: "#635c53"
+      decoration: none
+      letter-spacing: 0
+      text-transform: none
+  lists:
+    marker-style: disc
+    marker-color: "#706c66"
+    indent-guides: false
+    indent-guide-color: "rgba(48, 46, 43, 0.18)"
+    nested-indent: 0
   layout:
     max-width: 820
     padding-top: 60
@@ -104,6 +143,9 @@ templar-template:
     grayscale: 0
     saturation: 1
     contrast: 1
+    float: none
+    object-fit: contain
+    duotone: none
   blocks:
     link-color: "#315f86"
     quote-accent: "#9fb8ca"
@@ -114,10 +156,43 @@ templar-template:
     code-font: '"SFMono-Regular", Consolas, "Liberation Mono", monospace'
     code-size: 16
     table-border: "rgba(48, 46, 43, 0.24)"
+    table-border-width: 1
+    table-font-size: 15
+    table-text-color: "#302e2b"
+    table-header-text-color: "#302e2b"
+    table-padding: 8
+    table-striped: false
+    table-stripe-color: "rgba(48, 46, 43, 0.045)"
     table-header-background: "rgba(48, 46, 43, 0.07)"
     checkbox-accent: "#507b5c"
+    divider-color: "rgba(48, 46, 43, 0.35)"
+    divider-width: 1
+    divider-style: solid
+    callout-accent: "#9fb8ca"
+    callout-background: "rgba(159, 184, 202, 0.12)"
+    callout-text-color: "#302e2b"
+    callout-title-color: "#302e2b"
+    callout-icon-color: "#9fb8ca"
+    callout-border-width: 3
+    callout-radius: 8
+    callout-variants:
+      warning:
+        accent: "#c98b2e"
+        background: "rgba(201, 139, 46, 0.12)"
+        textColor: "#302e2b"
+        titleColor: "#7a4d12"
+        iconColor: "#c98b2e"
+    embed-background: "rgba(48, 46, 43, 0.06)"
+    embed-accent: "#9fb8ca"
+    embed-radius: 10
     highlight-background: "rgba(244, 210, 83, 0.48)"
     highlight-text-color: "#302e2b"
+  watermark:
+    text: ""
+    color: "rgba(48, 46, 43, 0.1)"
+    size: 96
+    rotation: -30
+    opacity: 0.5
   css: |
     .page h1 {
       letter-spacing: -0.025em;
@@ -130,22 +205,47 @@ templar-template:
 | --- | --- |
 | version | exactly `1` |
 | template-id | lowercase letters/digits and single hyphens |
-| paper.pattern | `blank`, `ruled`, `dot-grid`, `graph` |
+| paper.pattern | `blank`, `ruled`, `ledger`, `dot-grid`, `graph`, `cross-hatch`, `diagonal`, `hex`, `scallop` |
+| paper.pattern-opacity | 0–1 |
+| paper.pattern-scale | 0.25–4 |
+| paper.dot-radius | 0.5–6px |
+| paper.graph-major-interval | 2–10 cells |
 | baseline.mode | `strict`, `balanced`, `free` |
 | baseline.unit | 12–96px |
 | body-size | 8–72px |
+| body-line-height | 0 (automatic) or 16–120px |
+| first-line-indent | 0–120px (reading view only) |
+| drop-cap | boolean |
 | weights | 100–900 |
 | heading decoration | `none`, `underline`, `rule`, `highlight` |
+| heading text-transform | `none`, `uppercase`, `lowercase`, `capitalize` |
+| heading letter-spacing | 0–10px |
+| list marker-style | `disc`, `circle`, `square`, `none` (unordered lists) |
+| list nested-indent | 0–120px (reading view only) |
 | layout max-width | 320–2400px |
 | layout padding | 0–400px (bottom up to 600px) |
 | combined padding | leaves at least 240×240px on the minimum 480×640px custom page |
 | image frame | `none`, `thin`, `photo`, `polaroid`, `scrapbook`, `rounded`, `technical`, `dark`, `vintage` |
+| image float | `none`, `left`, `right` |
+| image object-fit | `contain`, `cover`, `fill`, `scale-down` |
+| image duotone | a hex color or `none` |
 | image rotation | -15–15 degrees |
 | image max-width | 10–100 percent |
 | opacity/sepia/grayscale | 0–1 |
 | saturation/contrast | 0–4 |
 | block colors | valid CSS colors, including both highlight background and highlighted text |
+| divider style | `solid`, `dashed`, `dotted`, `double`, `fade` |
+| divider width | 1–20px |
 | code size | 8–48px; baseline measured independently from body text |
+| table border width | 0–12px |
+| table font size | 8–48px |
+| table padding | 0–40px |
+| callout border width | 0–12px |
+| callout/embed radius | 0–60px |
+| callout variant key | letters, digits, and hyphens; each variant may override accent, background, text, title, and icon colors |
+| watermark size | 24–240px |
+| watermark rotation | -45–45 degrees |
+| watermark opacity | 0.05–1 |
 | custom CSS | maximum 50 KB and safe virtual selectors only |
 
 ## Baseline behavior
@@ -161,6 +261,14 @@ page top + content top padding + measured baseline inside line box
 ```
 
 Ruled, dot-grid, and graph paper all use that same vertical anchor and the effective content-left padding as their horizontal origin. A ruled stroke starts at the baseline and extends one CSS pixel downward. Ordinary glyph bodies therefore sit above the ink while descenders such as `g`, `p`, and `y` naturally cross it. Dot and graph intersections coincide with the text grid rather than an unrelated page origin.
+
+The additional patterns are decorative overlays, not baseline rules: ledger adds a second margin line to the ruled pattern, cross-hatch and diagonal tile 45-degree strokes at the grid unit (multiplied by `pattern-scale`), hex tiles an isometric lattice, and scallop staggers semicircles on the baseline. `pattern-opacity` fades every pattern color by mixing toward transparent; dot-grid uses `dot-radius` for the dot size; graph uses `graph-major-interval` for the heavy lines.
+
+`typography.body-line-height` overrides the automatic rhythm (1.55 × body size, minimum 22px) when gridded modes are off. `first-line-indent` and `nested-indent` only apply in Reading View because Live Preview wraps every paragraph line as its own element. `drop-cap` floats the first letter of the first paragraph after a heading. Headings below H4 (h5/h6) fall back to the H4 font and a darkened H4 color unless a template overrides them.
+
+`watermark.text` renders behind the page content (above the paper) as a rotated centered label at `watermark.size`, `rotation`, and `opacity`. Empty text hides it. The watermark sits below the content plane in both modes, so it never intercepts pointer events or selection.
+
+`blocks.callout-variants` is keyed by Obsidian callout type (for example, `warning` for `> [!warning]`). A variant can override any subset of `accent`, `background`, `textColor`, `titleColor`, and `iconColor`; omitted values inherit the base callout palette. These nested keys are camelCase even though top-level persisted field names use kebab-case.
 
 In both gridded modes, every inter-block offset is a whole multiple of the grid unit. Reading View list items and Live Preview list lines explicitly use the body line-height, with Obsidian's theme list padding removed. This prevents paragraphs, bullets, and later blocks from drifting between Graph Paper lines.
 
@@ -183,6 +291,8 @@ Supported roots include:
 .page h2
 .page h3
 .page h4
+.page h5
+.page h6
 .page p
 .page ul
 .page ol
@@ -234,4 +344,4 @@ Current overrides support frame metadata, rotation, and pixel width. The rendere
 
 ## Compatibility and migrations
 
-Template exports identify v1. H4 and the expanded quote/code/table palette are backward-compatible v1 additions: older styles receive defaults during normalization. A future v2 importer must explicitly migrate known v1 fields before normalization. Never silently reinterpret a v1 field with new units or semantics.
+Template exports identify v1. H4, the expanded quote/code/table palette, and the 1.1 feature batch (h5/h6, heading letter spacing and text transform, lists and watermark, new paper patterns, image float/object-fit/duotone, and the extended block palette) are backward-compatible v1 additions: older styles receive defaults during normalization. A future v2 importer must explicitly migrate known v1 fields before normalization. Never silently reinterpret a v1 field with new units or semantics.

@@ -7,6 +7,8 @@ const livePreviewElements: Readonly<Record<string, string>> = {
   h2: ':is(h2, .HyperMD-header-2)',
   h3: ':is(h3, .HyperMD-header-3)',
   h4: ':is(h4, .HyperMD-header-4)',
+  h5: ':is(h5, .HyperMD-header-5)',
+  h6: ':is(h6, .HyperMD-header-6)',
   p: ':is(p, .HyperMD-paragraph)',
   ul: ':is(ul, .HyperMD-list-line)',
   ol: ':is(ol, .HyperMD-list-line)',
@@ -28,7 +30,7 @@ function isInsideKeyframes(rule: Rule): boolean {
 
 function expandVirtualElements(selector: string): string {
   return selector.replace(
-    /(^|[\s>+~])(?:h1|h2|h3|h4|p|ul|ol|li|blockquote|img|table|code|pre|hr|a|mark|input)(?=$|[\s>+~.#:[])/g,
+    /(^|[\s>+~])(?:h[1-6]|p|ul|ol|li|blockquote|img|table|code|pre|hr|a|mark|input)(?=$|[\s>+~.#:[])/g,
     (match) => {
       const prefix = /^[\s>+~]/.test(match) ? match.charAt(0) : '';
       const element = match.slice(prefix.length);

@@ -1,10 +1,14 @@
-import { ItemView, Notice, Setting, type WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, type WorkspaceLeaf } from 'obsidian';
 import { TEMPLAR_ICON, TEMPLAR_VIEW_TYPE } from '../constants';
 import type TemplarPlugin from '../main';
 import type { TemplarTemplate } from '../types';
 import { ConfirmationModal } from './modals';
 
+type LibraryTab = 'favorites' | 'built-in' | 'custom';
+
 export class TemplarStylesView extends ItemView {
+  private activeTab: LibraryTab = 'favorites';
+
   public constructor(
     leaf: WorkspaceLeaf,
     private readonly plugin: TemplarPlugin,
@@ -72,19 +76,54 @@ export class TemplarStylesView extends ItemView {
     const batch = toolbar.createEl('button', { text: 'Batch apply' });
     batch.addEventListener('click', () => this.plugin.showBatchApply());
 
-    this.renderSection(container, 'Built-in styles', this.plugin.library.builtIns());
+    this.renderTabs(container);
+    this.renderTabContent(container);
+  }
+
+  private renderTabs(container: HTMLElement): void {
+    const builtIns = this.plugin.library.builtIns();
     const userTemplates = this.plugin.library.userTemplates();
-    if (userTemplates.length > 0) {
-      this.renderSection(container, 'My styles', userTemplates);
+    const favouriteCount = [...builtIns, ...userTemplates].filter((template) =>
+      this.plugin.library.isFavourite(template.id),
+    ).length;
+    const tabs = [
+      { id: 'favorites' as const, label: 'Favorites', count: favouriteCount },
+      { id: 'built-in' as const, label: 'Built-in styles', count: builtIns.length },
+      { id: 'custom' as const, label: 'My custom styles', count: userTemplates.length },
+    ];
+    const tabRow = container.createDiv({ cls: 'templar-library-tabs' });
+    for (const tab of tabs) {
+      const button = tabRow.createEl('button', {
+        cls: this.activeTab === tab.id ? 'is-active' : undefined,
+        text: `${tab.label} (${String(tab.count)})`,
+      });
+      button.addEventListener('click', () => {
+        this.activeTab = tab.id;
+        this.render();
+      });
     }
   }
 
-  private renderSection(
-    container: HTMLElement,
-    title: string,
-    templates: TemplarTemplate[],
-  ): void {
-    new Setting(container).setName(title).setHeading();
+  private renderTabContent(container: HTMLElement): void {
+    const templates =
+      this.activeTab === 'built-in'
+        ? this.plugin.library.builtIns()
+        : this.activeTab === 'custom'
+          ? this.plugin.library.userTemplates()
+          : [...this.plugin.library.builtIns(), ...this.plugin.library.userTemplates()].filter(
+              (template) => this.plugin.library.isFavourite(template.id),
+            );
+    if (templates.length === 0) {
+      const empty = container.createDiv({ cls: 'templar-library-empty' });
+      if (this.activeTab === 'favorites') {
+        empty.setText('Star a style with the ★ button to keep it here.');
+      } else if (this.activeTab === 'custom') {
+        empty.setText('No custom styles yet. Use “create”, “import”, or “duplicate” on a built-in.');
+      } else {
+        empty.setText('No built-in styles available.');
+      }
+      return;
+    }
     const grid = container.createDiv({ cls: 'templar-style-grid' });
     for (const template of templates) {
       this.renderTemplateCard(grid, template);
@@ -97,6 +136,16 @@ export class TemplarStylesView extends ItemView {
     swatch.style.setProperty('--templar-swatch-paper', template.paper.color);
     swatch.style.setProperty('--templar-swatch-line', template.paper.patternColor);
     swatch.dataset.pattern = template.paper.pattern;
+    const favourite = swatch.createEl('button', {
+      cls: `templar-favourite-toggle${this.plugin.library.isFavourite(template.id) ? ' is-active' : ''}`,
+      attr: { 'aria-label': 'Toggle favourite', 'aria-pressed': String(this.plugin.library.isFavourite(template.id)) },
+      text: '★',
+    });
+    favourite.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.toggleFavourite(template.id);
+    });
     card.createDiv({ cls: 'templar-style-name', text: template.name });
     card.createDiv({ cls: 'templar-style-description', text: template.metadata.description });
 
@@ -129,11 +178,13 @@ export class TemplarStylesView extends ItemView {
     }
   }
 
+  private async toggleFavourite(id: string): Promise<void> {
+    const isFavourite = await this.plugin.library.toggleFavourite(id);
+    new Notice(isFavourite ? 'Added to favorites.' : 'Removed from favorites.');
+    this.render();
+  }
+
   private async editTemplate(template: TemplarTemplate): Promise<void> {
-    if (template.builtIn) {
-      this.plugin.showTemplateCreator(template);
-      return;
-    }
     this.plugin.showTemplateCreator(template);
   }
 

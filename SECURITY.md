@@ -4,13 +4,13 @@ Templar takes the security of your vault seriously.
 
 ## Supported versions
 
-Security fixes are released for the latest published version. When a fix requires a new version, a release is tagged with the fixed `x.y.z` version and attached to the [releases page](https://github.com/K0g1/Templar/releases).
+Security fixes are released for the latest published version. When a fix requires a new version, the release tag exactly matches the version in `manifest.json` and is attached to the [releases page](https://github.com/K0g1/Templar/releases).
 
 ## Reporting a vulnerability
 
-Please report security issues privately by opening a GitHub issue with the "security" label, or contact the maintainer directly if the issue contains sensitive details.
+Please use GitHub's **[Report a vulnerability](https://github.com/K0g1/Templar/security/advisories/new)** form so the report and any follow-up remain private. If that form is unavailable, open a public issue containing no sensitive details and ask the maintainer for a private contact channel.
 
-Do not include private vault content in a public issue. Include:
+Never include private vault content, exploit details, or secrets in a public issue. In the private report, include:
 
 - the Templar and Obsidian versions involved;
 - the steps to reproduce;

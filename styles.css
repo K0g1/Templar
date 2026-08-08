@@ -199,6 +199,60 @@
   margin-bottom: var(--size-4-4);
 }
 
+.templar-library-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-4-3);
+}
+
+.templar-library-tabs button {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  color: var(--text-muted);
+  padding: var(--size-4-1) var(--size-4-2);
+}
+
+.templar-library-tabs button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.templar-library-tabs button.is-active {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.templar-library-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  padding: var(--size-4-4);
+  text-align: center;
+}
+
+.templar-favourite-toggle {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: var(--font-ui-smaller);
+  inset-block-start: var(--size-4-1);
+  inset-inline-end: var(--size-4-1);
+  line-height: 1;
+  padding: var(--size-4-1);
+  position: absolute;
+}
+
+.templar-favourite-toggle:hover {
+  color: var(--interactive-accent);
+}
+
+.templar-favourite-toggle.is-active {
+  color: var(--interactive-accent);
+}
+
 .templar-style-grid {
   display: grid;
   gap: var(--size-4-3);

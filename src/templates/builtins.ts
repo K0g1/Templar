@@ -24,6 +24,18 @@ function builtIn(
   if (template.headings.h4.color === DEFAULT_TEMPLATE.headings.h4.color) {
     template.headings.h4.color = template.headings.h3.color;
   }
+  if (template.headings.h5.font === DEFAULT_TEMPLATE.headings.h5.font) {
+    template.headings.h5.font = template.headings.h4.font;
+  }
+  if (template.headings.h5.color === DEFAULT_TEMPLATE.headings.h5.color) {
+    template.headings.h5.color = template.headings.h4.color;
+  }
+  if (template.headings.h6.font === DEFAULT_TEMPLATE.headings.h6.font) {
+    template.headings.h6.font = template.headings.h4.font;
+  }
+  if (template.headings.h6.color === DEFAULT_TEMPLATE.headings.h6.color) {
+    template.headings.h6.color = template.headings.h4.color;
+  }
   if (template.blocks.quoteTextColor === DEFAULT_TEMPLATE.blocks.quoteTextColor) {
     template.blocks.quoteTextColor = template.typography.textColor;
   }

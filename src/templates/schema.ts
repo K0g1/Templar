@@ -1,8 +1,13 @@
 import { TEMPLAR_FORMAT_VERSION } from '../constants';
 import type {
   BaselineMode,
+  CalloutVariant,
+  DividerStyle,
   HeadingLevelStyle,
+  ImageFloat,
   ImageFrame,
+  ImageObjectFit,
+  ListMarkerStyle,
   NotePageOptions,
   TemplarNoteStyle,
   TemplarTemplate,
@@ -11,6 +16,7 @@ import type {
   PageSize,
   ValidationIssue,
   ValidationResult,
+  HeadingTextTransform,
 } from '../types';
 import {
   booleanValue,
@@ -26,7 +32,17 @@ import {
 import { DEFAULT_PAGE_OPTIONS, DEFAULT_TEMPLATE } from './defaults';
 
 const baselineModes: readonly BaselineMode[] = ['strict', 'balanced', 'free'];
-const paperPatterns: readonly PaperPattern[] = ['blank', 'ruled', 'dot-grid', 'graph'];
+const paperPatterns: readonly PaperPattern[] = [
+  'blank',
+  'ruled',
+  'dot-grid',
+  'graph',
+  'ledger',
+  'cross-hatch',
+  'diagonal',
+  'hex',
+  'scallop',
+];
 const imageFrames: readonly ImageFrame[] = [
   'none',
   'thin',
@@ -37,6 +53,16 @@ const imageFrames: readonly ImageFrame[] = [
   'technical',
   'dark',
   'vintage',
+];
+const imageFloats: readonly ImageFloat[] = ['none', 'left', 'right'];
+const imageObjectFits: readonly ImageObjectFit[] = ['contain', 'cover', 'fill', 'scale-down'];
+const dividerStyles: readonly DividerStyle[] = ['solid', 'dashed', 'dotted', 'double', 'fade'];
+const listMarkerStyles: readonly ListMarkerStyle[] = ['disc', 'circle', 'square', 'none'];
+const textTransforms: readonly HeadingTextTransform[] = [
+  'none',
+  'uppercase',
+  'lowercase',
+  'capitalize',
 ];
 const decorations = ['none', 'underline', 'rule', 'highlight'] as const;
 const pageModes: readonly PageMode[] = ['pageless', 'paged'];
@@ -260,7 +286,38 @@ function normalizeHeading(raw: unknown, fallback: HeadingLevelStyle): HeadingLev
     weight: numberValue(value.weight, fallback.weight, 100, 900),
     color: stringValue(value.color, fallback.color),
     decoration: enumValue(value.decoration, decorations, fallback.decoration),
+    letterSpacing: numberValue(value.letterSpacing, fallback.letterSpacing, 0, 10),
+    textTransform: enumValue(value.textTransform, textTransforms, fallback.textTransform),
   };
+}
+
+function normalizeCalloutVariants(raw: unknown): Record<string, CalloutVariant> {
+  const source = record(raw);
+  const variants: Record<string, CalloutVariant> = {};
+  for (const [type, variantValue] of Object.entries(source)) {
+    if (!/^[a-z0-9-]+$/i.test(type)) {
+      continue;
+    }
+    const variant = record(variantValue);
+    const normalized: CalloutVariant = {};
+    if (typeof variant.accent === 'string') {
+      normalized.accent = variant.accent;
+    }
+    if (typeof variant.background === 'string') {
+      normalized.background = variant.background;
+    }
+    if (typeof variant.textColor === 'string') {
+      normalized.textColor = variant.textColor;
+    }
+    if (typeof variant.titleColor === 'string') {
+      normalized.titleColor = variant.titleColor;
+    }
+    if (typeof variant.iconColor === 'string') {
+      normalized.iconColor = variant.iconColor;
+    }
+    variants[type] = normalized;
+  }
+  return variants;
 }
 
 export function normalizeTemplate(raw: unknown): TemplarTemplate {
@@ -270,9 +327,11 @@ export function normalizeTemplate(raw: unknown): TemplarTemplate {
   const baseline = record(pick(source, 'baseline', 'baseline-grid'));
   const typography = record(source.typography);
   const headings = record(source.headings);
+  const lists = record(source.lists);
   const layout = record(source.layout);
   const images = record(source.images);
   const blocks = record(source.blocks);
+  const watermark = record(source.watermark);
 
   const name = stringValue(
     pick(source, 'name', 'style-name'),
@@ -315,6 +374,30 @@ export function normalizeTemplate(raw: unknown): TemplarTemplate {
         0,
         400,
       ),
+      patternOpacity: numberValue(
+        pick(paper, 'patternOpacity', 'pattern-opacity'),
+        DEFAULT_TEMPLATE.paper.patternOpacity,
+        0,
+        1,
+      ),
+      patternScale: numberValue(
+        pick(paper, 'patternScale', 'pattern-scale'),
+        DEFAULT_TEMPLATE.paper.patternScale,
+        0.25,
+        4,
+      ),
+      dotRadius: numberValue(
+        pick(paper, 'dotRadius', 'dot-radius'),
+        DEFAULT_TEMPLATE.paper.dotRadius,
+        0.5,
+        6,
+      ),
+      graphMajorInterval: numberValue(
+        pick(paper, 'graphMajorInterval', 'graph-major-interval'),
+        DEFAULT_TEMPLATE.paper.graphMajorInterval,
+        2,
+        10,
+      ),
     },
     baseline: {
       enabled: booleanValue(baseline.enabled, DEFAULT_TEMPLATE.baseline.enabled),
@@ -350,12 +433,53 @@ export function normalizeTemplate(raw: unknown): TemplarTemplate {
         pick(typography, 'mutedColor', 'muted-color'),
         DEFAULT_TEMPLATE.typography.mutedColor,
       ),
+      bodyLineHeight: (() => {
+        const raw = pick(typography, 'bodyLineHeight', 'body-line-height');
+        return raw === 0 ? 0 : numberValue(raw, 0, 16, 120);
+      })(),
+      firstLineIndent: numberValue(
+        pick(typography, 'firstLineIndent', 'first-line-indent'),
+        DEFAULT_TEMPLATE.typography.firstLineIndent,
+        0,
+        120,
+      ),
+      dropCap: booleanValue(
+        pick(typography, 'dropCap', 'drop-cap'),
+        DEFAULT_TEMPLATE.typography.dropCap,
+      ),
     },
     headings: {
       h1: normalizeHeading(headings.h1, DEFAULT_TEMPLATE.headings.h1),
       h2: normalizeHeading(headings.h2, DEFAULT_TEMPLATE.headings.h2),
       h3: normalizeHeading(headings.h3, DEFAULT_TEMPLATE.headings.h3),
       h4: normalizeHeading(headings.h4, DEFAULT_TEMPLATE.headings.h4),
+      h5: normalizeHeading(headings.h5, DEFAULT_TEMPLATE.headings.h5),
+      h6: normalizeHeading(headings.h6, DEFAULT_TEMPLATE.headings.h6),
+    },
+    lists: {
+      markerStyle: enumValue(
+        pick(lists, 'markerStyle', 'marker-style'),
+        listMarkerStyles,
+        DEFAULT_TEMPLATE.lists.markerStyle,
+      ),
+      markerColor: stringValue(
+        pick(lists, 'markerColor', 'marker-color'),
+        DEFAULT_TEMPLATE.lists.markerColor,
+      ),
+      indentGuides: booleanValue(
+        pick(lists, 'indentGuides', 'indent-guides'),
+        DEFAULT_TEMPLATE.lists.indentGuides,
+      ),
+      indentGuideColor: stringValue(
+        pick(lists, 'indentGuideColor', 'indent-guide-color'),
+        DEFAULT_TEMPLATE.lists.indentGuideColor,
+      ),
+      nestedIndent: numberValue(
+        pick(lists, 'nestedIndent', 'nested-indent'),
+        DEFAULT_TEMPLATE.lists.nestedIndent,
+        0,
+        120,
+      ),
     },
     layout: {
       maxWidth: numberValue(
@@ -448,6 +572,13 @@ export function normalizeTemplate(raw: unknown): TemplarTemplate {
       grayscale: numberValue(images.grayscale, DEFAULT_TEMPLATE.images.grayscale, 0, 1),
       saturation: numberValue(images.saturation, DEFAULT_TEMPLATE.images.saturation, 0, 4),
       contrast: numberValue(images.contrast, DEFAULT_TEMPLATE.images.contrast, 0, 4),
+      float: enumValue(images.float, imageFloats, DEFAULT_TEMPLATE.images.float),
+      objectFit: enumValue(
+        pick(images, 'objectFit', 'object-fit'),
+        imageObjectFits,
+        DEFAULT_TEMPLATE.images.objectFit,
+      ),
+      duotone: stringValue(images.duotone, DEFAULT_TEMPLATE.images.duotone),
     },
     blocks: {
       linkColor: stringValue(
@@ -500,10 +631,115 @@ export function normalizeTemplate(raw: unknown): TemplarTemplate {
         pick(blocks, 'tableHeaderBackground', 'table-header-background'),
         DEFAULT_TEMPLATE.blocks.tableHeaderBackground,
       ),
+      tableBorderWidth: numberValue(
+        pick(blocks, 'tableBorderWidth', 'table-border-width'),
+        DEFAULT_TEMPLATE.blocks.tableBorderWidth,
+        0,
+        12,
+      ),
+      tableFontSize: numberValue(
+        pick(blocks, 'tableFontSize', 'table-font-size'),
+        DEFAULT_TEMPLATE.blocks.tableFontSize,
+        8,
+        48,
+      ),
+      tableTextColor: stringValue(
+        pick(blocks, 'tableTextColor', 'table-text-color'),
+        DEFAULT_TEMPLATE.blocks.tableTextColor,
+      ),
+      tableHeaderTextColor: stringValue(
+        pick(blocks, 'tableHeaderTextColor', 'table-header-text-color'),
+        DEFAULT_TEMPLATE.blocks.tableHeaderTextColor,
+      ),
+      tablePadding: numberValue(
+        pick(blocks, 'tablePadding', 'table-padding'),
+        DEFAULT_TEMPLATE.blocks.tablePadding,
+        0,
+        40,
+      ),
+      tableStriped: booleanValue(
+        pick(blocks, 'tableStriped', 'table-striped'),
+        DEFAULT_TEMPLATE.blocks.tableStriped,
+      ),
+      tableStripeColor: stringValue(
+        pick(blocks, 'tableStripeColor', 'table-stripe-color'),
+        DEFAULT_TEMPLATE.blocks.tableStripeColor,
+      ),
       checkboxAccent: stringValue(
         pick(blocks, 'checkboxAccent', 'checkbox-accent'),
         DEFAULT_TEMPLATE.blocks.checkboxAccent,
       ),
+      dividerColor: stringValue(
+        pick(blocks, 'dividerColor', 'divider-color'),
+        DEFAULT_TEMPLATE.blocks.dividerColor,
+      ),
+      dividerWidth: numberValue(
+        pick(blocks, 'dividerWidth', 'divider-width'),
+        DEFAULT_TEMPLATE.blocks.dividerWidth,
+        1,
+        20,
+      ),
+      dividerStyle: enumValue(
+        pick(blocks, 'dividerStyle', 'divider-style'),
+        dividerStyles,
+        DEFAULT_TEMPLATE.blocks.dividerStyle,
+      ),
+      calloutAccent: stringValue(
+        pick(blocks, 'calloutAccent', 'callout-accent'),
+        DEFAULT_TEMPLATE.blocks.calloutAccent,
+      ),
+      calloutBackground: stringValue(
+        pick(blocks, 'calloutBackground', 'callout-background'),
+        DEFAULT_TEMPLATE.blocks.calloutBackground,
+      ),
+      calloutTextColor: stringValue(
+        pick(blocks, 'calloutTextColor', 'callout-text-color'),
+        DEFAULT_TEMPLATE.blocks.calloutTextColor,
+      ),
+      calloutTitleColor: stringValue(
+        pick(blocks, 'calloutTitleColor', 'callout-title-color'),
+        DEFAULT_TEMPLATE.blocks.calloutTitleColor,
+      ),
+      calloutIconColor: stringValue(
+        pick(blocks, 'calloutIconColor', 'callout-icon-color'),
+        DEFAULT_TEMPLATE.blocks.calloutIconColor,
+      ),
+      calloutBorderWidth: numberValue(
+        pick(blocks, 'calloutBorderWidth', 'callout-border-width'),
+        DEFAULT_TEMPLATE.blocks.calloutBorderWidth,
+        0,
+        12,
+      ),
+      calloutRadius: numberValue(
+        pick(blocks, 'calloutRadius', 'callout-radius'),
+        DEFAULT_TEMPLATE.blocks.calloutRadius,
+        0,
+        60,
+      ),
+      calloutVariants: normalizeCalloutVariants(
+        pick(blocks, 'calloutVariants', 'callout-variants'),
+      ),
+      embedBackground: stringValue(
+        pick(blocks, 'embedBackground', 'embed-background'),
+        DEFAULT_TEMPLATE.blocks.embedBackground,
+      ),
+      embedAccent: stringValue(
+        pick(blocks, 'embedAccent', 'embed-accent'),
+        DEFAULT_TEMPLATE.blocks.embedAccent,
+      ),
+      embedRadius: numberValue(
+        pick(blocks, 'embedRadius', 'embed-radius'),
+        DEFAULT_TEMPLATE.blocks.embedRadius,
+        0,
+        60,
+      ),
+    },
+    watermark: {
+      text: stringValue(watermark.text, DEFAULT_TEMPLATE.watermark.text),
+      color: stringValue(watermark.color, DEFAULT_TEMPLATE.watermark.color),
+      size: numberValue(watermark.size, DEFAULT_TEMPLATE.watermark.size, 24, 240),
+      rotation: numberValue(watermark.rotation, DEFAULT_TEMPLATE.watermark.rotation, -45, 45),
+      opacity: numberValue(watermark.opacity, DEFAULT_TEMPLATE.watermark.opacity, 0.05, 1),
     },
     css: stringValue(source.css, ''),
     builtIn: booleanValue(pick(source, 'builtIn', 'built-in'), false),
@@ -638,6 +874,8 @@ export function validateTemplate(template: TemplarTemplate): ValidationResult {
   validateColor(template.headings.h2.color, 'headings.h2.color', issues);
   validateColor(template.headings.h3.color, 'headings.h3.color', issues);
   validateColor(template.headings.h4.color, 'headings.h4.color', issues);
+  validateColor(template.headings.h5.color, 'headings.h5.color', issues);
+  validateColor(template.headings.h6.color, 'headings.h6.color', issues);
   validateColor(template.images.borderColor, 'images.borderColor', issues);
   validateColor(template.blocks.linkColor, 'blocks.linkColor', issues);
   validateColor(template.blocks.highlightBackground, 'blocks.highlightBackground', issues);
@@ -654,11 +892,63 @@ export function validateTemplate(template: TemplarTemplate): ValidationResult {
     issues,
   );
   validateColor(template.blocks.checkboxAccent, 'blocks.checkboxAccent', issues);
+  validateColor(template.blocks.dividerColor, 'blocks.dividerColor', issues);
+  validateColor(template.blocks.calloutAccent, 'blocks.calloutAccent', issues);
+  validateColor(template.blocks.calloutBackground, 'blocks.calloutBackground', issues);
+  validateColor(template.blocks.calloutTextColor, 'blocks.calloutTextColor', issues);
+  validateColor(template.blocks.calloutTitleColor, 'blocks.calloutTitleColor', issues);
+  validateColor(template.blocks.calloutIconColor, 'blocks.calloutIconColor', issues);
+  validateColor(template.blocks.tableTextColor, 'blocks.tableTextColor', issues);
+  validateColor(template.blocks.tableHeaderTextColor, 'blocks.tableHeaderTextColor', issues);
+  validateColor(template.blocks.tableStripeColor, 'blocks.tableStripeColor', issues);
+  validateColor(template.blocks.embedBackground, 'blocks.embedBackground', issues);
+  validateColor(template.blocks.embedAccent, 'blocks.embedAccent', issues);
+  validateColor(template.lists.markerColor, 'lists.markerColor', issues);
+  validateColor(template.lists.indentGuideColor, 'lists.indentGuideColor', issues);
+  validateColor(template.watermark.color, 'watermark.color', issues);
+  for (const [type, variant] of Object.entries(template.blocks.calloutVariants)) {
+    const path = `blocks.calloutVariants.${type}`;
+    if (variant.accent !== undefined) {
+      validateColor(variant.accent, `${path}.accent`, issues);
+    }
+    if (variant.background !== undefined) {
+      validateColor(variant.background, `${path}.background`, issues);
+    }
+    if (variant.textColor !== undefined) {
+      validateColor(variant.textColor, `${path}.textColor`, issues);
+    }
+    if (variant.titleColor !== undefined) {
+      validateColor(variant.titleColor, `${path}.titleColor`, issues);
+    }
+    if (variant.iconColor !== undefined) {
+      validateColor(variant.iconColor, `${path}.iconColor`, issues);
+    }
+  }
+  if (template.images.duotone !== 'none' && !/^#[0-9a-f]{3,8}$/i.test(template.images.duotone)) {
+    issues.push({
+      severity: 'error',
+      path: 'images.duotone',
+      message: 'The duotone color must be a hex color such as #a34f2c, or “none”.',
+      fix: 'Use “none” to disable the duotone treatment.',
+    });
+  }
+  if (
+    template.watermark.text.trim() &&
+    /["\\\r\n;{}<>]/.test(template.watermark.text)
+  ) {
+    issues.push({
+      severity: 'error',
+      path: 'watermark.text',
+      message: 'The watermark text cannot contain quotes, backslashes, or CSS punctuation.',
+    });
+  }
   validateCssValue(template.typography.bodyFont, 'typography.bodyFont', issues);
   validateCssValue(template.headings.h1.font, 'headings.h1.font', issues);
   validateCssValue(template.headings.h2.font, 'headings.h2.font', issues);
   validateCssValue(template.headings.h3.font, 'headings.h3.font', issues);
   validateCssValue(template.headings.h4.font, 'headings.h4.font', issues);
+  validateCssValue(template.headings.h5.font, 'headings.h5.font', issues);
+  validateCssValue(template.headings.h6.font, 'headings.h6.font', issues);
   validateCssValue(template.blocks.codeFont, 'blocks.codeFont', issues);
   validateCssValue(template.layout.pageShadow, 'layout.pageShadow', issues);
   validateCssValue(template.images.shadow, 'images.shadow', issues);

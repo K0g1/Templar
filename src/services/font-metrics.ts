@@ -30,11 +30,13 @@ export class FontMetricsService {
     const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
     const bodyLineHeight = gridded
       ? style.baseline.unit
-      : Math.max(style.typography.bodySize * 1.55, 22);
+      : style.typography.bodyLineHeight > 0
+        ? style.typography.bodyLineHeight
+        : Math.max(style.typography.bodySize * 1.55, 22);
     const headingLineHeight = (size: number): number =>
       gridded ? fitToGrid(size * 1.18, style.baseline.unit) : size * 1.2;
 
-    const [body, h1, h2, h3, h4, code] = await Promise.all([
+    const [body, h1, h2, h3, h4, h5, h6, code] = await Promise.all([
       this.measure(
         {
           family: style.typography.bodyFont,
@@ -82,6 +84,24 @@ export class FontMetricsService {
       ),
       this.measure(
         {
+          family: style.headings.h5.font,
+          fontSize: style.headings.h5.size,
+          fontWeight: style.headings.h5.weight,
+          lineHeight: headingLineHeight(style.headings.h5.size),
+        },
+        document,
+      ),
+      this.measure(
+        {
+          family: style.headings.h6.font,
+          fontSize: style.headings.h6.size,
+          fontWeight: style.headings.h6.weight,
+          lineHeight: headingLineHeight(style.headings.h6.size),
+        },
+        document,
+      ),
+      this.measure(
+        {
           family: style.blocks.codeFont,
           fontSize: style.blocks.codeSize,
           fontWeight: style.typography.bodyWeight,
@@ -90,7 +110,7 @@ export class FontMetricsService {
         document,
       ),
     ]);
-    return { body, h1, h2, h3, h4, code };
+    return { body, h1, h2, h3, h4, h5, h6, code };
   }
 
   public async measure(request: FontMetricRequest, document: Document): Promise<FontMetrics> {

@@ -116,4 +116,138 @@ describe('Templar v1 schema', () => {
     expect(result.valid).toBe(false);
     expect(result.issues.filter((issue) => issue.path === 'layout')).toHaveLength(2);
   });
+
+  it('normalizes the extended paper, typography, and list fields', () => {
+    const template = normalizeTemplate({
+      version: 1,
+      'style-name': 'Expanded',
+      'template-id': 'expanded',
+      paper: {
+        pattern: 'hex',
+        'pattern-opacity': 0.5,
+        'pattern-scale': 2,
+        'dot-radius': 3,
+        'graph-major-interval': 7,
+      },
+      typography: {
+        'body-line-height': 34,
+        'first-line-indent': 24,
+        'drop-cap': true,
+      },
+      lists: {
+        'marker-style': 'square',
+        'marker-color': '#441122',
+        'indent-guides': true,
+        'indent-guide-color': 'rgba(1, 2, 3, 0.2)',
+        'nested-indent': 40,
+      },
+    });
+    expect(template.paper.pattern).toBe('hex');
+    expect(template.paper.patternOpacity).toBe(0.5);
+    expect(template.paper.patternScale).toBe(2);
+    expect(template.paper.dotRadius).toBe(3);
+    expect(template.paper.graphMajorInterval).toBe(7);
+    expect(template.typography.bodyLineHeight).toBe(34);
+    expect(template.typography.firstLineIndent).toBe(24);
+    expect(template.typography.dropCap).toBe(true);
+    expect(template.lists.markerStyle).toBe('square');
+    expect(template.lists.markerColor).toBe('#441122');
+    expect(template.lists.indentGuides).toBe(true);
+    expect(template.lists.nestedIndent).toBe(40);
+  });
+
+  it('falls back gracefully for unknown patterns and zero line height', () => {
+    const template = normalizeTemplate({
+      'style-name': 'Fallbacks',
+      'template-id': 'fallbacks',
+      paper: { pattern: 'plaid' },
+      typography: { 'body-line-height': 0 },
+    });
+    expect(template.paper.pattern).toBe('blank');
+    expect(template.typography.bodyLineHeight).toBe(0);
+    expect(template.typography.bodyLineHeight === 0).toBe(true);
+  });
+
+  it('round-trips extended image, block, and watermark fields', () => {
+    const original = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    original.images.float = 'left';
+    original.images.objectFit = 'cover';
+    original.images.duotone = '#a34f2c';
+    original.blocks.dividerStyle = 'dashed';
+    original.blocks.dividerWidth = 4;
+    original.blocks.tableStriped = true;
+    original.blocks.calloutVariants = {
+      warning: { accent: '#c77b3a', background: 'rgba(199, 123, 58, 0.12)' },
+      tip: { titleColor: '#2f6b3a' },
+    };
+    original.watermark = {
+      text: 'Draft',
+      color: 'rgba(48, 46, 43, 0.1)',
+      size: 120,
+      rotation: -30,
+      opacity: 0.5,
+    };
+    const yamlObject = noteStyleToFrontmatter(original);
+    const restored = frontmatterToNoteStyle(yamlObject);
+    expect(restored?.images).toMatchObject({
+      float: 'left',
+      objectFit: 'cover',
+      duotone: '#a34f2c',
+    });
+    expect(restored?.blocks.dividerStyle).toBe('dashed');
+    expect(restored?.blocks.dividerWidth).toBe(4);
+    expect(restored?.blocks.tableStriped).toBe(true);
+    expect(restored?.blocks.calloutVariants).toEqual({
+      warning: { accent: '#c77b3a', background: 'rgba(199, 123, 58, 0.12)' },
+      tip: { titleColor: '#2f6b3a' },
+    });
+    expect(restored?.watermark).toEqual(original.watermark);
+  });
+
+  it('rejects invalid callout variant keys and unsupported enum values', () => {
+    const badVariants = normalizeTemplate({
+      'style-name': 'Bad variants',
+      'template-id': 'bad-variants',
+      blocks: {
+        'callout-variants': {
+          'note': { accent: '#112233' },
+          'BAD TYPE!': { accent: '#445566' },
+        },
+      },
+    });
+    expect(badVariants.blocks.calloutVariants).toEqual({ note: { accent: '#112233' } });
+    const badDuotone = normalizeTemplate({
+      'style-name': 'Bad duotone',
+      'template-id': 'bad-duotone',
+      images: { duotone: 'greenish' },
+    });
+    expect(badDuotone.images.duotone).toBe('greenish');
+    const badObjectFit = normalizeTemplate({
+      'style-name': 'Bad fit',
+      'template-id': 'bad-fit',
+      images: { 'object-fit': 'stretch' },
+    });
+    expect(badObjectFit.images.objectFit).toBe('contain');
+  });
+
+  it('validates extended color fields and the duotone hex requirement', () => {
+    const template = normalizeTemplate(BUILT_IN_TEMPLATES[0]!);
+    template.blocks.calloutAccent = 'red;';
+    template.blocks.dividerColor = 'url(x)';
+    template.images.duotone = 'greenish';
+    template.watermark.text = 'bad "quotes" here';
+    const issues = validateTemplate(template).issues;
+    expect(issues.some((issue) => issue.path === 'blocks.calloutAccent')).toBe(true);
+    expect(issues.some((issue) => issue.path === 'blocks.dividerColor')).toBe(true);
+    expect(issues.some((issue) => issue.path === 'images.duotone')).toBe(true);
+    expect(issues.some((issue) => issue.path === 'watermark.text')).toBe(true);
+  });
+
+  it('derives h5 and h6 heading styles for every built-in', () => {
+    for (const template of BUILT_IN_TEMPLATES) {
+      expect(template.headings.h5.font, template.name).toBeTruthy();
+      expect(template.headings.h6.font, template.name).toBeTruthy();
+      expect(template.headings.h5.size).toBeGreaterThan(template.headings.h6.size);
+    }
+  });
 });

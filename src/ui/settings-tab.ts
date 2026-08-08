@@ -1,6 +1,9 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import { DEFAULT_TEMPLATE_ID, VIRTUAL_SELECTORS } from '../constants';
 import type TemplarPlugin from '../main';
+import { DEFAULT_SETTINGS } from '../templates/defaults';
+import { clone } from '../utils/value';
+import { ConfirmationModal } from './modals';
 import { renderIssues } from './issues';
 import { renderTemplatePreview } from './template-preview';
 
@@ -13,6 +16,10 @@ export class TemplarSettingTab extends PluginSettingTab {
   }
 
   public display(): void {
+    this.render();
+  }
+
+  private render(): void {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.addClass('templar-settings');
@@ -174,5 +181,34 @@ export class TemplarSettingTab extends PluginSettingTab {
     architecture.appendText('See ');
     architecture.createEl('code', { text: 'docs/ARCHITECTURE.md' });
     architecture.appendText(' in the Templar plugin folder for renderer, schema, security, and extension points.');
+
+    new Setting(containerEl).setName('Reset').setHeading();
+    new Setting(containerEl)
+      .setName('Reset all settings')
+      .setDesc('Restores every option to its default value. Custom page styles in your library are kept; favorites are cleared.')
+      .addButton((button) => {
+        button
+          .setButtonText('Reset to defaults')
+          .onClick(() => this.confirmReset());
+        button.buttonEl.addClass('mod-warning');
+      });
+  }
+
+  private confirmReset(): void {
+    new ConfirmationModal(
+      this.plugin,
+      'Reset all Templar settings?',
+      'Every option returns to its default value. Custom page styles are kept, favorites are cleared.',
+      async () => {
+        const defaults = clone(DEFAULT_SETTINGS);
+        defaults.userTemplates = this.plugin.settings.userTemplates;
+        Object.assign(this.plugin.settings, defaults);
+        await this.plugin.saveSettings();
+        this.plugin.refreshEverything();
+        this.render();
+        new Notice('Templar settings restored to defaults.');
+      },
+      'Reset settings',
+    ).open();
   }
 }

@@ -15,7 +15,7 @@ All three can be synced or received from someone else and are treated as untrust
 - YAML parsing uses Obsidian's parser.
 - Imported objects are normalized into the known v1 schema; unknown keys are dropped.
 - Numeric values are finite and clamped.
-- enum values fall back to a documented safe member.
+- Enum values fall back to a documented safe member.
 - Writes use `FileManager.processFrontMatter()` and touch only `frontmatter.templar`.
 - No imported text is passed to `innerHTML` or executed.
 - Import preview is isolated and saving requires an explicit user action.
@@ -33,7 +33,7 @@ Every non-keyframe selector must start with `.page` or `.page-content`. The vali
 - `position: fixed`;
 - z-index above 20;
 - legacy executable binding/behavior properties;
-- viewport media queries that would make a fixed page reflow.
+- viewport media queries that would make a fixed page reflow;
 - viewport/container/environment-dependent lengths, container queries, `!important`, and private runtime selectors that could override the fixed canvas.
 
 Infinite animations and backdrop filters produce warnings. Validation errors omit advanced CSS from rendering.

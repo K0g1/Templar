@@ -26,7 +26,7 @@ import { normalizeTemplate } from './templates/schema';
 import { templateToExportObject } from './templates/note-format';
 import type { NotePageOptions, TemplarSettings, TemplarTemplate } from './types';
 import { writeTextToClipboard } from './utils/clipboard';
-import { clone, slugify } from './utils/value';
+import { clone, slugify, stringArray } from './utils/value';
 import {
   BatchApplyModal,
   ApplyStyleModal,
@@ -107,6 +107,7 @@ export default class TemplarPlugin extends Plugin {
       ...clone(DEFAULT_SETTINGS),
       ...(data ?? {}),
       userTemplates,
+      favouriteTemplateIds: stringArray(data?.favouriteTemplateIds, []),
     };
   }
 

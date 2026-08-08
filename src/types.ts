@@ -1,5 +1,14 @@
 export type BaselineMode = 'strict' | 'balanced' | 'free';
-export type PaperPattern = 'blank' | 'ruled' | 'dot-grid' | 'graph';
+export type PaperPattern =
+  | 'blank'
+  | 'ruled'
+  | 'dot-grid'
+  | 'graph'
+  | 'ledger'
+  | 'cross-hatch'
+  | 'diagonal'
+  | 'hex'
+  | 'scallop';
 export type PageMode = 'pageless' | 'paged';
 export type PageSize = 'a4' | 'letter' | 'custom';
 export type ImageFrame =
@@ -12,6 +21,11 @@ export type ImageFrame =
   | 'technical'
   | 'dark'
   | 'vintage';
+export type ImageFloat = 'none' | 'left' | 'right';
+export type ImageObjectFit = 'contain' | 'cover' | 'fill' | 'scale-down';
+export type DividerStyle = 'solid' | 'dashed' | 'dotted' | 'double' | 'fade';
+export type ListMarkerStyle = 'disc' | 'circle' | 'square' | 'none';
+export type HeadingTextTransform = 'none' | 'uppercase' | 'lowercase' | 'capitalize';
 
 export interface TemplateMetadata {
   author: string;
@@ -27,6 +41,10 @@ export interface PaperStyle {
   marginLine: boolean;
   marginColor: string;
   marginOffset: number;
+  patternOpacity: number;
+  patternScale: number;
+  dotRadius: number;
+  graphMajorInterval: number;
 }
 
 export interface BaselineStyle {
@@ -42,6 +60,9 @@ export interface TypographyStyle {
   bodyWeight: number;
   textColor: string;
   mutedColor: string;
+  bodyLineHeight: number;
+  firstLineIndent: number;
+  dropCap: boolean;
 }
 
 export interface HeadingLevelStyle {
@@ -50,6 +71,8 @@ export interface HeadingLevelStyle {
   weight: number;
   color: string;
   decoration: 'none' | 'underline' | 'rule' | 'highlight';
+  letterSpacing: number;
+  textTransform: HeadingTextTransform;
 }
 
 export interface HeadingStyle {
@@ -57,6 +80,8 @@ export interface HeadingStyle {
   h2: HeadingLevelStyle;
   h3: HeadingLevelStyle;
   h4: HeadingLevelStyle;
+  h5: HeadingLevelStyle;
+  h6: HeadingLevelStyle;
 }
 
 export interface LayoutStyle {
@@ -85,6 +110,17 @@ export interface ImageStyle {
   grayscale: number;
   saturation: number;
   contrast: number;
+  float: ImageFloat;
+  objectFit: ImageObjectFit;
+  duotone: string;
+}
+
+export interface CalloutVariant {
+  accent?: string;
+  background?: string;
+  textColor?: string;
+  titleColor?: string;
+  iconColor?: string;
 }
 
 export interface BlockStyle {
@@ -100,7 +136,44 @@ export interface BlockStyle {
   codeSize: number;
   tableBorder: string;
   tableHeaderBackground: string;
+  tableBorderWidth: number;
+  tableFontSize: number;
+  tableTextColor: string;
+  tableHeaderTextColor: string;
+  tablePadding: number;
+  tableStriped: boolean;
+  tableStripeColor: string;
   checkboxAccent: string;
+  dividerColor: string;
+  dividerWidth: number;
+  dividerStyle: DividerStyle;
+  calloutAccent: string;
+  calloutBackground: string;
+  calloutTextColor: string;
+  calloutTitleColor: string;
+  calloutIconColor: string;
+  calloutBorderWidth: number;
+  calloutRadius: number;
+  calloutVariants: Record<string, CalloutVariant>;
+  embedBackground: string;
+  embedAccent: string;
+  embedRadius: number;
+}
+
+export interface ListsStyle {
+  markerStyle: ListMarkerStyle;
+  markerColor: string;
+  indentGuides: boolean;
+  indentGuideColor: string;
+  nestedIndent: number;
+}
+
+export interface WatermarkStyle {
+  text: string;
+  color: string;
+  size: number;
+  rotation: number;
+  opacity: number;
 }
 
 export interface TemplarTemplate {
@@ -112,9 +185,11 @@ export interface TemplarTemplate {
   baseline: BaselineStyle;
   typography: TypographyStyle;
   headings: HeadingStyle;
+  lists: ListsStyle;
   layout: LayoutStyle;
   images: ImageStyle;
   blocks: BlockStyle;
+  watermark: WatermarkStyle;
   css: string;
   builtIn?: boolean;
 }
@@ -147,6 +222,7 @@ export interface TemplarSettings {
   defaultTemplateId: string;
   defaultGridUnit: number;
   fontCacheSize: number;
+  favouriteTemplateIds: string[];
   userTemplates: TemplarTemplate[];
 }
 

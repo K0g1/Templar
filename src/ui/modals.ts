@@ -14,6 +14,7 @@ import {
 } from 'obsidian';
 import type TemplarPlugin from '../main';
 import { validateCustomCss } from '../services/css-validator';
+import { BUILT_IN_TEMPLATES } from '../templates/builtins';
 import { DEFAULT_TEMPLATE } from '../templates/defaults';
 import { DEFAULT_PAGE_OPTIONS } from '../templates/defaults';
 import {
@@ -29,7 +30,12 @@ import {
 } from '../templates/schema';
 import type {
   BaselineMode,
+  DividerStyle,
+  HeadingTextTransform,
+  ImageFloat,
   ImageFrame,
+  ImageObjectFit,
+  ListMarkerStyle,
   NotePageOptions,
   TemplarNoteStyle,
   TemplarTemplate,
@@ -381,6 +387,7 @@ export class RawStyleModal extends Modal {
 export class TemplateCreatorModal extends Modal {
   private draft: TemplarTemplate;
   private readonly originalId: string | null;
+  private readonly sourceBuiltInId: string | null;
   private editorEl!: HTMLElement;
   private previewEl!: HTMLElement;
   private issuesEl!: HTMLElement;
@@ -396,6 +403,7 @@ export class TemplateCreatorModal extends Modal {
     super(plugin.app);
     this.draft = clone(template ?? DEFAULT_TEMPLATE);
     this.originalId = template && !template.builtIn ? template.id : null;
+    this.sourceBuiltInId = template && template.builtIn ? template.id : null;
     this.draft.builtIn = false;
     if (!template) {
       this.draft.id = `custom-style-${String(Date.now())}`;
@@ -443,6 +451,13 @@ export class TemplateCreatorModal extends Modal {
     this.issuesEl = previewColumn.createDiv();
 
     const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
+    if (this.sourceBuiltInId) {
+      const resetButton = actions.createEl('button', {
+        cls: 'mod-warning',
+        text: 'Reset to default',
+      });
+      resetButton.addEventListener('click', () => void this.resetToDefault());
+    }
     const exportButton = actions.createEl('button', { text: 'Copy YAML' });
     exportButton.addEventListener('click', () =>
       void runButtonAction(exportButton, async () => this.copyYaml()),
@@ -496,7 +511,17 @@ export class TemplateCreatorModal extends Modal {
     });
     new Setting(this.editorEl).setName('Pattern').addDropdown((dropdown) =>
       dropdown
-        .addOptions({ blank: 'Blank', ruled: 'Ruled', 'dot-grid': 'Dot grid', graph: 'Graph' })
+        .addOptions({
+          blank: 'Blank',
+          ruled: 'Ruled',
+          ledger: 'Ledger',
+          'dot-grid': 'Dot grid',
+          graph: 'Graph',
+          'cross-hatch': 'Cross hatch',
+          diagonal: 'Diagonal',
+          hex: 'Hex',
+          scallop: 'Scallop',
+        })
         .setValue(this.draft.paper.pattern)
         .onChange((value) => {
           this.draft.paper.pattern = value as PaperPattern;
@@ -509,13 +534,25 @@ export class TemplateCreatorModal extends Modal {
     this.colorSetting('Major graph color', this.draft.paper.majorPatternColor, (value) => {
       this.draft.paper.majorPatternColor = value;
     });
+    this.sliderSetting('Pattern opacity', this.draft.paper.patternOpacity, 0, 1, 0.05, (value) => {
+      this.draft.paper.patternOpacity = value;
+    });
+    this.sliderSetting('Pattern scale', this.draft.paper.patternScale, 0.25, 4, 0.05, (value) => {
+      this.draft.paper.patternScale = value;
+    });
+    this.sliderSetting('Dot radius', this.draft.paper.dotRadius, 0.5, 6, 0.5, (value) => {
+      this.draft.paper.dotRadius = value;
+    });
+    this.sliderSetting('Graph major interval', this.draft.paper.graphMajorInterval, 2, 10, 1, (value) => {
+      this.draft.paper.graphMajorInterval = value;
+    });
     this.toggleSetting('Margin line', this.draft.paper.marginLine, (value) => {
       this.draft.paper.marginLine = value;
     });
     this.colorSetting('Margin color', this.draft.paper.marginColor, (value) => {
       this.draft.paper.marginColor = value;
     });
-    this.sliderSetting('Margin offset', this.draft.paper.marginOffset, 0, 220, 2, (value) => {
+    this.sliderSetting('Margin offset', this.draft.paper.marginOffset, 0, 400, 2, (value) => {
       this.draft.paper.marginOffset = value;
     });
 
@@ -534,6 +571,15 @@ export class TemplateCreatorModal extends Modal {
     });
     this.colorSetting('Muted text color', this.draft.typography.mutedColor, (value) => {
       this.draft.typography.mutedColor = value;
+    });
+    this.sliderSetting('Body line height', this.draft.typography.bodyLineHeight, 0, 120, 1, (value) => {
+      this.draft.typography.bodyLineHeight = value;
+    }).setDesc('0 = automatic rhythm.');
+    this.sliderSetting('First line indent', this.draft.typography.firstLineIndent, 0, 120, 2, (value) => {
+      this.draft.typography.firstLineIndent = value;
+    }).setDesc('Reading view only.');
+    this.toggleSetting('Drop cap', this.draft.typography.dropCap, (value) => {
+      this.draft.typography.dropCap = value;
     });
     this.sliderSetting('Vertical rhythm', this.draft.baseline.unit, 12, 96, 1, (value) => {
       this.draft.baseline.unit = value;
@@ -557,6 +603,31 @@ export class TemplateCreatorModal extends Modal {
     this.headingLevelSettings('h2', 'Heading 2');
     this.headingLevelSettings('h3', 'Heading 3');
     this.headingLevelSettings('h4', 'Heading 4');
+    this.headingLevelSettings('h5', 'Heading 5');
+    this.headingLevelSettings('h6', 'Heading 6');
+
+    this.heading('Lists');
+    new Setting(this.editorEl).setName('Bullet style').addDropdown((dropdown) =>
+      dropdown
+        .addOptions({ disc: 'Disc', circle: 'Circle', square: 'Square', none: 'None' })
+        .setValue(this.draft.lists.markerStyle)
+        .onChange((value) => {
+          this.draft.lists.markerStyle = value as ListMarkerStyle;
+          void this.updatePreview();
+        }),
+    );
+    this.colorSetting('Marker color', this.draft.lists.markerColor, (value) => {
+      this.draft.lists.markerColor = value;
+    });
+    this.toggleSetting('Indent guides', this.draft.lists.indentGuides, (value) => {
+      this.draft.lists.indentGuides = value;
+    });
+    this.colorSetting('Indent guide color', this.draft.lists.indentGuideColor, (value) => {
+      this.draft.lists.indentGuideColor = value;
+    });
+    this.sliderSetting('Nested list indent', this.draft.lists.nestedIndent, 0, 120, 2, (value) => {
+      this.draft.lists.nestedIndent = value;
+    }).setDesc('0 = Obsidian default. Reading view only.');
 
     this.heading('Page geometry');
     this.sliderSetting('Maximum width', this.draft.layout.maxWidth, 320, 1800, 10, (value) => {
@@ -574,7 +645,7 @@ export class TemplateCreatorModal extends Modal {
     this.sliderSetting('Left padding', this.draft.layout.paddingLeft, 0, 180, 2, (value) => {
       this.draft.layout.paddingLeft = value;
     });
-    this.sliderSetting('Page corner radius', this.draft.layout.pageRadius, 0, 40, 1, (value) => {
+    this.sliderSetting('Page corner radius', this.draft.layout.pageRadius, 0, 80, 1, (value) => {
       this.draft.layout.pageRadius = value;
     });
     this.textSetting('Page shadow', 'A self-contained CSS box-shadow value.', this.draft.layout.pageShadow, (value) => {
@@ -627,14 +698,35 @@ export class TemplateCreatorModal extends Modal {
     this.sliderSetting('Grayscale', this.draft.images.grayscale, 0, 1, 0.05, (value) => {
       this.draft.images.grayscale = value;
     });
-    this.sliderSetting('Saturation', this.draft.images.saturation, 0, 2, 0.05, (value) => {
+    this.sliderSetting('Saturation', this.draft.images.saturation, 0, 4, 0.05, (value) => {
       this.draft.images.saturation = value;
     });
-    this.sliderSetting('Contrast', this.draft.images.contrast, 0, 2, 0.05, (value) => {
+    this.sliderSetting('Contrast', this.draft.images.contrast, 0, 4, 0.05, (value) => {
       this.draft.images.contrast = value;
     });
+    new Setting(this.editorEl).setName('Float').addDropdown((dropdown) =>
+      dropdown
+        .addOptions({ none: 'None', left: 'Left', right: 'Right' })
+        .setValue(this.draft.images.float)
+        .onChange((value) => {
+          this.draft.images.float = value as ImageFloat;
+          void this.updatePreview();
+        }),
+    );
+    new Setting(this.editorEl).setName('Object fit').addDropdown((dropdown) =>
+      dropdown
+        .addOptions({ contain: 'Contain', cover: 'Cover', fill: 'Fill', 'scale-down': 'Scale down' })
+        .setValue(this.draft.images.objectFit)
+        .onChange((value) => {
+          this.draft.images.objectFit = value as ImageObjectFit;
+          void this.updatePreview();
+        }),
+    );
+    this.colorSetting('Duotone', this.draft.images.duotone, (value) => {
+      this.draft.images.duotone = value;
+    });
 
-    this.heading('Links, highlights, quotes, code, tables, and tasks');
+    this.heading('Links, quotes, code, tables, lists, and callouts');
     this.colorSetting('Link color', this.draft.blocks.linkColor, (value) => {
       this.draft.blocks.linkColor = value;
     });
@@ -662,7 +754,7 @@ export class TemplateCreatorModal extends Modal {
     this.textSetting('Code font', 'Use a complete monospace fallback stack.', this.draft.blocks.codeFont, (value) => {
       this.draft.blocks.codeFont = value;
     });
-    this.sliderSetting('Code size', this.draft.blocks.codeSize, 8, 32, 1, (value) => {
+    this.sliderSetting('Code size', this.draft.blocks.codeSize, 8, 48, 1, (value) => {
       this.draft.blocks.codeSize = value;
     });
     this.colorSetting('Table borders', this.draft.blocks.tableBorder, (value) => {
@@ -671,20 +763,103 @@ export class TemplateCreatorModal extends Modal {
     this.colorSetting('Table header background', this.draft.blocks.tableHeaderBackground, (value) => {
       this.draft.blocks.tableHeaderBackground = value;
     });
+    this.sliderSetting('Table border width', this.draft.blocks.tableBorderWidth, 0, 12, 1, (value) => {
+      this.draft.blocks.tableBorderWidth = value;
+    });
+    this.sliderSetting('Table font size', this.draft.blocks.tableFontSize, 8, 48, 1, (value) => {
+      this.draft.blocks.tableFontSize = value;
+    });
+    this.colorSetting('Table text', this.draft.blocks.tableTextColor, (value) => {
+      this.draft.blocks.tableTextColor = value;
+    });
+    this.colorSetting('Table header text', this.draft.blocks.tableHeaderTextColor, (value) => {
+      this.draft.blocks.tableHeaderTextColor = value;
+    });
+    this.sliderSetting('Table padding', this.draft.blocks.tablePadding, 0, 40, 1, (value) => {
+      this.draft.blocks.tablePadding = value;
+    });
+    this.toggleSetting('Striped table rows', this.draft.blocks.tableStriped, (value) => {
+      this.draft.blocks.tableStriped = value;
+    });
+    this.colorSetting('Table stripe color', this.draft.blocks.tableStripeColor, (value) => {
+      this.draft.blocks.tableStripeColor = value;
+    });
     this.colorSetting('Checkbox accent', this.draft.blocks.checkboxAccent, (value) => {
       this.draft.blocks.checkboxAccent = value;
+    });
+    this.colorSetting('Divider color', this.draft.blocks.dividerColor, (value) => {
+      this.draft.blocks.dividerColor = value;
+    });
+    this.sliderSetting('Divider width', this.draft.blocks.dividerWidth, 1, 20, 1, (value) => {
+      this.draft.blocks.dividerWidth = value;
+    });
+    new Setting(this.editorEl).setName('Divider style').addDropdown((dropdown) =>
+      dropdown
+        .addOptions({ solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', double: 'Double', fade: 'Fade' })
+        .setValue(this.draft.blocks.dividerStyle)
+        .onChange((value) => {
+          this.draft.blocks.dividerStyle = value as DividerStyle;
+          void this.updatePreview();
+        }),
+    );
+    this.colorSetting('Callout accent', this.draft.blocks.calloutAccent, (value) => {
+      this.draft.blocks.calloutAccent = value;
+    });
+    this.colorSetting('Callout background', this.draft.blocks.calloutBackground, (value) => {
+      this.draft.blocks.calloutBackground = value;
+    });
+    this.colorSetting('Callout text', this.draft.blocks.calloutTextColor, (value) => {
+      this.draft.blocks.calloutTextColor = value;
+    });
+    this.colorSetting('Callout title', this.draft.blocks.calloutTitleColor, (value) => {
+      this.draft.blocks.calloutTitleColor = value;
+    });
+    this.colorSetting('Callout icon', this.draft.blocks.calloutIconColor, (value) => {
+      this.draft.blocks.calloutIconColor = value;
+    });
+    this.sliderSetting('Callout border width', this.draft.blocks.calloutBorderWidth, 0, 12, 1, (value) => {
+      this.draft.blocks.calloutBorderWidth = value;
+    });
+    this.sliderSetting('Callout corner radius', this.draft.blocks.calloutRadius, 0, 60, 1, (value) => {
+      this.draft.blocks.calloutRadius = value;
+    });
+    this.colorSetting('Embed background', this.draft.blocks.embedBackground, (value) => {
+      this.draft.blocks.embedBackground = value;
+    });
+    this.colorSetting('Embed accent', this.draft.blocks.embedAccent, (value) => {
+      this.draft.blocks.embedAccent = value;
+    });
+    this.sliderSetting('Embed corner radius', this.draft.blocks.embedRadius, 0, 60, 1, (value) => {
+      this.draft.blocks.embedRadius = value;
+    });
+
+    this.heading('Watermark');
+    this.textSetting('Watermark text', 'Leave empty to hide the watermark.', this.draft.watermark.text, (value) => {
+      this.draft.watermark.text = value;
+    });
+    this.colorSetting('Watermark color', this.draft.watermark.color, (value) => {
+      this.draft.watermark.color = value;
+    });
+    this.sliderSetting('Watermark size', this.draft.watermark.size, 24, 240, 2, (value) => {
+      this.draft.watermark.size = value;
+    });
+    this.sliderSetting('Watermark rotation', this.draft.watermark.rotation, -45, 45, 1, (value) => {
+      this.draft.watermark.rotation = value;
+    });
+    this.sliderSetting('Watermark opacity', this.draft.watermark.opacity, 0.05, 1, 0.05, (value) => {
+      this.draft.watermark.opacity = value;
     });
   }
 
   private headingLevelSettings(
-    level: 'h1' | 'h2' | 'h3' | 'h4',
+    level: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6',
     label: string,
   ): void {
     const heading = this.draft.headings[level];
     this.textSetting(`${label} font`, 'Use a complete fallback stack.', heading.font, (value) => {
       this.draft.headings[level].font = value;
     });
-    this.sliderSetting(`${label} size`, heading.size, 8, 100, 1, (value) => {
+    this.sliderSetting(`${label} size`, heading.size, 8, 144, 1, (value) => {
       this.draft.headings[level].size = value;
     });
     this.sliderSetting(`${label} weight`, heading.weight, 100, 900, 50, (value) => {
@@ -699,6 +874,23 @@ export class TemplateCreatorModal extends Modal {
         .setValue(heading.decoration)
         .onChange((value) => {
           this.draft.headings[level].decoration = value as typeof heading.decoration;
+          void this.updatePreview();
+        }),
+    );
+    this.sliderSetting(`${label} letter spacing`, heading.letterSpacing, 0, 10, 0.5, (value) => {
+      this.draft.headings[level].letterSpacing = value;
+    });
+    new Setting(this.editorEl).setName(`${label} text transform`).addDropdown((dropdown) =>
+      dropdown
+        .addOptions({
+          none: 'None',
+          uppercase: 'UPPERCASE',
+          lowercase: 'lowercase',
+          capitalize: 'Capitalize',
+        })
+        .setValue(heading.textTransform)
+        .onChange((value) => {
+          this.draft.headings[level].textTransform = value as HeadingTextTransform;
           void this.updatePreview();
         }),
     );
@@ -742,7 +934,17 @@ export class TemplateCreatorModal extends Modal {
       .setName('Pattern')
       .addDropdown((dropdown) =>
         dropdown
-          .addOptions({ blank: 'Blank', ruled: 'Ruled', 'dot-grid': 'Dot grid', graph: 'Graph' })
+          .addOptions({
+            blank: 'Blank',
+            ruled: 'Ruled',
+            ledger: 'Ledger',
+            'dot-grid': 'Dot grid',
+            graph: 'Graph',
+            'cross-hatch': 'Cross hatch',
+            diagonal: 'Diagonal',
+            hex: 'Hex',
+            scallop: 'Scallop',
+          })
           .setValue(this.draft.paper.pattern)
           .onChange((value) => {
             this.draft.paper.pattern = value as PaperPattern;
@@ -843,6 +1045,9 @@ export class TemplateCreatorModal extends Modal {
     this.colorSetting('Quote accent', this.draft.blocks.quoteAccent, (value) => {
       this.draft.blocks.quoteAccent = value;
     });
+    this.colorSetting('Callout accent', this.draft.blocks.calloutAccent, (value) => {
+      this.draft.blocks.calloutAccent = value;
+    });
     this.colorSetting('Checkbox accent', this.draft.blocks.checkboxAccent, (value) => {
       this.draft.blocks.checkboxAccent = value;
     });
@@ -935,8 +1140,8 @@ export class TemplateCreatorModal extends Modal {
     maximum: number,
     step: number,
     update: (value: number) => void,
-  ): void {
-    new Setting(this.editorEl)
+  ): Setting {
+    const setting = new Setting(this.editorEl)
       .setName(name)
       .setDesc(String(value))
       .addSlider((slider) =>
@@ -948,6 +1153,7 @@ export class TemplateCreatorModal extends Modal {
             void this.updatePreview();
           }),
       );
+    return setting;
   }
 
   private async updatePreview(): Promise<void> {
@@ -983,6 +1189,45 @@ export class TemplateCreatorModal extends Modal {
       this.contentEl.ownerDocument,
     );
     new Notice('Template YAML copied.');
+  }
+
+  private async resetToDefault(): Promise<void> {
+    if (!this.sourceBuiltInId) {
+      return;
+    }
+    const pristine = BUILT_IN_TEMPLATES.find(
+      (template) => template.id === this.sourceBuiltInId,
+    );
+    if (!pristine) {
+      new Notice('The built-in style is no longer available.');
+      return;
+    }
+    const overrides = this.plugin.library
+      .userTemplates()
+      .filter(
+        (template) =>
+          template.id === `${this.sourceBuiltInId}-custom` ||
+          template.id.startsWith(`${this.sourceBuiltInId}-custom-`),
+      );
+    const description = overrides.length > 0
+      ? `The draft returns to the original “${pristine.name}” definition. This also removes ${overrides.map((template) => `“${template.name}”`).join(', ')} from your custom styles.`
+      : `The draft returns to the original “${pristine.name}” definition. Any unsaved changes are discarded.`;
+    new ConfirmationModal(
+      this.plugin,
+      `Reset “${pristine.name}” to its default?`,
+      description,
+      async () => {
+        for (const override of overrides) {
+          await this.plugin.library.remove(override.id);
+        }
+        this.draft = clone(pristine);
+        this.draft.builtIn = false;
+        this.plugin.refreshSidebars();
+        this.renderEditor();
+        new Notice(`“${pristine.name}” restored to its default.`);
+      },
+      'Reset to default',
+    ).open();
   }
 
   private async save(): Promise<void> {

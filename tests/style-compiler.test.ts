@@ -9,6 +9,8 @@ const metrics: PageMetricSet = {
   h2: { baseline: 37, ascent: 29, descent: 6, lineHeight: 60, measuredAt: 0 },
   h3: { baseline: 24, ascent: 19, descent: 5, lineHeight: 30, measuredAt: 0 },
   h4: { baseline: 21, ascent: 16, descent: 4, lineHeight: 30, measuredAt: 0 },
+  h5: { baseline: 18, ascent: 14, descent: 4, lineHeight: 24, measuredAt: 0 },
+  h6: { baseline: 16, ascent: 12, descent: 4, lineHeight: 24, measuredAt: 0 },
   code: { baseline: 20, ascent: 14, descent: 4, lineHeight: 30, measuredAt: 0 },
 };
 
@@ -123,5 +125,114 @@ describe('structured style compiler', () => {
     expect(result.css).toContain('width: 816px !important');
     expect(result.css).toContain('zoom: var(--templar-page-scale) !important');
     expect(result.css).toContain('mask-image: repeating-linear-gradient');
+  });
+
+  it('styles h5 and h6 with their own rules and live preview classes', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-test"]',
+      'test',
+      metrics,
+    ).css;
+    expect(css).toContain(':is(h5, .HyperMD-header-5)');
+    expect(css).toContain(':is(h6, .HyperMD-header-6)');
+    expect(css).toContain(`font-size: ${String(style.headings.h5.size)}px`);
+    expect(css).toContain(`font-size: ${String(style.headings.h6.size)}px`);
+    expect(css).toContain('letter-spacing: 0px');
+  });
+
+  it('honors an explicit body line height', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.baseline.mode = 'free';
+    style.baseline.enabled = false;
+    style.typography.bodyLineHeight = 34;
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-test"]',
+      'test',
+      metrics,
+    ).css;
+    expect(css).toContain('--templar-body-line-height: 34px');
+  });
+
+  it('emits watermark, callout, divider, table, and list declarations', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.watermark.text = 'Draft copy';
+    style.watermark.size = 120;
+    style.watermark.rotation = -30;
+    style.blocks.dividerStyle = 'dashed';
+    style.blocks.dividerWidth = 3;
+    style.blocks.tableStriped = true;
+    style.blocks.tableFontSize = 14;
+    style.blocks.tablePadding = 6;
+    style.lists.markerStyle = 'square';
+    style.blocks.calloutVariants = {
+      warning: { accent: '#c77b3a' },
+    };
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-test"]',
+      'test',
+      metrics,
+    ).css;
+    expect(css).toContain('--templar-watermark: "Draft copy"');
+    expect(css).toContain('font-size: 120px');
+    expect(css).toContain('transform: rotate(-30deg)');
+    expect(css).toContain('.templar-page-content::after');
+    expect(css).toContain('border-block-start: 3px dashed');
+    expect(css).toContain('tbody tr:nth-child(even)');
+    expect(css).toContain('font-size: 14px');
+    expect(css).toContain('padding: 6px');
+    expect(css).toContain('list-style-type: square');
+    expect(css).toContain('[data-callout="warning"]');
+    expect(css).toContain('--callout-border-color: #c77b3a');
+  });
+
+  it('escapes watermark text and rejects pattern injection', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.watermark.text = 'He said "hi"';
+    style.paper.patternColor = 'red; } body { display: none';
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-test"]',
+      'test',
+      metrics,
+    ).css;
+    expect(css).toContain('--templar-watermark: "He said \\"hi\\""');
+    expect(css).not.toContain('body { display');
+  });
+
+  it('applies duotone and float to images', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.images.duotone = '#a34f2c';
+    style.images.float = 'right';
+    style.images.objectFit = 'cover';
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-test"]',
+      'test',
+      metrics,
+    ).css;
+    expect(css).toContain('float: right');
+    expect(css).toContain('object-fit: cover');
+    expect(css).toContain('grayscale(1) sepia(1)');
+    expect(css).toContain('hue-rotate(');
+    expect(css).toContain('margin-inline: 0 0 0 1em');
+  });
+
+  it('renders every new paper pattern', () => {
+    for (const pattern of ['ledger', 'cross-hatch', 'diagonal', 'hex', 'scallop'] as const) {
+      const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+      style.paper.pattern = pattern;
+      const css = compilePageStyle(
+        style,
+        '[data-templar-scope="templar-test"]',
+        'test',
+        metrics,
+      ).css;
+      expect(css.length, pattern).toBeGreaterThan(0);
+      expect(css, pattern).toContain('background-image');
+    }
   });
 });

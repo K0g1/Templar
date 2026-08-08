@@ -101,12 +101,33 @@ export class TemplateLibrary {
       return false;
     }
     this.settings.userTemplates.splice(index, 1);
+    const favouriteIndex = this.settings.favouriteTemplateIds.indexOf(id);
+    if (favouriteIndex >= 0) {
+      this.settings.favouriteTemplateIds.splice(favouriteIndex, 1);
+    }
     await this.persist();
     return true;
   }
 
   public isBuiltIn(id: string): boolean {
     return BUILT_IN_TEMPLATES.some((template) => template.id === id);
+  }
+
+  public isFavourite(id: string): boolean {
+    return this.settings.favouriteTemplateIds.includes(id);
+  }
+
+  public async toggleFavourite(id: string): Promise<boolean> {
+    const favourites = this.settings.favouriteTemplateIds;
+    const index = favourites.indexOf(id);
+    if (index >= 0) {
+      favourites.splice(index, 1);
+      await this.persist();
+      return false;
+    }
+    favourites.push(id);
+    await this.persist();
+    return true;
   }
 
   private uniqueId(preferred: string): string {

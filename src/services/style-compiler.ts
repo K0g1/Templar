@@ -20,6 +20,8 @@ export interface PageMetricSet {
   h2: FontMetrics;
   h3: FontMetrics;
   h4: FontMetrics;
+  h5: FontMetrics;
+  h6: FontMetrics;
   code: FontMetrics;
 }
 
@@ -39,6 +41,14 @@ function px(value: number): string {
   return `${String(round(value))}px`;
 }
 
+function withOpacity(color: string, opacity: number): string {
+  const clamped = Math.min(1, Math.max(0, opacity));
+  if (clamped >= 1) {
+    return color;
+  }
+  return `color-mix(in srgb, ${color} ${String(round(clamped * 100))}%, transparent)`;
+}
+
 function patternDeclarations(
   style: TemplarNoteStyle,
   baseline: number,
@@ -46,49 +56,61 @@ function patternDeclarations(
 ): string {
   const { paper, baseline: grid } = style;
   const unit = grid.unit;
+  const tile = unit * paper.patternScale;
   const baselineAnchor = px(baseline);
-  const halfUnit = px(unit / 2);
+  const halfUnit = px(tile / 2);
   const dotPosition = `calc(${inlineStart} - ${halfUnit}) calc(${baselineAnchor} - ${halfUnit})`;
   const gridPosition = `${inlineStart} ${baselineAnchor}`;
-  const patternColor = safeValue(paper.patternColor, 'rgba(80, 120, 160, 0.3)');
-  const majorColor = safeValue(paper.majorPatternColor, 'rgba(60, 100, 140, 0.35)');
+  const patternColor = withOpacity(
+    safeValue(paper.patternColor, 'rgba(80, 120, 160, 0.3)'),
+    paper.patternOpacity,
+  );
+  const majorColor = withOpacity(
+    safeValue(paper.majorPatternColor, 'rgba(60, 100, 140, 0.35)'),
+    paper.patternOpacity,
+  );
   const marginColor = safeValue(paper.marginColor, 'rgba(200, 80, 80, 0.55)');
   const marginOffset =
     style.page.mode === 'paged' ? px(paper.marginOffset) : `min(${px(paper.marginOffset)}, 15%)`;
   const marginStart = `calc(${marginOffset} - 0.75px)`;
   const marginEnd = `calc(${marginOffset} + 0.75px)`;
   const marginLayer = `linear-gradient(to right, transparent 0, transparent ${marginStart}, ${marginColor} ${marginStart}, ${marginColor} ${marginEnd}, transparent ${marginEnd})`;
+  const ledgerLayer = `linear-gradient(to right, transparent 0, transparent ${marginStart}, ${marginColor} ${marginStart}, ${marginColor} ${marginEnd}, transparent ${marginEnd})`;
 
-  if (paper.pattern === 'ruled') {
+  if (paper.pattern === 'ruled' || paper.pattern === 'ledger') {
     // The baseline is the top edge of the ink. The one-pixel rule extends
     // downward so ordinary glyph bottoms remain clear while descenders cross it.
     const ruling = `linear-gradient(to bottom, ${patternColor} 0, ${patternColor} 1px, transparent 1px, transparent 100%)`;
-    if (paper.marginLine) {
-      return `background-image: ${marginLayer}, ${ruling};
-  background-size: 100% 100%, 100% ${px(unit)};
+    const marginLayerForPattern = paper.pattern === 'ledger' ? ledgerLayer : marginLayer;
+    const layers = paper.marginLine || paper.pattern === 'ledger'
+      ? `${marginLayerForPattern}, ${ruling}`
+      : ruling;
+    if (paper.marginLine || paper.pattern === 'ledger') {
+      return `background-image: ${layers};
+  background-size: 100% 100%, 100% ${px(tile)};
   background-position: 0 0, 0 ${baselineAnchor};
   background-repeat: no-repeat, repeat;`;
     }
     return `background-image: ${ruling};
-  background-size: 100% ${px(unit)};
+  background-size: 100% ${px(tile)};
   background-position: 0 ${baselineAnchor};
   background-repeat: repeat;`;
   }
 
   if (paper.pattern === 'dot-grid') {
-    const dots = `radial-gradient(circle, ${patternColor} 1px, transparent 1.25px)`;
+    const dots = `radial-gradient(circle, ${patternColor} ${px(paper.dotRadius)}, transparent calc(${px(paper.dotRadius)} * 1.25))`;
     return paper.marginLine
       ? `background-image: ${marginLayer}, ${dots};
-  background-size: 100% 100%, ${px(unit)} ${px(unit)};
+  background-size: 100% 100%, ${px(tile)} ${px(tile)};
   background-position: 0 0, ${dotPosition};
   background-repeat: no-repeat, repeat;`
       : `background-image: ${dots};
-  background-size: ${px(unit)} ${px(unit)};
+  background-size: ${px(tile)} ${px(tile)};
   background-position: ${dotPosition};`;
   }
 
   if (paper.pattern === 'graph') {
-    const major = unit * 5;
+    const major = tile * paper.graphMajorInterval;
     const layers = [
       `linear-gradient(${majorColor} 1.25px, transparent 1.25px)`,
       `linear-gradient(90deg, ${majorColor} 1.25px, transparent 1.25px)`,
@@ -98,8 +120,8 @@ function patternDeclarations(
     const sizes = [
       `${px(major)} ${px(major)}`,
       `${px(major)} ${px(major)}`,
-      `${px(unit)} ${px(unit)}`,
-      `${px(unit)} ${px(unit)}`,
+      `${px(tile)} ${px(tile)}`,
+      `${px(tile)} ${px(tile)}`,
     ];
     const positions = [gridPosition, gridPosition, gridPosition, gridPosition];
     const repeats = ['repeat', 'repeat', 'repeat', 'repeat'];
@@ -113,6 +135,72 @@ function patternDeclarations(
   background-size: ${sizes.join(', ')};
   background-position: ${positions.join(', ')};
   background-repeat: ${repeats.join(', ')};`;
+  }
+
+  if (paper.pattern === 'diagonal' || paper.pattern === 'cross-hatch') {
+    const stroke = `linear-gradient(to top right, ${patternColor} 1px, transparent 1px)`;
+    const counterStroke = `linear-gradient(to top left, ${patternColor} 1px, transparent 1px)`;
+    const layers = paper.pattern === 'cross-hatch' ? `${stroke}, ${counterStroke}` : stroke;
+    const sizes = paper.pattern === 'cross-hatch'
+      ? `${px(tile)} ${px(tile)}, ${px(tile)} ${px(tile)}`
+      : `${px(tile)} ${px(tile)}`;
+    const positions = paper.pattern === 'cross-hatch'
+      ? `${gridPosition}, ${gridPosition}`
+      : gridPosition;
+    if (paper.marginLine) {
+      return `background-image: ${marginLayer}, ${layers};
+  background-size: 100% 100%, ${sizes};
+  background-position: 0 0, ${positions};
+  background-repeat: no-repeat, repeat;`;
+    }
+    return `background-image: ${layers};
+  background-size: ${sizes};
+  background-position: ${positions};
+  background-repeat: repeat;`;
+  }
+
+  if (paper.pattern === 'hex') {
+    const hexLayers = [
+      `linear-gradient(60deg, ${patternColor} 1px, transparent 1px)`,
+      `linear-gradient(-60deg, ${patternColor} 1px, transparent 1px)`,
+      `linear-gradient(to right, ${patternColor} 1px, transparent 1px)`,
+    ];
+    const hexSizes = [
+      `${px(tile)} ${px(tile)}`,
+      `${px(tile)} ${px(tile)}`,
+      `${px(tile)} ${px(tile)}`,
+    ];
+    const hexPositions = [
+      `${inlineStart} ${baselineAnchor}`,
+      `${inlineStart} ${baselineAnchor}`,
+      `${inlineStart} ${baselineAnchor}`,
+    ];
+    if (paper.marginLine) {
+      hexLayers.unshift(marginLayer);
+      hexSizes.unshift('100% 100%');
+      hexPositions.unshift('0 0');
+    }
+    return `background-image: ${hexLayers.join(',\n    ')};
+  background-size: ${hexSizes.join(', ')};
+  background-position: ${hexPositions.join(', ')};
+  background-repeat: ${paper.marginLine ? 'no-repeat, ' : ''}repeat;`;
+  }
+
+  if (paper.pattern === 'scallop') {
+    const bump = `radial-gradient(circle at 50% 100%, ${patternColor} 35%, transparent 37%)`;
+    const bumps = `${bump}, ${bump}`;
+    const bumpSize = `${px(tile)} ${px(tile)}, ${px(tile)} ${px(tile)}`;
+    const bumpPosition = `${inlineStart} ${baselineAnchor}, calc(${inlineStart} + ${halfUnit}) calc(${baselineAnchor} + ${halfUnit})`;
+    if (paper.marginLine) {
+      return `background-image: ${marginLayer}, ${bumps};
+  background-size: 100% 100%, ${bumpSize};
+  background-position: 0 0, ${bumpPosition};
+  background-repeat: no-repeat, repeat;`;
+    }
+    return `background-image: ${bumps};
+  background-size: ${bumpSize};
+  background-position: ${bumpPosition};
+  background-repeat: repeat;`;
   }
 
   if (paper.marginLine) {
@@ -145,7 +233,7 @@ function headingDecoration(style: HeadingLevelStyle): string {
 
 function headingRule(
   scope: string,
-  level: 'h1' | 'h2' | 'h3' | 'h4',
+  level: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6',
   style: HeadingLevelStyle,
   metric: FontMetrics,
   bodyBaseline: number,
@@ -162,9 +250,11 @@ function headingRule(
   font-family: ${safeValue(style.font, 'inherit')};
   font-size: ${px(style.size)};
   font-weight: ${String(style.weight)};
+  letter-spacing: ${px(style.letterSpacing)};
   line-height: ${px(lineHeight)};
   margin-block: ${gridded ? `${px(gridUnit)} 0` : '1.35em 0.55em'} !important;
   padding-block: ${px(padding.top)} ${px(padding.bottom)} !important;
+  text-transform: ${style.textTransform};
   ${headingDecoration(style)}
 }`;
 }
@@ -242,6 +332,164 @@ function attachmentRules(style: TemplarNoteStyle, scope: string): string {
   return rules.join('\n');
 }
 
+function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
+  const cleaned = hex.replace('#', '');
+  const full =
+    cleaned.length === 3 || cleaned.length === 4
+      ? cleaned
+          .split('')
+          .map((channel) => channel + channel)
+          .join('')
+      : cleaned;
+  const match = /^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(full);
+  if (!match) {
+    return null;
+  }
+  const r = parseInt(match[1] ?? '', 16) / 255;
+  const g = parseInt(match[2] ?? '', 16) / 255;
+  const b = parseInt(match[3] ?? '', 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) {
+    return { h: 0, s: 0, l: l * 100 };
+  }
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) {
+    h = (g - b) / d + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / d + 2;
+  } else {
+    h = (r - g) / d + 4;
+  }
+  return { h: h * 60, s: s * 100, l: l * 100 };
+}
+
+function duotoneFilter(hex: string): string {
+  const target = hexToHsl(hex);
+  if (!target) {
+    return '';
+  }
+  // A full sepia pass lands near hsl(38, 50%, 50%); rotate and rescale the
+  // channel percentages toward the requested color for a believable duotone.
+  const hue = round(target.h - 38);
+  const saturation = round(target.s / 50, 2);
+  const lightness = round(target.l / 50, 2);
+  return `grayscale(1) sepia(1) hue-rotate(${String(hue)}deg) saturate(${String(saturation)}) brightness(${String(lightness)})`;
+}
+
+function imageFilter(style: TemplarNoteStyle): string {
+  const legacy = `sepia(${String(style.images.sepia)}) grayscale(${String(style.images.grayscale)}) saturate(${String(style.images.saturation)}) contrast(${String(style.images.contrast)})`;
+  if (style.images.duotone === 'none') {
+    return legacy;
+  }
+  const duotone = duotoneFilter(style.images.duotone);
+  return duotone ? `${duotone} ${legacy}` : legacy;
+}
+
+function dividerDeclarations(style: TemplarNoteStyle): string {
+  const color = safeValue(style.blocks.dividerColor, 'rgba(48, 46, 43, 0.35)');
+  const width = Math.max(style.blocks.dividerWidth, 1);
+  switch (style.blocks.dividerStyle) {
+    case 'dashed':
+      return `border-block-start: ${px(width)} dashed ${color};`;
+    case 'dotted':
+      return `border-block-start: ${px(width)} dotted ${color};`;
+    case 'double':
+      return `border-block-start: ${px(Math.max(width, 3))} double ${color};`;
+    case 'fade':
+      return `border-block-start: ${px(width)} solid ${color};
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);`;
+    case 'solid':
+    default:
+      return `border-block-start: ${px(width)} solid ${color};`;
+  }
+}
+
+function calloutRules(style: TemplarNoteStyle, scope: string): string {
+  const { blocks } = style;
+  const accent = safeValue(blocks.calloutAccent, '#9fb8ca');
+  const background = safeValue(blocks.calloutBackground, 'rgba(159, 184, 202, 0.12)');
+  const textColor = safeValue(blocks.calloutTextColor, '#302e2b');
+  const titleColor = safeValue(blocks.calloutTitleColor, '#302e2b');
+  const iconColor = safeValue(blocks.calloutIconColor, '#9fb8ca');
+  const base = `${scope} .templar-page :is(.callout, .cm-callout) {
+  --callout-background: ${background};
+  --callout-border-color: ${accent};
+  --callout-border-width: ${px(blocks.calloutBorderWidth)};
+  background-color: ${background};
+  border-color: ${accent};
+  border-radius: ${px(blocks.calloutRadius)};
+}
+
+${scope} .templar-page :is(.callout, .cm-callout) .callout-content {
+  color: ${textColor};
+}
+
+${scope} .templar-page :is(.callout, .cm-callout) .callout-title {
+  color: ${titleColor};
+}
+
+${scope} .templar-page :is(.callout, .cm-callout) .callout-icon {
+  color: ${iconColor};
+}`;
+  const variantRules: string[] = [];
+  for (const [type, variant] of Object.entries(blocks.calloutVariants)) {
+    const containerDeclarations: string[] = [];
+    if (variant.accent !== undefined) {
+      const value = safeValue(variant.accent, accent);
+      containerDeclarations.push(
+        `--callout-border-color: ${value};`,
+        `border-color: ${value};`,
+      );
+    }
+    if (variant.background !== undefined) {
+      const value = safeValue(variant.background, background);
+      containerDeclarations.push(`--callout-background: ${value};`, `background-color: ${value};`);
+    }
+    if (containerDeclarations.length > 0) {
+      variantRules.push(
+        `${scope} .templar-page :is(.callout, .cm-callout)[data-callout="${type}"] {
+  ${containerDeclarations.join('\n  ')}
+}`,
+      );
+    }
+    const innerDeclarations: string[] = [];
+    if (variant.textColor !== undefined) {
+      innerDeclarations.push(`color: ${safeValue(variant.textColor, textColor)};`);
+    }
+    if (innerDeclarations.length > 0) {
+      variantRules.push(
+        `${scope} .templar-page :is(.callout, .cm-callout)[data-callout="${type}"] .callout-content {
+  ${innerDeclarations.join('\n  ')}
+}`,
+      );
+    }
+    const titleDeclarations: string[] = [];
+    if (variant.titleColor !== undefined) {
+      titleDeclarations.push(`color: ${safeValue(variant.titleColor, titleColor)};`);
+    }
+    if (variant.iconColor !== undefined) {
+      titleDeclarations.push(`color: ${safeValue(variant.iconColor, iconColor)};`);
+    }
+    if (titleDeclarations.length > 0) {
+      variantRules.push(
+        `${scope} .templar-page :is(.callout, .cm-callout)[data-callout="${type}"] :is(.callout-title, .callout-icon) {
+  ${titleDeclarations.join('\n  ')}
+}`,
+      );
+    }
+  }
+  return variantRules.length > 0 ? `${base}\n\n${variantRules.join('\n\n')}` : base;
+}
+
+function escapeCssString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 export function compilePageStyle(
   style: TemplarNoteStyle,
   scope: string,
@@ -250,7 +498,11 @@ export function compilePageStyle(
 ): StyleCompilation {
   const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
   const unit = style.baseline.unit;
-  const bodyLineHeight = gridded ? unit : Math.max(style.typography.bodySize * 1.55, 22);
+  const bodyLineHeight = gridded
+    ? unit
+    : style.typography.bodyLineHeight > 0
+      ? style.typography.bodyLineHeight
+      : Math.max(style.typography.bodySize * 1.55, 22);
   const blockSpacing = blockSpacingForMode(
     style.baseline.mode,
     unit,
@@ -271,6 +523,7 @@ export function compilePageStyle(
   const textColor = safeValue(style.typography.textColor, '#302e2b');
   const mutedColor = safeValue(style.typography.mutedColor, '#706c66');
   const imageBorder = safeValue(style.images.borderColor, '#ffffff');
+  const watermarkText = escapeCssString(style.watermark.text);
   const paddingRight = horizontalPadding(style.layout.paddingRight, 'right', paged);
   const paddingLeft = horizontalPadding(style.layout.paddingLeft, 'left', paged);
   const pattern = patternDeclarations(style, baselinePosition, paddingLeft);
@@ -288,6 +541,7 @@ export function compilePageStyle(
   --templar-page-span: ${px(pageSpan)};
   --templar-page-scale: 1;
   --templar-body-line-height: ${px(bodyLineHeight)};
+  --templar-watermark: "${watermarkText}";
 }
 
 ${scope} .templar-page {
@@ -318,7 +572,7 @@ ${scope} .markdown-source-view.mod-cm6 .cm-scroller.templar-page {
 }
 
 ${scope} .templar-page-content {
-  ${paged ? '' : `${pattern}\n  background-color: ${paperColor};`}
+  ${paged ? '' : 'background-color: transparent;'}
   box-sizing: border-box;
   margin-inline: auto;
   max-width: ${paged ? 'none' : px(style.layout.maxWidth)};
@@ -327,6 +581,33 @@ ${scope} .templar-page-content {
   position: relative;
   width: ${paged ? px(style.page.width) : '100%'};
   zoom: ${paged ? 'var(--templar-page-scale)' : '1'};
+}
+
+${paged ? '' : `${scope} .templar-page-content::before {
+  ${pattern}
+  background-color: ${paperColor};
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+`}${scope} .templar-page-content::after {
+  color: ${safeValue(style.watermark.color, 'rgba(48, 46, 43, 0.1)')};
+  content: var(--templar-watermark, "");
+  display: grid;
+  font-size: ${px(style.watermark.size)};
+  inset: 0;
+  line-height: 1;
+  opacity: ${String(style.watermark.opacity)};
+  place-items: center;
+  pointer-events: none;
+  position: absolute;
+  transform: rotate(${String(style.watermark.rotation)}deg);
+  user-select: none;
+  white-space: pre;
+  z-index: -1;
 }
 
 ${paged ? `${scope} .templar-page-content {
@@ -415,6 +696,10 @@ ${headingRule(scope, 'h3', style.headings.h3, metrics.h3, metrics.body.baseline,
 
 ${headingRule(scope, 'h4', style.headings.h4, metrics.h4, metrics.body.baseline, unit, gridded)}
 
+${headingRule(scope, 'h5', style.headings.h5, metrics.h5, metrics.body.baseline, unit, gridded)}
+
+${headingRule(scope, 'h6', style.headings.h6, metrics.h6, metrics.body.baseline, unit, gridded)}
+
 ${scope} .templar-page a {
   color: ${safeValue(style.blocks.linkColor, '#315f86')};
   text-decoration-thickness: 1px;
@@ -469,16 +754,101 @@ ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line.Hype
   padding-block: 0 !important;
 }
 
-${scope} .templar-page table,
+${scope} .templar-page table {
+  border-collapse: collapse;
+  border-color: ${safeValue(style.blocks.tableBorder, 'currentColor')};
+  font-size: ${px(style.blocks.tableFontSize)};
+}
+
 ${scope} .templar-page :is(th, td) {
   border-color: ${safeValue(style.blocks.tableBorder, 'currentColor')};
+  border-width: ${px(style.blocks.tableBorderWidth)};
+  padding: ${px(style.blocks.tablePadding)};
+  text-align: start;
 }
 
 ${scope} .templar-page th {
   background: ${safeValue(style.blocks.tableHeaderBackground, 'transparent')};
+  color: ${safeValue(style.blocks.tableHeaderTextColor, textColor)};
 }
 
-${scope} .templar-blank-line-spacer {
+${scope} .templar-page td {
+  color: ${safeValue(style.blocks.tableTextColor, textColor)};
+}
+
+${style.blocks.tableStriped ? `${scope} .templar-page tbody tr:nth-child(even) {
+  background: ${safeValue(style.blocks.tableStripeColor, 'rgba(48, 46, 43, 0.045)')};
+}
+
+` : ''}${scope} .templar-page :is(hr, .HyperMD-hr) {
+  ${dividerDeclarations(style)}
+  border-bottom: 0;
+  border-inline: 0;
+  margin-block: ${px(blockSpacing)} !important;
+}
+
+${scope} .templar-page .cm-hr {
+  background-color: ${safeValue(style.blocks.dividerColor, 'rgba(48, 46, 43, 0.35)')};
+  height: ${px(Math.max(style.blocks.dividerWidth, 1))};
+  margin: 0;
+  padding: 0;
+  ${style.blocks.dividerStyle === 'fade'
+    ? `-webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);`
+    : ''}
+}
+
+${calloutRules(style, scope)}
+
+${scope} .templar-page :is(.internal-embed, .file-embed) {
+  background: ${safeValue(style.blocks.embedBackground, 'rgba(48, 46, 43, 0.06)')};
+  border-radius: ${px(style.blocks.embedRadius)};
+}
+
+${scope} .templar-page :is(.markdown-embed-link, .markdown-embed-title, .file-embed-title) {
+  color: ${safeValue(style.blocks.embedAccent, '#9fb8ca')};
+}
+
+${scope} .templar-page :is(ul, ol) :is(ul, ol) {
+  ${style.lists.nestedIndent > 0
+    ? `padding-inline-start: ${px(style.lists.nestedIndent)} !important;`
+    : ''}
+  ${style.lists.indentGuides
+    ? `border-inline-start: 1px solid ${safeValue(style.lists.indentGuideColor, 'rgba(48, 46, 43, 0.18)')};`
+    : ''}
+}
+
+${scope} .templar-page ul {
+  list-style-type: ${style.lists.markerStyle};
+}
+
+${scope} .templar-page :is(ul, ol) li::marker {
+  color: ${safeValue(style.lists.markerColor, '#706c66')};
+}
+
+${scope} .templar-page ul .list-bullet {
+  display: none;
+}
+
+${scope} .markdown-source-view.mod-cm6 .templar-page :is(.cm-formatting-list-ul, .cm-formatting-list-ol) {
+  color: ${safeValue(style.lists.markerColor, '#706c66')};
+}
+
+${style.typography.firstLineIndent > 0 ? `${scope} .templar-page-content p {
+  text-indent: ${px(style.typography.firstLineIndent)};
+}
+
+` : ''}${style.typography.dropCap ? `${scope} .templar-page-content :is(h1, h2, h3) ~ p:first-of-type::first-letter,
+${scope} .templar-page-content .HyperMD-header + .HyperMD-paragraph::first-letter {
+  float: left;
+  font-size: 3.2em;
+  font-weight: 700;
+  line-height: 0.8;
+  margin-block-start: 0.04em;
+  margin-inline-end: 0.1em;
+}
+
+` : ''}${scope} .templar-blank-line-spacer {
   height: calc(var(--templar-body-line-height) * var(--templar-blank-lines, 1));
   margin: 0 !important;
   min-height: 0 !important;
@@ -503,12 +873,13 @@ ${scope} .templar-page img {
   box-shadow: ${safeValue(style.images.shadow, 'none')};
   box-sizing: border-box;
   display: block;
-  filter: sepia(${String(style.images.sepia)}) grayscale(${String(style.images.grayscale)}) saturate(${String(style.images.saturation)}) contrast(${String(style.images.contrast)});
+  filter: ${imageFilter(style)};
+  float: ${style.images.float};
   margin-block: ${px(style.images.topSpacing)} calc(${px(imageBottom)} + var(--templar-image-snap, 0px));
-  margin-inline: auto;
+  margin-inline: ${style.images.float === 'left' ? '0 1em 0 0' : style.images.float === 'right' ? '0 0 0 1em' : 'auto'};
   max-height: ${paged ? px(printableHeight) : 'none'};
   max-width: ${String(style.images.maxWidth)}%;
-  object-fit: contain;
+  object-fit: ${style.images.objectFit};
   opacity: ${String(style.images.opacity)};
   transform: rotate(${String(style.images.rotation)}deg);
 }
