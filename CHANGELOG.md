@@ -4,6 +4,9 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+- Added a consolidated developer reference covering the current feature surface, commands/settings, v1 persistence contract, runtime/source map, lifecycle, QA/release runbook, and known alpha limitations.
+- Clarified documentation authority, handoff expectations, pack/schema contribution rules, and the canonical camelCase shape of nested heading fields in exported templates.
+
 ## 1.1.0-alpha.3 — 2026-08-08
 
 - Fixed ruled, grid, decorative paper patterns, and margin lines being painted behind the solid page background in pageless Reading view. The page content now creates an isolated stacking context, with a compiler regression test protecting the paper layer.

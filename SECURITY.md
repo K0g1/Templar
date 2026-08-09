@@ -25,4 +25,4 @@ Never include private vault content, exploit details, or secrets in a public iss
 - Imported YAML and CSS are treated as untrusted and are validated before use; invalid input is rejected with human-readable diagnostics.
 - Custom CSS is size-limited, selector-scoped, and compiled onto plugin-owned classes.
 
-The detailed threat model lives in [`docs/SECURITY.md`](docs/SECURITY.md).
+The detailed threat model lives in [`docs/SECURITY.md`](docs/SECURITY.md); the current runtime/source map is in [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md).

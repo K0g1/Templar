@@ -1,5 +1,7 @@
 # Paged and pageless layout
 
+The current implementation/source map and smoke-test handoff are in [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). This document is the geometry and pagination contract.
+
 ## Product contract
 
 Every Templar template must render in both modes:

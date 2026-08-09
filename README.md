@@ -61,6 +61,7 @@ Templar has no account, telemetry, ads, API key, or network traffic. It reads an
 ## Project links
 
 - [Documentation](docs/README.md)
+- [Developer reference and maintainer handoff](docs/DEVELOPER_REFERENCE.md)
 - [Template specification](docs/TEMPLATE_SPEC.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

@@ -1,5 +1,7 @@
 # Security model
 
+The current runtime/source map and release status are summarized in [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). This document is the normative threat model for note frontmatter, imported YAML, custom CSS, runtime APIs, and dependencies.
+
 ## Trust boundaries
 
 Templar processes three user-controlled inputs:

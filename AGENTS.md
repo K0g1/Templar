@@ -5,10 +5,11 @@ These rules apply to every file in this plugin directory.
 ## Read first
 
 1. `README.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/TEMPLATE_SPEC.md`
-4. `docs/PAGED_LAYOUT.md`
-5. `docs/SECURITY.md`
+2. `docs/DEVELOPER_REFERENCE.md`
+3. `docs/ARCHITECTURE.md`
+4. `docs/TEMPLATE_SPEC.md`
+5. `docs/PAGED_LAYOUT.md`
+6. `docs/SECURITY.md`
 
 ## Non-negotiable product invariants
 

@@ -1,5 +1,7 @@
 # Architecture
 
+For the current alpha snapshot, complete command/settings inventory, source map, release runbook, and known-limitations handoff, see [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). This document remains the detailed runtime and ownership contract.
+
 ## Design goals
 
 Templar is a rendering adapter around ordinary Markdown. It owns neither note content nor Obsidian's global interface. Its responsibilities are:
@@ -137,7 +139,7 @@ Two residual behaviors follow from Obsidian's measurement model (heights are re-
 - Uses a per-leaf generation number to prevent an old async font measurement from overwriting a newer render.
 - Adds/removes classes and the owned style element.
 - Configures image and page-layout observers.
-- records validation issues per file for settings diagnostics.
+- Records validation issues per file for settings diagnostics.
 - Per Reading root, tracks the post-processor context and a source-ordered section list (including temporarily detached virtual-scroller elements) that feeds blank-line reconciliation; discarded sections are compacted after `getSectionInfo` marks them stale, and replaced roots are pruned with their scheduled frames.
 
 ### Image compensation

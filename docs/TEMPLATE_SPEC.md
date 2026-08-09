@@ -2,7 +2,7 @@
 
 ## Overview
 
-A Page Style is structured visual data plus optional advanced CSS. Library exports use a top-level `templar-template` mapping. Notes use a top-level `templar` mapping and additionally store their page mode.
+A Page Style is structured visual data plus optional advanced CSS. Library exports use a top-level `templar-template` mapping. Notes use a top-level `templar` mapping and additionally store their page mode. For the current implementation's command/settings/source map, see [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md).
 
 Unknown fields are discarded during import. Missing fields receive defaults. Current import supports only version 1.
 
@@ -72,48 +72,48 @@ templar-template:
       weight: 700
       color: "#302e2b"
       decoration: none
-      letter-spacing: 0
-      text-transform: none
+      letterSpacing: 0
+      textTransform: none
     h2:
       font: 'Georgia, "Times New Roman", serif'
       size: 31
       weight: 700
       color: "#393631"
       decoration: none
-      letter-spacing: 0
-      text-transform: none
+      letterSpacing: 0
+      textTransform: none
     h3:
       font: 'Georgia, "Times New Roman", serif'
       size: 24
       weight: 700
       color: "#46413b"
       decoration: none
-      letter-spacing: 0
-      text-transform: none
+      letterSpacing: 0
+      textTransform: none
     h4:
       font: 'Georgia, "Times New Roman", serif'
       size: 20
       weight: 700
       color: "#514b44"
       decoration: none
-      letter-spacing: 0
-      text-transform: none
+      letterSpacing: 0
+      textTransform: none
     h5:
       font: 'Georgia, "Times New Roman", serif'
       size: 17
       weight: 700
       color: "#5a534b"
       decoration: none
-      letter-spacing: 0
-      text-transform: none
+      letterSpacing: 0
+      textTransform: none
     h6:
       font: 'Georgia, "Times New Roman", serif'
       size: 15
       weight: 700
       color: "#635c53"
       decoration: none
-      letter-spacing: 0
-      text-transform: none
+      letterSpacing: 0
+      textTransform: none
   lists:
     marker-style: disc
     marker-color: "#706c66"
@@ -266,11 +266,11 @@ Ruled, dot-grid, and graph paper all use that same vertical anchor and the effec
 
 The additional patterns are decorative overlays, not baseline rules: ledger adds a second margin line to the ruled pattern, cross-hatch and diagonal tile 45-degree strokes at the grid unit (multiplied by `pattern-scale`), hex tiles an isometric lattice, and scallop staggers semicircles on the baseline. `pattern-opacity` fades every pattern color by mixing toward transparent; dot-grid uses `dot-radius` for the dot size; graph uses `graph-major-interval` for the heavy lines.
 
-`typography.body-line-height` overrides the automatic rhythm (1.55 × body size, minimum 22px) when gridded modes are off. `first-line-indent` and `nested-indent` only apply in Reading View because Live Preview wraps every paragraph line as its own element. `drop-cap` floats the first letter of the first paragraph after a heading. Headings below H4 (h5/h6) fall back to the H4 font and a darkened H4 color unless a template overrides them.
+`typography.body-line-height` overrides the automatic rhythm (1.55 × body size, minimum 22px) when gridded modes are off. `first-line-indent` and `nested-indent` only apply in Reading View because Live Preview wraps every paragraph line as its own element. `drop-cap` floats the first letter of the first paragraph after a heading. Older v1 styles that omit H5/H6 receive the safe v1 defaults for those levels; a complete export writes all six heading levels.
 
 `watermark.text` renders behind the page content (above the paper) as a rotated centered label at `watermark.size`, `rotation`, and `opacity`. Empty text hides it. The watermark sits below the content plane in both modes, so it never intercepts pointer events or selection.
 
-`blocks.callout-variants` is keyed by Obsidian callout type (for example, `warning` for `> [!warning]`). A variant can override any subset of `accent`, `background`, `textColor`, `titleColor`, and `iconColor`; omitted values inherit the base callout palette. These nested keys are camelCase even though top-level persisted field names use kebab-case.
+`blocks.callout-variants` is keyed by Obsidian callout type (for example, `warning` for `> [!warning]`). A variant can override any subset of `accent`, `background`, `textColor`, `titleColor`, and `iconColor`; omitted values inherit the base callout palette. These nested keys are camelCase even though top-level persisted field names use kebab-case. The six nested heading objects also use the internal camelCase keys `letterSpacing` and `textTransform` because the canonical serializer preserves their object shape; `normalizeTemplate()` accepts the same internal form.
 
 In both gridded modes, every inter-block offset is a whole multiple of the grid unit. Reading View list items and Live Preview list lines explicitly use the body line-height, with Obsidian's theme list padding removed. This prevents paragraphs, bullets, and later blocks from drifting between Graph Paper lines.
 

@@ -5,7 +5,7 @@ Thank you for helping build Templar. The core design promise is unusually strict
 ## Getting started
 
 - Browse open work in [issues](https://github.com/K0g1/Templar/issues) and discuss a feature before implementing it.
-- Start with [`docs/README.md`](docs/README.md) for the reading order of the technical documentation.
+- Start with [`docs/README.md`](docs/README.md), then read the [`developer handoff`](docs/DEVELOPER_REFERENCE.md) before editing.
 - Report security issues through the process in [`SECURITY.md`](SECURITY.md), not in a public issue.
 
 ## Setup
@@ -24,11 +24,13 @@ npm audit
 npm run check
 ```
 
+`npm run check` is the normal local gate: it runs lint, the pure Vitest suite, strict TypeScript, a production browser bundle, and the mobile-bundle scan. Run `npm run verify:release -- <exact-version>` as well when changing release metadata or release notes. For a local Obsidian smoke test, build first and copy the generated `main.js`, `manifest.json`, and `styles.css` into a disposable vault's `.obsidian/plugins/templar/` folder.
+
 ## Pull request expectations
 
 - Explain the user-visible behavior and the notes/frontmatter it touches.
 - Add tests for pure logic, schema changes, CSS rules, or regressions.
-- Update the template specification and architecture docs when contracts change.
+- Update the template specification, architecture docs, and [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md) when contracts or current behavior change. Update `src/templates/llm-kit.ts` when the authoring schema changes.
 - Include desktop Reading/Live Preview results and mobile/emulation results for renderer work.
 - Do not include unrelated formatting or generated dependency churn.
 - Do not add default hotkeys.
@@ -47,3 +49,13 @@ The source repository may omit generated `main.js`, but every GitHub release and
 - `styles.css`
 
 Release tags exactly match the manifest version and do not use a `v` prefix. Prerelease versions use SemVer suffixes such as `1.1.0-alpha.1`; their GitHub releases must be marked as prereleases. Each tag also needs a matching `docs/releases/<version>.md` release-notes file.
+
+## Template and pack work
+
+Add a one-off hand-tuned design with `builtIn()` in `src/templates/builtins.ts`; add a family to the compact seeds in `src/templates/packs/catalog.ts`. Every style needs a permanent ID, a display folder, useful tags, both page modes, and readable colors. Run the catalog identity/schema/CSS/contrast tests before treating a palette as complete. Folder metadata is a display label, not a vault path; separators are sanitized and missing values become `Unfiled`.
+
+For a persisted field, follow the full boundary in [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md): type → default → normalization/aliases → YAML serialization → validation → compiler/UI → round-trip tests → specification/authoring-kit docs. The generated `main.js` is never the place to implement a change.
+
+## Handoff expectations
+
+Leave a future contributor with a clean `git status` when possible, the source commit/tag, the commands that passed, any intentionally pending mobile/manual checks, and links to the docs/tests that define the change. The developer reference contains the current source map, runtime lifecycle, release runbook, and known limitations; update it whenever those facts change.

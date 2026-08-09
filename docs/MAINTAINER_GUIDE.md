@@ -1,5 +1,9 @@
 # Maintainer guide
 
+The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). It records the alpha version, command/settings surface, source map, persistence and lifecycle contracts, release artifacts, and known limitations. This guide is the executable smoke-test and release checklist.
+
+At `1.1.0-alpha.3`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and the only supported distribution path is manual installation of the three release artifacts.
+
 ## Local workflow
 
 ```bash
@@ -16,6 +20,8 @@ npm run check
 
 `npm run check` runs Obsidian-aware ESLint, Vitest, strict TypeScript, a minified browser-targeted esbuild bundle, and the mobile bundle guard. The guard fails if `main.js` retains Node/Electron imports, dynamic `require`, `Buffer`, or `process` access.
 
+For the `1.1.0-alpha.3` snapshot, the pure suite contains 58 tests. Treat the command result—not a hard-coded count—as authoritative when the suite grows.
+
 The CI workflow runs the same check on every pull request and push to `main`; tagged releases repeat it before attaching artifacts.
 
 ## Test layout
@@ -28,8 +34,11 @@ The CI workflow runs the same check on every pull request and push to `main`; ta
 - `builtins.test.ts`: catalog size and uniqueness, pack/folder diversity, schema/CSS validity, and palette contrast.
 - `css.test.ts`: virtual mapping, scope guarantees, keyframes, global/resource rejection, paged media-query rule.
 - `style-compiler.test.ts`: shared pattern origin, editor list normalization, measured Reading code padding, highlight palettes, injection containment, fixed-page CSS, extended headings, watermark/divider/table/list/callout declarations, duotone/float, and every pattern variant.
+- `template-library.test.ts`: immutable built-in/custom snapshots, IDs, duplicate/save/remove behavior, and favorites.
 
 Pure tests deliberately avoid importing Obsidian's Electron runtime. UI/runtime behavior needs an Obsidian smoke test.
+
+The generated bundle is intentionally ignored by source control. A local live test must run `npm run build`, then copy `main.js`, `manifest.json`, and `styles.css` into the test vault's `.obsidian/plugins/templar/` directory before reloading the plugin. If the UI appears stale, compare artifact hashes and confirm the plugin folder is the one Obsidian has enabled.
 
 ## Manual smoke test
 
@@ -148,3 +157,17 @@ When an Obsidian release changes DOM:
 9. Wait for the release workflow and verify that the GitHub release contains `main.js`, `manifest.json`, and `styles.css`.
 
 The release workflow uses `docs/releases/<tag>.md` as the release body and automatically marks any tag containing `-` as a GitHub prerelease. Never repoint or overwrite an existing release tag; increment the prerelease suffix instead.
+
+## Documentation handoff
+
+When a change lands, update the narrowest contract document and the developer reference summary:
+
+- YAML/schema/normalization/virtual selectors → `TEMPLATE_SPEC.md` and `src/templates/llm-kit.ts`;
+- renderer ownership, event flow, CSS isolation, or cleanup → `ARCHITECTURE.md`;
+- fixed page geometry or page fitting → `PAGED_LAYOUT.md`;
+- trust boundary, runtime dependency, or privacy behavior → `SECURITY.md` and root `SECURITY.md` when reporting policy changes;
+- commands/settings, source ownership, current catalog counts, release state, known limitations, or handoff instructions → `DEVELOPER_REFERENCE.md`;
+- user-facing installation or feature summary → root `README.md`;
+- historical behavior → `CHANGELOG.md` and a new `docs/releases/<version>.md` entry, without rewriting older release notes.
+
+Before handing the repository to another maintainer, record the source commit/tag, whether `main.js` was rebuilt and copied to a live vault, the exact verification commands that passed, and any physical-device checks that remain pending. Never commit `data.json`, private notes, credentials, or unrelated vault assets.
