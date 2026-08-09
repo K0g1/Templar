@@ -102,6 +102,24 @@ Live Preview is CodeMirror 6 and virtualizes long documents. Templar fits curren
 - Image load/resize: image compensation and page layout observers schedule new fitting.
 - Plugin unload or leaf close: disconnect observers, cancel animation frames, remove scale/break properties.
 
+## Print and PDF handoff
+
+`PrintService` cooperates with the host browser/Obsidian print pipeline; it does not generate PDF files itself. Before invoking `window.print()` it:
+
+1. forces the active leaf through the latest renderer generation;
+2. waits for `document.fonts.ready`;
+3. waits for current images to decode or settle;
+4. prepares `PageLayoutService` at scale 1 with the screen gap removed and repaginates;
+5. appends temporary print rules to that leaf's renderer-owned scoped style.
+
+A4 emits `@page { size: A4 }`, Letter emits `@page { size: Letter }`, and custom pages request their stored CSS-pixel dimensions. Paged sheets lose screen-only shadows/gaps while keeping paper, pattern, watermark, images, tables, callouts, code, and calculated breaks. Pageless notes use natural paper pagination while retaining content styling. `afterprint`, a mobile fallback timeout, or service destruction removes temporary CSS and restores screen scaling/layout.
+
+Printing remains unavailable where the host platform does not expose a usable print action; no Electron or Node dependency is introduced.
+
+## Divider rhythm
+
+With strict or balanced baseline alignment, a Markdown horizontal rule owns one complete grid row in both Reading and Live Preview. Its external margins are zero, the visible stroke is centered, and all five divider styles share the same footprint. Pagination therefore measures a divider as exactly one unit: it either fits as a whole row or moves according to the ordinary fitted-block algorithm. Free/disabled baseline modes retain non-grid spacing.
+
 ## Mobile behavior
 
 Paged mode uses only web-platform APIs available to Obsidian mobile: CSS, `ResizeObserver`, `MutationObserver`, animation frames, and DOM geometry. It does not use Electron, Node.js, filesystem paths, or desktop-only zoom controls.
@@ -122,3 +140,5 @@ For a paged renderer change:
 8. Test strict ruled and free blank templates.
 9. Repeat with a missing first-choice font to exercise fallback metrics.
 10. Run on physical iOS and Android before release.
+11. Print A4, Letter, custom, and pageless samples; verify gap/shadow removal, page-size requests, patterns, watermarks, images, tables, callouts, code, and page breaks.
+12. Place solid/dashed/dotted/double/fade rules before, after, consecutively, and near a page boundary at several grid units; every following baseline must remain congruent.

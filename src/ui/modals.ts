@@ -14,6 +14,14 @@ import {
 } from 'obsidian';
 import type TemplarPlugin from '../main';
 import { validateCustomCss } from '../services/css-validator';
+import { parseTemplatePack, uniqueCopyId, type PackReview } from '../services/template-pack';
+import {
+  mergeTemplateUpdate,
+  replaceWithLatestTemplate,
+  synchronizationStatus,
+  type SynchronizationStatus,
+} from '../services/synchronization';
+import { pageFlowOptions, ruleMatches } from '../services/style-rules';
 import { BUILT_IN_TEMPLATES } from '../templates/builtins';
 import { DEFAULT_TEMPLATE } from '../templates/defaults';
 import { DEFAULT_PAGE_OPTIONS } from '../templates/defaults';
@@ -40,6 +48,8 @@ import type {
   NotePageOptions,
   TemplarNoteStyle,
   TemplarTemplate,
+  StyleRule,
+  StyleRuleCondition,
   PaperPattern,
   ValidationIssue,
 } from '../types';
@@ -71,7 +81,7 @@ export class StylePickerModal extends FuzzySuggestModal<TemplarTemplate> {
     if (this.intent === 'create') {
       new CreateStyledNoteModal(this.plugin, item).open();
     } else if (this.file) {
-      new ApplyStyleModal(this.plugin, this.file, item).open();
+      void this.plugin.applyTemplate(item, this.file);
     }
   }
 }
@@ -212,6 +222,11 @@ export class TemplateImportModal extends Modal {
   private previewEl!: HTMLElement;
   private saveButton!: HTMLButtonElement;
   private validationVersion = 0;
+  private packReview: PackReview | null = null;
+  private readonly packSelection = new Set<number>();
+  private readonly conflictChoices = new Map<number, 'keep' | 'replace' | 'copy'>();
+  private applyConflictChoiceToRemaining = false;
+  private singleConflictChoice: 'keep' | 'replace' | 'copy' = 'copy';
 
   public constructor(private readonly plugin: TemplarPlugin) {
     super(plugin.app);
@@ -252,10 +267,22 @@ export class TemplateImportModal extends Modal {
   private async validateInput(): Promise<void> {
     const version = ++this.validationVersion;
     this.importedTemplate = null;
+    this.packReview = null;
+    this.packSelection.clear();
+    this.conflictChoices.clear();
+    this.singleConflictChoice = 'copy';
     this.saveButton.disabled = true;
     this.previewEl.empty();
     try {
       const parsed = parseYaml(stripCodeFence(this.inputEl.value)) as unknown;
+      const packReview = parseTemplatePack(parsed);
+      if (packReview) {
+        this.packReview = packReview;
+        const allIssues = packReview.templates.flatMap((entry) => entry.issues);
+        renderIssues(this.validationEl, allIssues.length > 0 ? allIssues : [{ severity: 'suggestion', path: 'pack', message: 'Every selected template is ready to import.' }]);
+        this.renderPackReview();
+        return;
+      }
       const template = parsedObjectToTemplate(parsed);
       template.builtIn = false;
       const issues = [
@@ -267,6 +294,21 @@ export class TemplateImportModal extends Modal {
         return;
       }
       this.importedTemplate = template;
+      const existing = this.plugin.library.get(template.id);
+      if (existing) {
+        this.singleConflictChoice = 'keep';
+        new Setting(this.validationEl)
+          .setName(`ID conflict: ${template.id}`)
+          .setDesc(existing.builtIn ? 'A shipped built-in can never be replaced.' : 'Choose explicitly how to resolve this library conflict.')
+          .addDropdown((dropdown) => {
+            dropdown.addOption('keep', existing.builtIn ? 'Keep built-in' : 'Keep existing');
+            if (!existing.builtIn) dropdown.addOption('replace', 'Replace existing');
+            dropdown.addOption('copy', 'Import as custom copy');
+            dropdown.setValue(this.singleConflictChoice).onChange((value) => {
+              this.singleConflictChoice = value as typeof this.singleConflictChoice;
+            });
+          });
+      }
       this.saveButton.disabled = false;
       const staging = this.previewEl.ownerDocument.createElement('div');
       await renderTemplatePreview(staging, template, this.plugin.fontMetrics);
@@ -291,17 +333,460 @@ export class TemplateImportModal extends Modal {
   }
 
   private async save(): Promise<void> {
+    if (this.packReview) {
+      let imported = 0;
+      const usedIds = new Set(this.plugin.library.all().map((template) => template.id));
+      for (const index of this.packSelection) {
+        const review = this.packReview.templates[index];
+        if (!review?.valid) continue;
+        const incoming = clone(review.template);
+        const existing = this.plugin.library.get(incoming.id);
+        if (existing) {
+          const choice = this.conflictChoices.get(index) ?? 'keep';
+          if (choice === 'keep') continue;
+          if (choice === 'replace' && !existing.builtIn) {
+            await this.plugin.library.save(incoming);
+            imported += 1;
+            continue;
+          }
+          incoming.id = uniqueCopyId(incoming.id, usedIds);
+        }
+        usedIds.add(incoming.id);
+        await this.plugin.library.saveAsNew(incoming);
+        imported += 1;
+      }
+      this.plugin.refreshSidebars();
+      new Notice(`Imported ${String(imported)} ${imported === 1 ? 'style' : 'styles'} from “${this.packReview.pack.name}”.`);
+      this.close();
+      return;
+    }
     if (!this.importedTemplate) {
       return;
     }
     try {
-      const saved = await this.plugin.library.saveAsNew(this.importedTemplate);
+      const existing = this.plugin.library.get(this.importedTemplate.id);
+      if (existing && this.singleConflictChoice === 'keep') {
+        new Notice(`Kept existing “${existing.name}”; nothing was imported.`);
+        this.close();
+        return;
+      }
+      const saved = existing && this.singleConflictChoice === 'replace' && !existing.builtIn
+        ? await this.plugin.library.save(this.importedTemplate)
+        : await this.plugin.library.saveAsNew(this.importedTemplate);
       this.plugin.refreshSidebars();
       new Notice(`Imported “${saved.name}”.`);
       this.close();
     } catch (error) {
       new Notice(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  private renderPackReview(): void {
+    const review = this.packReview;
+    if (!review) return;
+    this.previewEl.empty();
+    const header = this.previewEl.createDiv({ cls: 'templar-pack-header' });
+    header.createEl('h3', { text: review.pack.name });
+    header.createEl('p', { text: `${String(review.templates.length)} templates${review.pack.author ? ` · By ${review.pack.author}` : ''}` });
+    if (review.pack.description) header.createEl('p', { text: review.pack.description });
+    if (review.templates.filter((entry) => this.plugin.library.get(entry.template.id)).length > 1) {
+      const applyAll = header.createEl('label');
+      const checkbox = applyAll.createEl('input', { attr: { type: 'checkbox' } });
+      checkbox.checked = this.applyConflictChoiceToRemaining;
+      checkbox.addEventListener('change', () => { this.applyConflictChoiceToRemaining = checkbox.checked; });
+      applyAll.createSpan({ text: 'Use conflict choices for remaining compatible conflicts' });
+    }
+    const list = this.previewEl.createDiv({ cls: 'templar-pack-list' });
+    const detailPreview = this.previewEl.createDiv({ cls: 'templar-preview-container templar-pack-detail-preview' });
+    review.templates.forEach((entry, index) => {
+      const row = list.createDiv({ cls: `templar-pack-entry${entry.valid ? '' : ' has-errors'}` });
+      const label = row.createEl('label');
+      const checkbox = label.createEl('input', { attr: { type: 'checkbox' } });
+      checkbox.disabled = !entry.valid;
+      checkbox.checked = entry.valid;
+      if (entry.valid) this.packSelection.add(index);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) this.packSelection.add(index); else this.packSelection.delete(index);
+        this.updatePackSaveButton();
+      });
+      label.createSpan({ text: entry.template.name });
+      const errors = entry.issues.filter((issue) => issue.severity === 'error').length;
+      const warnings = entry.issues.filter((issue) => issue.severity === 'warning').length;
+      row.createDiv({ cls: 'templar-pack-entry-status', text: errors ? `${String(errors)} errors` : warnings ? `${String(warnings)} warnings` : 'Ready' });
+      const preview = row.createEl('button', { text: 'Preview', attr: { 'aria-label': `Preview ${entry.template.name}` } });
+      preview.disabled = !entry.valid;
+      preview.addEventListener('click', () => void renderTemplatePreview(detailPreview, entry.template, this.plugin.fontMetrics));
+      const existing = this.plugin.library.get(entry.template.id);
+      if (existing && entry.valid) {
+        const conflict = row.createEl('select', { attr: { 'aria-label': `Resolve ID conflict for ${entry.template.name}` } });
+        conflict.createEl('option', { value: 'keep', text: existing.builtIn ? 'Keep built-in' : 'Keep existing' });
+        if (!existing.builtIn) conflict.createEl('option', { value: 'replace', text: 'Replace existing' });
+        conflict.createEl('option', { value: 'copy', text: 'Import as custom copy' });
+        conflict.addEventListener('change', () => {
+          const choice = conflict.value as 'keep' | 'replace' | 'copy';
+          this.conflictChoices.set(index, choice);
+          if (this.applyConflictChoiceToRemaining) {
+            for (let remaining = index + 1; remaining < review.templates.length; remaining += 1) {
+              const remainingExisting = this.plugin.library.get(review.templates[remaining]!.template.id);
+              if (!remainingExisting) continue;
+              this.conflictChoices.set(remaining, choice === 'replace' && remainingExisting.builtIn ? 'copy' : choice);
+            }
+          }
+        });
+        this.conflictChoices.set(index, 'keep');
+      }
+    });
+    this.updatePackSaveButton();
+  }
+
+  private updatePackSaveButton(): void {
+    this.saveButton.disabled = this.packSelection.size === 0;
+    this.saveButton.setText(`Import ${String(this.packSelection.size)} ${this.packSelection.size === 1 ? 'style' : 'styles'}`);
+  }
+}
+
+export class TemplatePackExportModal extends Modal {
+  private readonly selected = new Set<string>();
+  private name = 'Templar Style Pack';
+  private author = '';
+  private description = '';
+  private tags = '';
+
+  public constructor(
+    private readonly plugin: TemplarPlugin,
+    private readonly templates: TemplarTemplate[] = plugin.library.all(),
+  ) {
+    super(plugin.app);
+    for (const template of templates) this.selected.add(template.id);
+    const folders = new Set(templates.map((template) => template.metadata.folder));
+    if (folders.size === 1) this.name = `${[...folders][0]} Pack`;
+  }
+
+  public onOpen(): void {
+    this.setTitle('Export template pack');
+    this.modalEl.addClass('templar-modal', 'templar-pack-modal');
+    new Setting(this.contentEl).setName('Pack name').addText((text) => text.setValue(this.name).onChange((value) => { this.name = value; }));
+    new Setting(this.contentEl).setName('Author').addText((text) => text.setValue(this.author).onChange((value) => { this.author = value; }));
+    new Setting(this.contentEl).setName('Description').addTextArea((text) => text.setValue(this.description).onChange((value) => { this.description = value; }));
+    new Setting(this.contentEl).setName('Tags').setDesc('Optional, comma-separated pack tags.').addText((text) => text.setValue(this.tags).onChange((value) => { this.tags = value; }));
+    this.contentEl.createEl('p', { text: `${String(this.templates.length)} styles available for this pack.` });
+    const list = this.contentEl.createDiv({ cls: 'templar-pack-list' });
+    for (const template of this.templates) {
+      const label = list.createEl('label', { cls: 'templar-pack-entry' });
+      const checkbox = label.createEl('input', { attr: { type: 'checkbox' } });
+      checkbox.checked = true;
+      checkbox.addEventListener('change', () => checkbox.checked ? this.selected.add(template.id) : this.selected.delete(template.id));
+      label.createSpan({ text: `${template.name} · ${template.metadata.folder}` });
+    }
+    const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
+    const cancel = actions.createEl('button', { text: 'Cancel' });
+    cancel.addEventListener('click', () => this.close());
+    const exportButton = actions.createEl('button', { cls: 'mod-cta', text: 'Export pack' });
+    exportButton.addEventListener('click', () => void runButtonAction(exportButton, async () => {
+      const templates = this.templates.filter((template) => this.selected.has(template.id));
+      if (templates.length === 0) throw new Error('Select at least one style.');
+      const tags = this.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
+      await this.plugin.exportTemplatePack({ name: this.name, author: this.author, description: this.description, tags }, templates);
+      this.close();
+    }));
+  }
+}
+
+interface SyncReviewItem {
+  file: TFile;
+  style: TemplarNoteStyle;
+  source: TemplarTemplate | null;
+  status: SynchronizationStatus;
+  action: 'safe' | 'merge' | 'replace' | 'skip';
+}
+
+export class SynchronizationReviewModal extends Modal {
+  private items: SyncReviewItem[] = [];
+  private overview = { total: 0, upToDate: 0, localOnly: 0, safe: 0, modified: 0, legacy: 0, missing: 0 };
+
+  public constructor(
+    private readonly plugin: TemplarPlugin,
+    private readonly templateId?: string,
+  ) { super(plugin.app); }
+
+  public onOpen(): void {
+    this.setTitle('Review template updates');
+    this.modalEl.addClass('templar-modal', 'templar-sync-modal');
+    this.plugin.ensureUsageIndex();
+    const candidates = this.plugin.usageIndex.allEntries().flatMap((entry) => {
+      if (!entry.style || (this.templateId && entry.style.sourceTemplateId !== this.templateId)) return [];
+      const file = this.app.vault.getAbstractFileByPath(entry.path);
+      if (!(file instanceof TFile)) return [];
+      const source = this.plugin.library.get(entry.style.sourceTemplateId ?? entry.style.id);
+      const status = synchronizationStatus(entry.style, source);
+      const action: SyncReviewItem['action'] = status.state === 'update-available'
+        ? 'safe'
+        : status.state === 'modified-update-available'
+          ? 'merge'
+          : 'skip';
+      return [{ file, style: entry.style, source, status, action }];
+    });
+    this.overview = {
+      total: candidates.length,
+      upToDate: candidates.filter((item) => item.status.state === 'up-to-date').length,
+      localOnly: candidates.filter((item) => item.status.state === 'modified').length,
+      safe: candidates.filter((item) => item.status.state === 'update-available').length,
+      modified: candidates.filter((item) => item.status.state === 'modified-update-available').length,
+      legacy: candidates.filter((item) => item.status.state === 'legacy-update-unknown').length,
+      missing: candidates.filter((item) => item.status.state === 'source-missing').length,
+    };
+    this.items = candidates.filter((item) => item.status.updateAvailable || item.status.state === 'source-missing');
+    this.render();
+  }
+
+  private render(): void {
+    this.contentEl.empty();
+    if (this.templateId) {
+      this.contentEl.createEl('h3', { text: `Template: ${this.plugin.library.get(this.templateId)?.name ?? this.templateId}` });
+    }
+    this.contentEl.createEl('p', { text: `${String(this.overview.total)} styled notes · ${String(this.overview.upToDate)} up to date · ${String(this.overview.localOnly)} locally modified · ${String(this.overview.safe)} safe updates · ${String(this.overview.modified)} modified + update · ${String(this.overview.legacy)} legacy · ${String(this.overview.missing)} source missing` });
+    if (this.items.length === 0) {
+      this.contentEl.createDiv({ cls: 'templar-library-empty', text: 'Every indexed note is up to date.' });
+      return;
+    }
+    const selectSafe = this.contentEl.createEl('button', { text: 'Select all safe updates' });
+    selectSafe.addEventListener('click', () => { for (const item of this.items) if (item.status.state === 'update-available') item.action = 'safe'; this.render(); });
+    const list = this.contentEl.createDiv({ cls: 'templar-sync-list' });
+    for (const item of this.items) {
+      const row = list.createDiv({ cls: 'templar-sync-entry' });
+      row.createDiv({ cls: 'templar-sync-note', text: item.file.path });
+      row.createDiv({ cls: 'templar-sync-state', text: item.status.state.replace(/-/g, ' ') });
+      const open = row.createEl('button', { text: 'Open note' });
+      open.addEventListener('click', () => void this.app.workspace.getLeaf(false).openFile(item.file));
+      const choice = row.createEl('select', { attr: { 'aria-label': `Update choice for ${item.file.basename}` } });
+      if (item.status.state === 'update-available') choice.createEl('option', { value: 'safe', text: 'Update safely' });
+      if (item.status.state === 'modified-update-available') choice.createEl('option', { value: 'merge', text: 'Keep my changes where possible' });
+      if (item.source) choice.createEl('option', { value: 'replace', text: 'Replace with latest' });
+      choice.createEl('option', { value: 'skip', text: item.status.legacy ? 'Keep current / skip' : 'Skip this note' });
+      choice.value = item.action;
+      choice.addEventListener('change', () => { item.action = choice.value as SyncReviewItem['action']; });
+      if (item.status.legacy) row.createEl('p', { text: 'Templar cannot reliably separate local changes from the original template for this older note.' });
+    }
+    const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
+    const close = actions.createEl('button', { text: 'Cancel' });
+    close.addEventListener('click', () => this.close());
+    const apply = actions.createEl('button', { cls: 'mod-cta', text: 'Review and update…' });
+    apply.addEventListener('click', () => this.confirm());
+  }
+
+  private confirm(): void {
+    const counts = {
+      safe: this.items.filter((item) => item.action === 'safe').length,
+      merge: this.items.filter((item) => item.action === 'merge').length,
+      replace: this.items.filter((item) => item.action === 'replace').length,
+      skip: this.items.filter((item) => item.action === 'skip').length,
+    };
+    new ConfirmationModal(this.plugin, 'Apply reviewed template updates?', `${String(counts.safe)} will update safely, ${String(counts.merge)} will merge local changes, ${String(counts.replace)} will be replaced, and ${String(counts.skip)} will be skipped.`, async () => this.execute(), 'Apply updates').open();
+  }
+
+  private async execute(): Promise<void> {
+    let completed = 0;
+    for (const item of this.items) {
+      if (item.action === 'skip' || !item.source) continue;
+      const style = item.action === 'merge'
+        ? mergeTemplateUpdate(item.style, item.source)
+        : replaceWithLatestTemplate(item.style, item.source);
+      await this.plugin.frontmatter.writeStyle(item.file, style);
+      completed += 1;
+      if (completed % 20 === 0) await new Promise<void>((resolve) => this.contentEl.ownerDocument.defaultView?.setTimeout(resolve, 0));
+    }
+    this.plugin.renderer.scheduleRefreshAll();
+    this.plugin.refreshSidebars();
+    new Notice(`Updated ${String(completed)} ${completed === 1 ? 'note' : 'notes'}.`);
+    this.close();
+  }
+}
+
+export class StyleRulesModal extends Modal {
+  public constructor(private readonly plugin: TemplarPlugin) { super(plugin.app); }
+
+  public onOpen(): void {
+    this.setTitle('Style rules');
+    this.modalEl.addClass('templar-modal', 'templar-rules-modal');
+    this.render();
+  }
+
+  private render(): void {
+    this.contentEl.empty();
+    this.contentEl.createEl('p', { text: 'Rules apply only to unstyled notes. When multiple rules match, the first matching rule is used.' });
+    const add = this.contentEl.createEl('button', { cls: 'mod-cta', text: 'Add rule' });
+    add.addEventListener('click', () => new StyleRuleEditorModal(this.plugin, null, () => this.render()).open());
+    const list = this.contentEl.createDiv({ cls: 'templar-rules-list' });
+    this.plugin.settings.styleRules.forEach((rule, index) => {
+      const row = list.createDiv({ cls: 'templar-rule-entry' });
+      row.draggable = true;
+      row.dataset.ruleIndex = String(index);
+      row.addEventListener('dragstart', (event) => event.dataTransfer?.setData('text/plain', String(index)));
+      row.addEventListener('dragover', (event) => event.preventDefault());
+      row.addEventListener('drop', (event) => {
+        event.preventDefault();
+        const from = Number(event.dataTransfer?.getData('text/plain'));
+        if (Number.isInteger(from)) void this.moveTo(from, index);
+      });
+      row.createSpan({ cls: 'templar-drag-handle', text: '⋮⋮', attr: { title: 'Drag to reorder', 'aria-hidden': 'true' } });
+      const enabled = row.createEl('input', { attr: { type: 'checkbox', 'aria-label': `Enable ${rule.name}` } });
+      enabled.checked = rule.enabled;
+      enabled.addEventListener('change', () => { rule.enabled = enabled.checked; void this.plugin.saveSettings(); });
+      const summary = row.createDiv({ cls: 'templar-rule-summary' });
+      summary.createDiv({ cls: 'templar-rule-name', text: rule.name });
+      summary.createDiv({ text: `${rule.conditions.length} ${rule.conditions.length === 1 ? 'condition' : 'conditions'} · ${this.plugin.library.get(rule.templateId)?.name ?? 'Missing style'}` });
+      const up = row.createEl('button', { text: 'Move up', attr: { 'aria-label': `Move ${rule.name} up` } });
+      up.disabled = index === 0;
+      up.addEventListener('click', () => void this.move(index, -1));
+      const down = row.createEl('button', { text: 'Move down', attr: { 'aria-label': `Move ${rule.name} down` } });
+      down.disabled = index === this.plugin.settings.styleRules.length - 1;
+      down.addEventListener('click', () => void this.move(index, 1));
+      const preview = row.createEl('button', { text: 'Preview existing matches' });
+      preview.addEventListener('click', () => this.previewMatches(rule));
+      const edit = row.createEl('button', { text: 'Edit' });
+      edit.addEventListener('click', () => new StyleRuleEditorModal(this.plugin, index, () => this.render()).open());
+      const remove = row.createEl('button', { text: 'Delete' });
+      remove.addEventListener('click', () => void this.remove(index));
+    });
+  }
+
+  private async move(index: number, delta: -1 | 1): Promise<void> {
+    const rules = this.plugin.settings.styleRules;
+    const target = index + delta;
+    if (target < 0 || target >= rules.length) return;
+    [rules[index], rules[target]] = [rules[target]!, rules[index]!];
+    await this.plugin.saveSettings();
+    this.render();
+  }
+
+  private async moveTo(from: number, to: number): Promise<void> {
+    const rules = this.plugin.settings.styleRules;
+    if (from < 0 || from >= rules.length || to < 0 || to >= rules.length || from === to) return;
+    const [rule] = rules.splice(from, 1);
+    if (!rule) return;
+    rules.splice(to, 0, rule);
+    await this.plugin.saveSettings();
+    this.render();
+  }
+
+  private async remove(index: number): Promise<void> {
+    this.plugin.settings.styleRules.splice(index, 1);
+    await this.plugin.saveSettings();
+    this.render();
+  }
+
+  private previewMatches(rule: StyleRule): void {
+    const matches: TFile[] = [];
+    let unavailable = 0;
+    const needsMetadata = rule.conditions.some((condition) => condition.type === 'tag' || condition.type === 'frontmatter');
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const cache = this.app.metadataCache.getFileCache(file);
+      const facts = {
+        path: file.path,
+        basename: file.basename,
+        folder: file.parent?.path ?? '',
+        tags: cache ? getAllTags(cache) ?? [] : [],
+        frontmatter: cache?.frontmatter ?? {},
+        metadataReady: cache !== null,
+      };
+      if (!cache && needsMetadata) {
+        const staticConditions = rule.conditions.filter((condition) => condition.type === 'folder' || condition.type === 'filename');
+        if (staticConditions.length === 0 || ruleMatches({ ...rule, conditions: staticConditions }, facts)) unavailable += 1;
+      } else if (ruleMatches(rule, facts)) {
+        matches.push(file);
+      }
+    }
+    const eligible = matches.filter((file) => !this.plugin.frontmatter.hasStyle(file));
+    const styled = matches.length - eligible.length;
+    const missingTemplate = this.plugin.library.get(rule.templateId) === null;
+    const invalid = missingTemplate ? eligible.length : 0;
+    const eligibleCount = missingTemplate ? 0 : eligible.length;
+    new ConfirmationModal(this.plugin, `${String(matches.length)} notes match “${rule.name}”`, `${String(eligibleCount)} unstyled and eligible; ${String(styled)} already styled and will be skipped; ${String(unavailable + invalid)} unavailable or invalid.`, async () => {
+      const template = this.plugin.library.get(rule.templateId);
+      if (!template) throw new Error('The rule’s style no longer exists.');
+      const page = { ...clone(DEFAULT_PAGE_OPTIONS), ...pageFlowOptions(rule.pageFlow === 'default' ? this.plugin.settings.defaultNewPageFlow : rule.pageFlow) };
+      let completed = 0;
+      for (const file of eligible) {
+        await this.plugin.applyTemplate(template, file, page, { recordRecent: false, notify: false, appliedByRule: { id: rule.id, name: rule.name } });
+        completed += 1;
+        if (completed % 20 === 0) await new Promise<void>((resolve) => this.contentEl.ownerDocument.defaultView?.setTimeout(resolve, 0));
+      }
+      new Notice(`Applied “${template.name}” to ${String(completed)} eligible notes.`);
+    }, `Apply to ${String(eligibleCount)} eligible notes`).open();
+  }
+}
+
+class StyleRuleEditorModal extends Modal {
+  private readonly rule: StyleRule;
+
+  public constructor(
+    private readonly plugin: TemplarPlugin,
+    private readonly index: number | null,
+    private readonly changed: () => void,
+  ) {
+    super(plugin.app);
+    this.rule = index === null
+      ? { id: `rule-${Date.now().toString(36)}`, name: 'New rule', enabled: true, conditions: [{ type: 'folder', folder: '', includeSubfolders: true }], templateId: plugin.settings.defaultTemplateId, pageFlow: 'default' }
+      : clone(plugin.settings.styleRules[index]!);
+  }
+
+  public onOpen(): void { this.setTitle(this.index === null ? 'Add Style Rule' : 'Edit Style Rule'); this.render(); }
+
+  private render(): void {
+    this.contentEl.empty();
+    new Setting(this.contentEl).setName('Name').addText((text) => text.setValue(this.rule.name).onChange((value) => { this.rule.name = value; }));
+    const options: Record<string, string> = {};
+    for (const template of this.plugin.library.all()) options[template.id] = template.name;
+    new Setting(this.contentEl).setName('Style to apply').addDropdown((dropdown) => dropdown.addOptions(options).setValue(this.rule.templateId).onChange((value) => { this.rule.templateId = value; }));
+    new Setting(this.contentEl).setName('Default page behavior').addDropdown((dropdown) => dropdown.addOptions({ default: 'Use default page flow', pageless: 'Pageless', 'paged-a4': 'Paged A4', 'paged-letter': 'Paged Letter' }).setValue(this.rule.pageFlow).onChange((value) => { this.rule.pageFlow = value as StyleRule['pageFlow']; }));
+    this.contentEl.createEl('h3', { text: 'Conditions (all must match)' });
+    const conditions = this.contentEl.createDiv({ cls: 'templar-rule-conditions' });
+    this.rule.conditions.forEach((condition, index) => this.renderCondition(conditions, condition, index));
+    const add = this.contentEl.createEl('button', { text: 'Add condition' });
+    add.addEventListener('click', () => { this.rule.conditions.push({ type: 'tag', tag: '' }); this.render(); });
+    const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
+    const cancel = actions.createEl('button', { text: 'Cancel' }); cancel.addEventListener('click', () => this.close());
+    const save = actions.createEl('button', { cls: 'mod-cta', text: 'Save rule' }); save.addEventListener('click', () => void runButtonAction(save, async () => this.save()));
+  }
+
+  private renderCondition(container: HTMLElement, condition: StyleRuleCondition, index: number): void {
+    const row = container.createDiv({ cls: 'templar-rule-condition' });
+    const type = row.createEl('select', { attr: { 'aria-label': `Condition ${String(index + 1)} type` } });
+    for (const [value, label] of [['folder', 'Folder'], ['tag', 'Tag'], ['filename', 'Filename'], ['frontmatter', 'Frontmatter property']] as const) type.createEl('option', { value, text: label });
+    type.value = condition.type;
+    type.addEventListener('change', () => {
+      this.rule.conditions[index] = type.value === 'folder' ? { type: 'folder', folder: '', includeSubfolders: true }
+        : type.value === 'tag' ? { type: 'tag', tag: '' }
+          : type.value === 'filename' ? { type: 'filename', operator: 'contains', value: '' }
+            : { type: 'frontmatter', property: '', value: '' };
+      this.render();
+    });
+    if (condition.type === 'folder') {
+      const input = row.createEl('input', { attr: { type: 'text', placeholder: 'Projects/research', 'aria-label': 'Folder path' } }); input.value = condition.folder; input.addEventListener('input', () => { condition.folder = input.value; });
+      const label = row.createEl('label'); const check = label.createEl('input', { attr: { type: 'checkbox' } }); check.checked = condition.includeSubfolders; check.addEventListener('change', () => { condition.includeSubfolders = check.checked; }); label.createSpan({ text: 'Include subfolders' });
+    } else if (condition.type === 'tag') {
+      const input = row.createEl('input', { attr: { type: 'text', placeholder: 'Meeting', 'aria-label': 'Tag' } }); input.value = condition.tag; input.addEventListener('input', () => { condition.tag = input.value.replace(/^#/, ''); });
+    } else if (condition.type === 'filename') {
+      const operator = row.createEl('select', { attr: { 'aria-label': 'Filename match type' } });
+      for (const [value, label] of [['starts-with', 'Starts with'], ['ends-with', 'Ends with'], ['contains', 'Contains'], ['exact', 'Exact match']] as const) operator.createEl('option', { value, text: label });
+      operator.value = condition.operator; operator.addEventListener('change', () => { condition.operator = operator.value as typeof condition.operator; });
+      const input = row.createEl('input', { attr: { type: 'text', 'aria-label': 'Filename value' } }); input.value = condition.value; input.addEventListener('input', () => { condition.value = input.value; });
+    } else {
+      const property = row.createEl('input', { attr: { type: 'text', placeholder: 'Status', 'aria-label': 'Frontmatter property' } }); property.value = condition.property; property.addEventListener('input', () => { condition.property = property.value; });
+      const value = row.createEl('input', { attr: { type: 'text', placeholder: 'Published', 'aria-label': 'Frontmatter value' } }); value.value = condition.value; value.addEventListener('input', () => { condition.value = value.value; });
+    }
+    const remove = row.createEl('button', { text: 'Remove', attr: { 'aria-label': `Remove condition ${String(index + 1)}` } });
+    remove.addEventListener('click', () => { this.rule.conditions.splice(index, 1); this.render(); });
+  }
+
+  private async save(): Promise<void> {
+    if (!this.rule.name.trim() || this.rule.conditions.length === 0) throw new Error('Give the rule a name and at least one condition.');
+    const empty = this.rule.conditions.some((condition) => condition.type === 'folder' ? !condition.folder.trim() : condition.type === 'tag' ? !condition.tag.trim() : condition.type === 'filename' ? !condition.value.trim() : !condition.property.trim());
+    if (empty) throw new Error('Complete every condition before saving.');
+    if (this.index === null) this.plugin.settings.styleRules.push(this.rule); else this.plugin.settings.styleRules[this.index] = this.rule;
+    await this.plugin.saveSettings();
+    this.changed();
+    this.close();
   }
 }
 
@@ -383,6 +868,165 @@ export class RawStyleModal extends Modal {
     this.plugin.updateStatusBar();
     new Notice('Saved the note’s page style.');
     this.close();
+  }
+}
+
+export class CurrentNoteInspectorModal extends Modal {
+  private readonly original: TemplarNoteStyle;
+  private readonly draft: TemplarNoteStyle;
+  private readonly owner = `inspector-${Math.random().toString(36).slice(2)}`;
+  private saved = false;
+
+  public constructor(
+    private readonly plugin: TemplarPlugin,
+    private readonly file: TFile,
+    style: TemplarNoteStyle,
+  ) {
+    super(plugin.app);
+    this.original = clone(style);
+    this.draft = clone(style);
+  }
+
+  public onOpen(): void {
+    this.setTitle(`Customize ${this.file.basename}`);
+    this.modalEl.addClass('templar-modal', 'templar-inspector-modal');
+    this.contentEl.createEl('p', { text: 'Changes here affect only this note. Nothing is written until save changes.' });
+    this.renderAppearance();
+    this.renderTypography();
+    this.renderHeadings();
+    this.renderLayout();
+    this.renderImages();
+    this.renderPage();
+    this.renderWatermark();
+    const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
+    const discard = actions.createEl('button', { text: 'Discard changes' });
+    discard.addEventListener('click', () => this.close());
+    const save = actions.createEl('button', { cls: 'mod-cta', text: 'Save changes' });
+    save.addEventListener('click', () => void runButtonAction(save, async () => {
+      await this.plugin.frontmatter.writeStyle(this.file, this.draft);
+      this.saved = true;
+      await this.plugin.preview.cancel(this.owner);
+      await this.plugin.renderer.refreshFile(this.file);
+      this.plugin.refreshSidebars();
+      this.plugin.updateStatusBar();
+      this.close();
+    }));
+    this.updatePreview();
+  }
+
+  public onClose(): void {
+    if (!this.saved) void this.plugin.preview.cancel(this.owner);
+    this.contentEl.empty();
+  }
+
+  private section(title: string, key: keyof TemplarTemplate | 'page'): HTMLElement {
+    const details = this.contentEl.createEl('details', { cls: 'templar-inspector-section' });
+    details.open = title === 'Appearance';
+    const summary = details.createEl('summary');
+    summary.createSpan({ text: title });
+    const reset = summary.createEl('button', { text: 'Reset section', attr: { 'aria-label': `Reset ${title}` } });
+    reset.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const source = key === 'page' ? null : this.plugin.library.get(this.draft.sourceTemplateId ?? this.draft.id);
+      const baseline = source ?? this.original;
+      if (title === 'Appearance') {
+        this.draft.paper = clone(baseline.paper);
+        this.draft.typography.textColor = baseline.typography.textColor;
+        this.draft.typography.mutedColor = baseline.typography.mutedColor;
+        this.draft.blocks.highlightBackground = baseline.blocks.highlightBackground;
+        this.draft.blocks.highlightTextColor = baseline.blocks.highlightTextColor;
+        this.contentEl.empty();
+        this.onOpen();
+        return;
+      }
+      if (title === 'Typography') {
+        this.draft.typography = clone(baseline.typography);
+        this.draft.baseline = clone(baseline.baseline);
+        this.contentEl.empty();
+        this.onOpen();
+        return;
+      }
+      const replacement = source
+        ? clone(source[key as keyof TemplarTemplate])
+        : clone(this.original[key as keyof TemplarNoteStyle]);
+      (this.draft as unknown as Record<string, unknown>)[key] = replacement;
+      this.contentEl.empty();
+      this.onOpen();
+    });
+    return details.createDiv({ cls: 'templar-inspector-controls' });
+  }
+
+  private renderAppearance(): void {
+    const section = this.section('Appearance', 'paper');
+    new Setting(section).setName('Paper color').addColorPicker((picker) => picker.setValue(this.draft.paper.color).onChange((value) => { this.draft.paper.color = value; this.updatePreview(); }));
+    new Setting(section).setName('Pattern').addDropdown((dropdown) => dropdown.addOptions({ blank: 'Blank', ruled: 'Ruled', ledger: 'Ledger', 'dot-grid': 'Dot grid', graph: 'Graph', 'cross-hatch': 'Cross hatch', diagonal: 'Diagonal', hex: 'Hex', scallop: 'Scallop' }).setValue(this.draft.paper.pattern).onChange((value) => { this.draft.paper.pattern = value as PaperPattern; this.updatePreview(); }));
+    new Setting(section).setName('Pattern color').addColorPicker((picker) => picker.setValue(this.draft.paper.patternColor).onChange((value) => { this.draft.paper.patternColor = value; this.updatePreview(); }));
+    new Setting(section).setName('Text color').addColorPicker((picker) => picker.setValue(this.draft.typography.textColor).onChange((value) => { this.draft.typography.textColor = value; this.updatePreview(); }));
+    new Setting(section).setName('Highlight background').addColorPicker((picker) => picker.setValue(this.draft.blocks.highlightBackground).onChange((value) => { this.draft.blocks.highlightBackground = value; this.updatePreview(); }));
+    new Setting(section).setName('Highlight text').addColorPicker((picker) => picker.setValue(this.draft.blocks.highlightTextColor).onChange((value) => { this.draft.blocks.highlightTextColor = value; this.updatePreview(); }));
+  }
+
+  private renderTypography(): void {
+    const section = this.section('Typography', 'typography');
+    new Setting(section).setName('Body font').addText((text) => text.setValue(this.draft.typography.bodyFont).onChange((value) => { this.draft.typography.bodyFont = value; this.updatePreview(); }));
+    this.slider(section, 'Body size', this.draft.typography.bodySize, 8, 72, (value) => { this.draft.typography.bodySize = value; });
+    this.slider(section, 'Body weight', this.draft.typography.bodyWeight, 100, 900, (value) => { this.draft.typography.bodyWeight = value; }, 100);
+    this.slider(section, 'Line height (0 = automatic)', this.draft.typography.bodyLineHeight, 0, 120, (value) => { this.draft.typography.bodyLineHeight = value; });
+    this.slider(section, 'Baseline unit', this.draft.baseline.unit, 12, 96, (value) => { this.draft.baseline.unit = value; });
+  }
+
+  private renderHeadings(): void {
+    const section = this.section('Headings', 'headings');
+    const originalSizes = clone(this.draft.headings);
+    this.slider(section, 'Overall heading scale', 100, 60, 160, (value) => {
+      for (const key of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
+        this.draft.headings[key].size = Math.round(originalSizes[key].size * value / 100);
+      }
+    });
+    section.createEl('p', { text: 'Use the full template creator or raw editor for per-heading controls.' });
+  }
+
+  private renderLayout(): void {
+    const section = this.section('Layout', 'layout');
+    this.slider(section, 'Content width', this.draft.layout.maxWidth, 320, 2400, (value) => { this.draft.layout.maxWidth = value; }, 10);
+    for (const [label, key, max] of [['Top padding', 'paddingTop', 400], ['Right padding', 'paddingRight', 400], ['Bottom padding', 'paddingBottom', 600], ['Left padding', 'paddingLeft', 400]] as const) {
+      this.slider(section, label, this.draft.layout[key], 0, max, (value) => { this.draft.layout[key] = value; });
+    }
+    this.slider(section, 'Page radius', this.draft.layout.pageRadius, 0, 80, (value) => { this.draft.layout.pageRadius = value; });
+    new Setting(section).setName('Page shadow').addText((text) => text.setValue(this.draft.layout.pageShadow).onChange((value) => { this.draft.layout.pageShadow = value; this.updatePreview(); }));
+  }
+
+  private renderImages(): void {
+    const section = this.section('Images', 'images');
+    new Setting(section).setName('Default frame').addDropdown((dropdown) => dropdown.addOptions({ none: 'None', thin: 'Thin', photo: 'Photo', polaroid: 'Polaroid', scrapbook: 'Scrapbook', rounded: 'Rounded', technical: 'Technical', dark: 'Dark', vintage: 'Vintage' }).setValue(this.draft.images.frame).onChange((value) => { this.draft.images.frame = value as ImageFrame; applyFramePreset(this.draft, this.draft.images.frame); this.updatePreview(); }));
+    this.slider(section, 'Maximum width', this.draft.images.maxWidth, 10, 100, (value) => { this.draft.images.maxWidth = value; });
+    this.slider(section, 'Top spacing', this.draft.images.topSpacing, 0, 180, (value) => { this.draft.images.topSpacing = value; });
+    this.slider(section, 'Bottom spacing', this.draft.images.bottomSpacing, 0, 180, (value) => { this.draft.images.bottomSpacing = value; });
+    this.slider(section, 'Sepia', this.draft.images.sepia, 0, 1, (value) => { this.draft.images.sepia = value; }, 0.05);
+  }
+
+  private renderPage(): void {
+    const section = this.section('Page', 'page');
+    renderPageOptionSettings(section, this.draft.page, () => this.updatePreview());
+  }
+
+  private renderWatermark(): void {
+    const section = this.section('Watermark', 'watermark');
+    new Setting(section).setName('Text').addText((text) => text.setValue(this.draft.watermark.text).onChange((value) => { this.draft.watermark.text = value; this.updatePreview(); }));
+    this.slider(section, 'Opacity', this.draft.watermark.opacity, 0.05, 1, (value) => { this.draft.watermark.opacity = value; }, 0.05);
+    this.slider(section, 'Size', this.draft.watermark.size, 24, 240, (value) => { this.draft.watermark.size = value; });
+    this.slider(section, 'Rotation', this.draft.watermark.rotation, -45, 45, (value) => { this.draft.watermark.rotation = value; });
+  }
+
+  private slider(container: HTMLElement, name: string, value: number, min: number, max: number, update: (value: number) => void, step = 1): void {
+    new Setting(container).setName(name).addSlider((slider) => slider.setLimits(min, max, step).setValue(value).onChange((next) => { update(next); this.updatePreview(); }));
+  }
+
+  private updatePreview(): void {
+    const leaf = this.plugin.activeMarkdownLeaf();
+    if (!leaf) return;
+    this.plugin.preview.previewStyle(this.owner, leaf, this.file, this.draft);
   }
 }
 
@@ -1398,7 +2042,8 @@ export class BatchApplyModal extends Modal {
       return;
     }
     const count = this.matchingFiles().length;
-    this.summaryEl.setText(`${String(count)} Markdown ${count === 1 ? 'note' : 'notes'} will be updated.`);
+    const styled = this.matchingFiles().filter((file) => this.plugin.frontmatter.hasStyle(file)).length;
+    this.summaryEl.setText(`${String(count)} Markdown ${count === 1 ? 'note' : 'notes'} match: ${String(count - styled)} unstyled will receive the style; ${String(styled)} styled will be replaced.`);
   }
 
   private confirm(): void {
@@ -1411,7 +2056,7 @@ export class BatchApplyModal extends Modal {
     new ConfirmationModal(
       this.plugin,
       `Apply “${template.name}” to ${String(files.length)} notes?`,
-      'This changes only each note’s templar frontmatter property. The operation can be reversed per note with “Remove Page Style”.',
+      `${String(files.filter((file) => !this.plugin.frontmatter.hasStyle(file)).length)} unstyled notes will receive the style and ${String(files.filter((file) => this.plugin.frontmatter.hasStyle(file)).length)} styled notes will be replaced. Markdown and unrelated frontmatter remain unchanged.`,
       async () => {
         let completed = 0;
         for (const file of files) {
@@ -1427,6 +2072,9 @@ export class BatchApplyModal extends Modal {
           }
           await this.plugin.frontmatter.applyTemplate(file, template, page);
           completed += 1;
+          if (completed % 20 === 0) {
+            await new Promise<void>((resolve) => this.contentEl.ownerDocument.defaultView?.setTimeout(resolve, 0));
+          }
         }
         this.plugin.renderer.scheduleRefreshAll();
         this.plugin.refreshSidebars();

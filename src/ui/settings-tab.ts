@@ -72,6 +72,13 @@ export class TemplarSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           }),
       );
+    new Setting(containerEl)
+      .setName('Default page flow for newly styled notes')
+      .setDesc('Used by one-click apply when the note has no existing templar page settings.')
+      .addDropdown((dropdown) => dropdown
+        .addOptions({ pageless: 'Pageless', 'paged-a4': 'Paged A4', 'paged-letter': 'Paged Letter' })
+        .setValue(this.plugin.settings.defaultNewPageFlow)
+        .onChange(async (value) => { this.plugin.settings.defaultNewPageFlow = value as typeof this.plugin.settings.defaultNewPageFlow; await this.plugin.saveSettings(); }));
 
     new Setting(containerEl).setName('Template library').setHeading();
     containerEl.createEl('p', {
@@ -95,6 +102,15 @@ export class TemplarSettingTab extends PluginSettingTab {
       .addButton((button) =>
         button.setButtonText('Import…').onClick(() => this.plugin.showTemplateImporter()),
       );
+
+    new Setting(containerEl).setName('Style rules').setHeading();
+    containerEl.createEl('p', {
+      text: `${String(this.plugin.settings.styleRules.length)} automatic ${this.plugin.settings.styleRules.length === 1 ? 'rule' : 'rules'} configured. Rules only style unstyled notes and never run a background vault scan.`,
+    });
+    new Setting(containerEl)
+      .setName('Manage style rules')
+      .setDesc('Create ordered folder, tag, filename, and frontmatter rules; preview existing matches before any bulk operation.')
+      .addButton((button) => button.setButtonText('Manage rules…').onClick(() => this.plugin.showStyleRules()));
 
     new Setting(containerEl).setName('Typography and baseline').setHeading();
     new Setting(containerEl)
@@ -185,7 +201,7 @@ export class TemplarSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Reset').setHeading();
     new Setting(containerEl)
       .setName('Reset all settings')
-      .setDesc('Restores every option to its default value. Custom page styles in your library are kept; favorites are cleared.')
+      .setDesc('Restores every option to its default value. Custom styles are kept; favorites, recents, and style rules are cleared.')
       .addButton((button) => {
         button
           .setButtonText('Reset to defaults')
@@ -198,7 +214,7 @@ export class TemplarSettingTab extends PluginSettingTab {
     new ConfirmationModal(
       this.plugin,
       'Reset all Templar settings?',
-      'Every option returns to its default value. Custom page styles are kept, favorites are cleared.',
+      'Every option returns to its default value. Custom page styles are kept; favorites, recents, and style rules are cleared.',
       async () => {
         const defaults = clone(DEFAULT_SETTINGS);
         defaults.userTemplates = this.plugin.settings.userTemplates;

@@ -14,6 +14,7 @@ import {
 import type { TemplarNoteStyle, TemplarSettings, ValidationIssue } from '../types';
 import { imageGridCompensation } from '../utils/grid';
 import { escapeCssAttribute, round } from '../utils/value';
+import { clone } from '../utils/value';
 import { FontMetricsService } from './font-metrics';
 import type { FrontmatterService } from './frontmatter';
 import { PageLayoutService } from './page-layout';
@@ -46,6 +47,12 @@ interface ImageObservationState {
   resizeObserver: ResizeObserver;
 }
 
+interface PreviewState {
+  owner: string;
+  filePath: string;
+  style: TemplarNoteStyle;
+}
+
 export class PageRenderer {
   private destroyed = false;
   private scheduled = false;
@@ -57,6 +64,7 @@ export class PageRenderer {
   private readonly readingSections = new WeakMap<HTMLElement, ReadingSectionInfo>();
   private readonly readingRoots = new Map<HTMLElement, ReadingRootState>();
   private readonly scheduledReadingRoots = new Map<HTMLElement, number>();
+  private readonly previews = new Map<WorkspaceLeaf, PreviewState>();
 
   public constructor(
     private readonly app: App,
@@ -112,8 +120,49 @@ export class PageRenderer {
     }
   }
 
+  public async refreshLeafNow(leaf: WorkspaceLeaf): Promise<void> {
+    await this.refreshLeaf(leaf);
+  }
+
+  public preparePrint(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
+    this.pageLayout.preparePrint(leaf, style);
+  }
+
+  public restoreAfterPrint(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
+    this.pageLayout.restoreAfterPrint(leaf, style);
+  }
+
   public issuesFor(file: TFile): ValidationIssue[] {
     return [...(this.issuesByFile.get(file.path) ?? [])];
+  }
+
+  public async setPreview(
+    leaf: WorkspaceLeaf,
+    owner: string,
+    filePath: string,
+    style: TemplarNoteStyle,
+  ): Promise<void> {
+    this.previews.set(leaf, { owner, filePath, style: clone(style) });
+    await this.refreshLeaf(leaf);
+  }
+
+  public async cancelPreview(leaf: WorkspaceLeaf, owner?: string): Promise<void> {
+    const state = this.previews.get(leaf);
+    if (!state || (owner && state.owner !== owner)) return;
+    this.previews.delete(leaf);
+    await this.refreshLeaf(leaf);
+  }
+
+  public cancelPreviewsByOwner(owner: string): void {
+    for (const [leaf, state] of this.previews) {
+      if (state.owner !== owner) continue;
+      this.previews.delete(leaf);
+      void this.refreshLeaf(leaf);
+    }
+  }
+
+  public previewStyle(leaf: WorkspaceLeaf): TemplarNoteStyle | null {
+    return this.previews.has(leaf) ? clone(this.previews.get(leaf)!.style) : null;
   }
 
   public registerReadingSection(
@@ -166,6 +215,7 @@ export class PageRenderer {
     this.scheduledReadingRoots.clear();
     this.readingRoots.clear();
     this.pageLayout.destroy();
+    this.previews.clear();
     for (const leaf of [...this.styledViews.keys()]) {
       this.clearLeaf(leaf);
     }
@@ -184,7 +234,13 @@ export class PageRenderer {
     }
     const view = leaf.view;
     const file = view.file;
-    const style = file ? this.frontmatter.getStyle(file) : null;
+    const preview = this.previews.get(leaf);
+    if (preview && preview.filePath !== file?.path) {
+      this.previews.delete(leaf);
+    }
+    const style = file
+      ? this.previews.get(leaf)?.style ?? this.frontmatter.getStyle(file)
+      : null;
     if (!file || !style) {
       this.clearLeaf(leaf);
       return;
@@ -341,6 +397,9 @@ export class PageRenderer {
   private clearLeaf(leaf: WorkspaceLeaf): void {
     this.leafGenerations.set(leaf, (this.leafGenerations.get(leaf) ?? 0) + 1);
     this.pageLayout.clear(leaf);
+    if (!(leaf.view instanceof MarkdownView) || !leaf.view.file) {
+      this.previews.delete(leaf);
+    }
     const styled = this.styledViews.get(leaf);
     const contentEl =
       styled?.contentEl ??

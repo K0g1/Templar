@@ -180,13 +180,39 @@ describe('structured style compiler', () => {
     expect(css).toContain('font-size: 120px');
     expect(css).toContain('transform: rotate(-30deg)');
     expect(css).toContain('.templar-page-content::after');
-    expect(css).toContain('border-block-start: 3px dashed');
+    expect(css).toContain('repeating-linear-gradient(to right');
+    expect(css).toContain('height: 30px !important');
     expect(css).toContain('tbody tr:nth-child(even)');
     expect(css).toContain('font-size: 14px');
     expect(css).toContain('padding: 6px');
     expect(css).toContain('list-style-type: square');
     expect(css).toContain('[data-callout="warning"]');
     expect(css).toContain('--callout-border-color: #c77b3a');
+  });
+
+  it('allocates exactly one baseline row to every gridded divider style', () => {
+    for (const unit of [24, 30, 42]) {
+      for (const dividerStyle of ['solid', 'dashed', 'dotted', 'double', 'fade'] as const) {
+        const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+        style.baseline.enabled = true;
+        style.baseline.mode = unit === 24 ? 'balanced' : 'strict';
+        style.baseline.unit = unit;
+        style.blocks.dividerStyle = dividerStyle;
+        style.blocks.dividerWidth = 20;
+        const css = compilePageStyle(style, '[data-templar-scope="divider"]', 'divider', metrics).css;
+        expect(css, `${String(unit)} ${dividerStyle}`).toContain(`height: ${String(unit)}px !important`);
+        expect(css, `${String(unit)} ${dividerStyle}`).toContain('margin-block: 0 !important');
+      }
+    }
+  });
+
+  it('retains ordinary divider spacing when baseline alignment is off', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.baseline.enabled = false;
+    style.baseline.mode = 'free';
+    const css = compilePageStyle(style, '[data-templar-scope="divider-free"]', 'divider-free', metrics).css;
+    expect(css).toContain('border-block-start: 1px solid');
+    expect(css).toContain('margin-block: 18.135px !important');
   });
 
   it('escapes watermark text and rejects pattern injection', () => {

@@ -32,6 +32,7 @@ npm run check
 - Add tests for pure logic, schema changes, CSS rules, or regressions.
 - Update the template specification, architecture docs, and [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md) when contracts or current behavior change. Update `src/templates/llm-kit.ts` when the authoring schema changes.
 - Include desktop Reading/Live Preview results and mobile/emulation results for renderer work.
+- For preview, rules, usage, synchronization, inspector, print, or bulk work, document event/observer ownership, stale-work protection, cleanup, and exact confirmation behavior.
 - Do not include unrelated formatting or generated dependency churn.
 - Do not add default hotkeys.
 - Do not commit secrets, vault content, `data.json`, or external user assets.
@@ -52,7 +53,9 @@ Release tags exactly match the manifest version and do not use a `v` prefix. Pre
 
 ## Template and pack work
 
-Add a one-off hand-tuned design with `builtIn()` in `src/templates/builtins.ts`; add a family to the compact seeds in `src/templates/packs/catalog.ts`. Every style needs a permanent ID, a display folder, useful tags, both page modes, and readable colors. Run the catalog identity/schema/CSS/contrast tests before treating a palette as complete. Folder metadata is a display label, not a vault path; separators are sanitized and missing values become `Unfiled`.
+Add a one-off hand-tuned design with `builtIn()` in `src/templates/builtins.ts`; add a shipped family to the compact seeds in `src/templates/packs/catalog.ts`. User-shareable `.templar-pack` files are data containers, not shipped TypeScript packs: every member must remain a complete v1 template and pass the standalone schema/CSS/security path. Every style needs a permanent ID, a display folder, useful tags, both page modes, and readable colors. Run the catalog identity/schema/CSS/contrast tests before treating a palette as complete. Folder metadata is a display label, not a vault path; separators are sanitized and missing values become `Unfiled`.
+
+Do not replace built-in definitions from imported data. New metadata-derived features must use the shared lazy index or Obsidian events—never polling, per-note listeners, or a vault scan on every render. Bulk mutations require a dry run, exact affected/skipped counts, explicit confirmation, and chunked/yielding execution.
 
 For a persisted field, follow the full boundary in [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md): type → default → normalization/aliases → YAML serialization → validation → compiler/UI → round-trip tests → specification/authoring-kit docs. The generated `main.js` is never the place to implement a change.
 

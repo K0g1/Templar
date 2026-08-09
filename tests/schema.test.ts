@@ -56,6 +56,7 @@ describe('Templar v1 schema', () => {
     expect(restored?.name).toBe(original.name);
     expect(restored?.paper.pattern).toBe('ruled');
     expect(restored?.attachments?.['mountains.jpg']?.width).toBe(420);
+    expect(restored?.provenance?.sourceSnapshot?.id).toBe(original.sourceTemplateId);
     expect(restored?.blocks.highlightBackground).toBe(
       original.blocks.highlightBackground,
     );
@@ -75,6 +76,14 @@ describe('Templar v1 schema', () => {
       height: 1056,
     });
     expect(yamlObject).toHaveProperty('style-name', original.name);
+  });
+
+  it('round-trips source history and automatic rule attribution', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.provenance!.appliedByRule = { id: 'journal-notes', name: 'Journal notes' };
+    const restored = frontmatterToNoteStyle(noteStyleToFrontmatter(style));
+    expect(restored?.provenance?.appliedByRule).toEqual({ id: 'journal-notes', name: 'Journal notes' });
+    expect(restored?.provenance?.sourceSnapshot?.paper).toEqual(style.paper);
   });
 
   it('ships only valid built-in styles and scoped custom CSS', () => {

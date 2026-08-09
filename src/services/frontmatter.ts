@@ -2,6 +2,7 @@ import type { App, TFile } from 'obsidian';
 import type { NotePageOptions, TemplarNoteStyle, TemplarTemplate } from '../types';
 import { frontmatterToNoteStyle, noteStyleToFrontmatter, templateToNoteStyle } from '../templates/note-format';
 import { normalizePageOptions } from '../templates/schema';
+import { clone } from '../utils/value';
 
 export class FrontmatterService {
   private readonly optimisticStyles = new Map<string, TemplarNoteStyle | null>();
@@ -24,8 +25,15 @@ export class FrontmatterService {
     file: TFile,
     template: TemplarTemplate,
     pageOptions?: NotePageOptions,
+    appliedByRule?: { id: string; name: string },
   ): Promise<void> {
+    const existing = this.getStyle(file);
     const style = templateToNoteStyle(template, pageOptions);
+    if (existing?.attachments) style.attachments = clone(existing.attachments);
+    if (appliedByRule) {
+      style.provenance ??= {};
+      style.provenance.appliedByRule = { ...appliedByRule };
+    }
     this.optimisticStyles.set(file.path, style);
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {

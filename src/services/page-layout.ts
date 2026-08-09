@@ -83,6 +83,29 @@ export class PageLayoutService {
     }
   }
 
+  public preparePrint(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
+    const state = this.states.get(leaf);
+    if (!state || style.page.mode !== 'paged') return;
+    for (const { pageContent } of this.pagePairs(state.scopeEl)) {
+      pageContent.setCssProps({
+        '--templar-page-scale': '1',
+        '--templar-page-gap': '0px',
+        '--templar-page-span': `${String(style.page.height)}px`,
+      });
+      this.paginate(pageContent, style, 1, 0);
+    }
+  }
+
+  public restoreAfterPrint(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
+    const state = this.states.get(leaf);
+    if (!state) return;
+    for (const { pageContent } of this.pagePairs(state.scopeEl)) {
+      pageContent.style.removeProperty('--templar-page-gap');
+      pageContent.style.removeProperty('--templar-page-span');
+    }
+    this.schedule(leaf, style);
+  }
+
   private schedule(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
     const state = this.states.get(leaf);
     const view = state?.scopeEl.ownerDocument.defaultView;
@@ -174,10 +197,11 @@ export class PageLayoutService {
     pageContent: HTMLElement,
     style: TemplarNoteStyle,
     geometryScale: number,
+    pageGapOverride?: number,
   ): void {
     this.clearBreaks(pageContent);
     const candidates = this.pageBreakCandidates(pageContent);
-    const pageGap = alignedPageGap(
+    const pageGap = pageGapOverride ?? alignedPageGap(
       style.page.height,
       style.page.gap,
       style.baseline.unit,

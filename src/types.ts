@@ -11,6 +11,9 @@ export type PaperPattern =
   | 'scallop';
 export type PageMode = 'pageless' | 'paged';
 export type PageSize = 'a4' | 'letter' | 'custom';
+export type DefaultPageFlow = 'pageless' | 'paged-a4' | 'paged-letter';
+export type RulePageFlow = 'default' | DefaultPageFlow;
+export type LibraryDensity = 'compact' | 'comfortable' | 'gallery';
 export type ImageFrame =
   | 'none'
   | 'thin'
@@ -212,8 +215,43 @@ export interface AttachmentOverride {
 
 export interface TemplarNoteStyle extends TemplarTemplate {
   sourceTemplateId?: string;
+  provenance?: NoteStyleProvenance;
   attachments?: Record<string, AttachmentOverride>;
   page: NotePageOptions;
+}
+
+export interface NoteStyleProvenance {
+  sourceSnapshot?: TemplarTemplate;
+  appliedByRule?: {
+    id: string;
+    name: string;
+  };
+}
+
+export type FilenameRuleOperator = 'starts-with' | 'ends-with' | 'contains' | 'exact';
+
+export type StyleRuleCondition =
+  | { type: 'folder'; folder: string; includeSubfolders: boolean }
+  | { type: 'tag'; tag: string }
+  | { type: 'filename'; operator: FilenameRuleOperator; value: string }
+  | { type: 'frontmatter'; property: string; value: string };
+
+export interface StyleRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  conditions: StyleRuleCondition[];
+  templateId: string;
+  pageFlow: RulePageFlow;
+}
+
+export interface TemplarPack {
+  version: 1;
+  name: string;
+  description: string;
+  author: string;
+  tags: string[];
+  templates: TemplarTemplate[];
 }
 
 export interface TemplarSettings {
@@ -224,6 +262,10 @@ export interface TemplarSettings {
   defaultGridUnit: number;
   fontCacheSize: number;
   favouriteTemplateIds: string[];
+  recentTemplateIds: string[];
+  defaultNewPageFlow: DefaultPageFlow;
+  libraryDensity: LibraryDensity;
+  styleRules: StyleRule[];
   userTemplates: TemplarTemplate[];
 }
 

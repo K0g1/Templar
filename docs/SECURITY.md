@@ -4,11 +4,12 @@ The current runtime/source map and release status are summarized in [`DEVELOPER_
 
 ## Trust boundaries
 
-Templar processes three user-controlled inputs:
+Templar processes four user-controlled inputs:
 
 1. note frontmatter;
 2. pasted/imported template YAML;
 3. advanced template CSS.
+4. `.templar-pack` files containing multiple templates.
 
 All three can be synced or received from someone else and are treated as untrusted until normalized and validated.
 
@@ -21,6 +22,7 @@ All three can be synced or received from someone else and are treated as untrust
 - Writes use `FileManager.processFrontMatter()` and touch only `frontmatter.templar`.
 - No imported text is passed to `innerHTML` or executed.
 - Import preview is isolated and saving requires an explicit user action.
+- Every pack member traverses the standalone normalizer, source validator, structured validator, and CSS validator independently. Invalid members are blocked, built-in IDs cannot be overwritten, and folder labels never become filesystem paths.
 
 ## CSS controls
 
@@ -50,7 +52,7 @@ Templar makes no network requests and has no telemetry, analytics, ads, accounts
 
 ## Filesystem
 
-Runtime code uses Obsidian Vault/FileManager APIs only. It does not import Node.js or Electron and does not access files outside the vault. The production build explicitly targets browsers, applies PostCSS’s browser shims, disables source-map handling during parsing, and fails a bundle scan if any Node/Electron import or Node global remains. Exports are explicit user actions into visible vault paths.
+Runtime code uses Obsidian Vault/FileManager APIs only. It does not import Node.js or Electron and does not access files outside the vault. The production build explicitly targets browsers, applies PostCSS’s browser shims, disables source-map handling during parsing, and fails a bundle scan if any Node/Electron import or Node global remains. Template/pack exports and print actions are explicit user actions; print delegates to the host browser instead of adding an independent document engine.
 
 ## Dependency policy
 
@@ -72,6 +74,9 @@ The initial implementation upgraded PostCSS and Vitest in response to advisories
 - observers are per open styled leaf and disconnect on reconfigure/cleanup.
 - over-tall page blocks are not repeatedly moved.
 - imported animations/effects receive performance validation.
+- library cards are lightweight swatches; only one selected actual-note preview uses the production renderer per sidebar owner.
+- usage and rules are event-driven with one lazy metadata index, no polling, no listener per note, and no scan on each sidebar render.
+- bulk writes yield in chunks, inspector updates coalesce to animation frames, and preview/print generations ignore stale asynchronous work.
 
 Future work should benchmark very large notes and consider viewport-aware page fitting limits if observer work becomes significant.
 

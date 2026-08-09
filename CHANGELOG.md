@@ -4,8 +4,20 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
-- Added a consolidated developer reference covering the current feature surface, commands/settings, v1 persistence contract, runtime/source map, lifecycle, QA/release runbook, and known alpha limitations.
-- Clarified documentation authority, handoff expectations, pack/schema contribution rules, and the canonical camelCase shape of nested heading fields in exported templates.
+## 1.2.0-alpha.1 — 2026-08-09
+
+- Added leaf-scoped live “try on this note” previews with production rendering, generation-safe rapid switching, explicit Apply/Cancel, exact restoration, global Escape cancellation, and multi-pane isolation.
+- Rebuilt Page Styles around Current Note state, Recent/Favorites/Built-in/My Styles, usage and folder relevance, Most Used sorting, lightweight swatches, Compact/Comfortable/Gallery density, simplified cards, and accessible roving keyboard navigation.
+- Made normal apply one click: styled notes retain all page options and attachment overrides; unstyled notes use a new Pageless/Paged A4/Paged Letter default; explicit page options remain in overflow.
+- Added an explicit-session Current Note inspector with live draft rendering, collapsible appearance/typography/headings/layout/images/page/watermark controls, per-section reset, Save/Discard, and Modified status.
+- Added source snapshots, update/missing/modified state calculation, safe replacement, conservative legacy handling, recursive three-way merge, exact review counts, and chunked synchronization writes while preserving note-specific data.
+- Added ordered automatic style rules for folder, tag, filename, and frontmatter equality, with AND conditions, first-match priority, metadata readiness, event-only triggers, dry runs, accessible ordering, and unstyled-only safety.
+- Added a lazy incremental note-style index for usage badges, update counts, Most Used, and current-folder relevance without polling or per-render vault scans.
+- Added versioned `.templar-pack` import/export with arbitrary/folder selection, independent member validation, on-demand preview, explicit custom keep/replace/copy conflicts, and immutable built-in protection.
+- Added print/export preparation using the existing renderer and host print system: fonts/images/layout settle first, A4/Letter/custom page sizing is requested, screen gaps/shadows are removed, and no PDF dependency was introduced.
+- Added context-sensitive commands for search, note customization, last/favorite styles, preview control, page toggles, synchronization, rules, and print/export.
+- Fixed horizontal rules in strict/balanced grids so Reading and Live Preview allocate exactly one baseline unit for solid/dashed/dotted/double/fade dividers, including paged output and thickness clamping without persistence changes.
+- Expanded settings migration, mobile/touch/reduced-motion CSS, accessibility labels/focus behavior, cleanup ownership, security documentation, architecture/specification/runbooks, and regression coverage to 76 tests.
 
 ## 1.1.0-alpha.3 — 2026-08-08
 

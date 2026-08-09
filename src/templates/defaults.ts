@@ -196,5 +196,9 @@ export const DEFAULT_SETTINGS: TemplarSettings = {
   defaultGridUnit: 30,
   fontCacheSize: 64,
   favouriteTemplateIds: [],
+  recentTemplateIds: [],
+  defaultNewPageFlow: 'pageless',
+  libraryDensity: 'comfortable',
+  styleRules: [],
   userTemplates: [],
 };

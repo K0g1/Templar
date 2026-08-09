@@ -2,7 +2,7 @@
 
 The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). It records the alpha version, command/settings surface, source map, persistence and lifecycle contracts, release artifacts, and known limitations. This guide is the executable smoke-test and release checklist.
 
-At `1.1.0-alpha.3`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and the only supported distribution path is manual installation of the three release artifacts.
+At `1.2.0-alpha.1`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and the only supported distribution path is manual installation of the three release artifacts.
 
 ## Local workflow
 
@@ -20,7 +20,7 @@ npm run check
 
 `npm run check` runs Obsidian-aware ESLint, Vitest, strict TypeScript, a minified browser-targeted esbuild bundle, and the mobile bundle guard. The guard fails if `main.js` retains Node/Electron imports, dynamic `require`, `Buffer`, or `process` access.
 
-For the `1.1.0-alpha.3` snapshot, the pure suite contains 58 tests. Treat the command result—not a hard-coded count—as authoritative when the suite grows.
+For the `1.2.0-alpha.1` snapshot, the pure suite contains 76 tests. Treat the command result—not a hard-coded count—as authoritative when the suite grows.
 
 The CI workflow runs the same check on every pull request and push to `main`; tagged releases repeat it before attaching artifacts.
 
@@ -35,6 +35,12 @@ The CI workflow runs the same check on every pull request and push to `main`; ta
 - `css.test.ts`: virtual mapping, scope guarantees, keyframes, global/resource rejection, paged media-query rule.
 - `style-compiler.test.ts`: shared pattern origin, editor list normalization, measured Reading code padding, highlight palettes, injection containment, fixed-page CSS, extended headings, watermark/divider/table/list/callout declarations, duotone/float, and every pattern variant.
 - `template-library.test.ts`: immutable built-in/custom snapshots, IDs, duplicate/save/remove behavior, and favorites.
+- `synchronization.test.ts`: status classification, note/source separation, page/attachment preservation, and recursive three-way merge.
+- `style-rules.test.ts`: folder/tag/filename/frontmatter AND matching, metadata readiness, priority, and page presets.
+- `note-style-index.test.ts`: lazy usage/folder counts and metadata/delete/rename updates.
+- `template-pack.test.ts`: pack parsing, per-member validity, portable export, and copy conflict IDs.
+- `settings.test.ts`: migration/normalization for default page flow, density, Recent, and rules.
+- `print-service.test.ts`: A4, Letter, custom, and pageless print-size selection.
 
 Pure tests deliberately avoid importing Obsidian's Electron runtime. UI/runtime behavior needs an Obsidian smoke test.
 
@@ -82,6 +88,20 @@ Spot-check the extended features in both views: H5/H6 rendering, heading letter 
 Open the Template Creator's Simple, Detailed, and Advanced tabs. In Detailed mode exercise H2–H6 font controls, pattern controls, margin color/offset, code typography, table/divider/callout/embed settings, lists, watermark, image float/object-fit/duotone, and paged/pageless preview.
 
 For paged mode, follow `docs/PAGED_LAYOUT.md`'s resize matrix. For per-note isolation, open at least three split leaves with different styles and modes.
+
+### UX expansion smoke matrix
+
+1. Search a 132-style section; click and keyboard-preview several cards quickly. Verify only the originating leaf changes, there is no unstyled flash, Escape restores the exact persisted style, and another pane of the same file remains persistent.
+2. Apply from preview and directly from a card. Confirm there is no page modal, existing page/attachment settings persist, unstyled notes use the configured default flow, and Recent changes only after successful apply.
+3. Exercise `/`, arrows, Home/End, Space, Enter, F, and the Escape hierarchy in Compact, Comfortable, and Gallery modes. Inspect visible focus and screen-reader labels.
+4. Open Customize current note, drag controls rapidly, reset sections, discard once, then save. Confirm no frontmatter writes occur before Save and the note becomes Modified afterward.
+5. Change a custom source template and review clean, modified, legacy, and missing-source notes. Verify exact confirmation counts; safe replace and three-way merge must preserve page, attachments, unrelated frontmatter, and Markdown.
+6. Create folder/tag/filename/property rules, reorder by drag and buttons, preview existing matches, and run a bulk apply. Styled notes must always be skipped by automatic triggers.
+7. Delete and rename styled notes while the library is open. Usage, current-folder, Most Used, and update counts must change incrementally without reopening or a recurring scan.
+8. Export/import standalone templates and packs. Test valid/warning/error members, custom keep/replace/copy conflicts, built-in protection, keyboard selection, and a pack whose folder labels contain separators.
+9. Print paged A4/Letter/custom and pageless notes after late fonts/images. Inspect backgrounds, patterns, watermarks, frames, tables, callouts, code, pagination, removed gaps/shadows, and restored screen layout after cancelling print.
+10. Test multiple consecutive Markdown dividers and every divider style in strict/balanced ruled and graph templates at several units, in Reading/Live Preview and near A4/Letter boundaries. Every following block must remain on the grid.
+11. Close preview/inspector/sidebar/leaf and unload the plugin while work is pending. Confirm temporary styles, frames, observers, listeners, print CSS, and draft state are released.
 
 ## Mobile release gate
 

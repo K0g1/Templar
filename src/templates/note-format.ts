@@ -10,16 +10,18 @@ export function templateToNoteStyle(
   const noteStyle = clone(template) as TemplarNoteStyle;
   delete noteStyle.builtIn;
   noteStyle.sourceTemplateId = template.id;
+  const sourceSnapshot = clone(template);
+  delete sourceSnapshot.builtIn;
+  noteStyle.provenance = { sourceSnapshot };
   noteStyle.page = clone(pageOptions);
   return noteStyle;
 }
 
-export function noteStyleToFrontmatter(style: TemplarNoteStyle): Record<string, unknown> {
+function templateFieldsToFrontmatter(style: TemplarTemplate): Record<string, unknown> {
   return {
     version: 1,
     'style-name': style.name,
     'template-id': style.id,
-    'source-template-id': style.sourceTemplateId ?? style.id,
     metadata: clone(style.metadata),
     paper: {
       color: style.paper.color,
@@ -130,6 +132,14 @@ export function noteStyleToFrontmatter(style: TemplarNoteStyle): Record<string, 
       rotation: style.watermark.rotation,
       opacity: style.watermark.opacity,
     },
+    css: style.css,
+  };
+}
+
+export function noteStyleToFrontmatter(style: TemplarNoteStyle): Record<string, unknown> {
+  return {
+    ...templateFieldsToFrontmatter(style),
+    'source-template-id': style.sourceTemplateId ?? style.id,
     page: {
       mode: style.page.mode,
       size: style.page.size,
@@ -138,8 +148,20 @@ export function noteStyleToFrontmatter(style: TemplarNoteStyle): Record<string, 
       gap: style.page.gap,
       'scale-to-fit': style.page.scaleToFit,
     },
+    ...(style.provenance ? {
+      provenance: {
+        ...(style.provenance.sourceSnapshot ? {
+          'source-snapshot': templateFieldsToFrontmatter(style.provenance.sourceSnapshot),
+        } : {}),
+        ...(style.provenance.appliedByRule ? {
+          'applied-by-rule': {
+            id: style.provenance.appliedByRule.id,
+            name: style.provenance.appliedByRule.name,
+          },
+        } : {}),
+      },
+    } : {}),
     ...(style.attachments ? { attachments: clone(style.attachments) } : {}),
-    css: style.css,
   };
 }
 
@@ -148,11 +170,8 @@ export function frontmatterToNoteStyle(raw: unknown): TemplarNoteStyle | null {
 }
 
 export function templateToExportObject(template: TemplarTemplate): Record<string, unknown> {
-  const portableTemplate = noteStyleToFrontmatter(templateToNoteStyle(template));
-  // Page mode is a per-note choice, not part of a reusable visual template.
-  delete portableTemplate.page;
   return {
-    'templar-template': portableTemplate,
+    'templar-template': templateFieldsToFrontmatter(template),
   };
 }
 

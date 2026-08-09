@@ -787,6 +787,23 @@ export function normalizeNoteStyle(raw: unknown): TemplarNoteStyle | null {
     normalized.id,
   );
 
+  const provenance = record(source.provenance);
+  const sourceSnapshotValue = pick(provenance, 'sourceSnapshot', 'source-snapshot');
+  const appliedByRule = record(pick(provenance, 'appliedByRule', 'applied-by-rule'));
+  if (sourceSnapshotValue && typeof sourceSnapshotValue === 'object') {
+    const sourceSnapshot = normalizeTemplate(sourceSnapshotValue);
+    delete sourceSnapshot.builtIn;
+    normalized.provenance = { sourceSnapshot };
+  }
+  const ruleId = stringValue(appliedByRule.id, '').trim();
+  if (ruleId) {
+    normalized.provenance ??= {};
+    normalized.provenance.appliedByRule = {
+      id: ruleId,
+      name: stringValue(appliedByRule.name, ruleId),
+    };
+  }
+
   const rawAttachments = record(source.attachments);
   const attachments: TemplarNoteStyle['attachments'] = {};
   for (const [fileName, overrideValue] of Object.entries(rawAttachments)) {

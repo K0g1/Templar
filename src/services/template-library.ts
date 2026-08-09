@@ -126,6 +126,10 @@ export class TemplateLibrary {
     if (favouriteIndex >= 0) {
       this.settings.favouriteTemplateIds.splice(favouriteIndex, 1);
     }
+    const recentIndex = this.settings.recentTemplateIds.indexOf(id);
+    if (recentIndex >= 0) {
+      this.settings.recentTemplateIds.splice(recentIndex, 1);
+    }
     await this.persist();
     return true;
   }
@@ -149,6 +153,16 @@ export class TemplateLibrary {
     favourites.push(id);
     await this.persist();
     return true;
+  }
+
+  public async recordRecent(id: string): Promise<void> {
+    if (!this.get(id)) return;
+    const recent = this.settings.recentTemplateIds;
+    const existing = recent.indexOf(id);
+    if (existing >= 0) recent.splice(existing, 1);
+    recent.unshift(id);
+    if (recent.length > 10) recent.length = 10;
+    await this.persist();
   }
 
   private uniqueId(preferred: string): string {

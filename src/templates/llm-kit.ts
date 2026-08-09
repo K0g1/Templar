@@ -25,6 +25,7 @@ Create one complete, portable Templar Page Style. Return only a YAML document wi
 13. Do not use viewport-width media queries. A Page Style must render on a fixed page without changing text positions when the window is resized. Preference queries for reduced motion, color scheme, or contrast are allowed.
 14. Do not use viewport/container units, environment-dependent lengths, container queries, \`!important\`, or private \`.templar-*\` classes. Do not override geometry, zoom, transforms, overflow, base font, or line height directly on \`.page\` or \`.page-content\`; use the structured fields instead.
 15. Always choose both a highlight background and a highlighted-text color with enough contrast for the template palette.
+16. In strict or balanced baseline modes, Templar allocates every Markdown horizontal rule exactly one grid unit. Choose a divider width/style for appearance; do not add external \`hr\` margins or height in advanced CSS that fights the rhythm engine.
 
 ## Supported virtual selectors
 
@@ -40,7 +41,7 @@ Pseudo-classes, pseudo-elements, attribute selectors, and descendant selectors m
 
 \`template-id\`: lowercase letters, digits, and hyphens.
 
-\`metadata\`: author, description, and a list of tags.
+\`metadata\`: author, description, a portable single-level display \`folder\` (not a vault path), and a list of tags.
 
 \`paper\`:
 - \`color\`: CSS color.
@@ -98,6 +99,7 @@ templar-template:
   metadata:
     author: AI-assisted design
     description: A calm field notebook inspired by pressed leaves.
+    folder: Nature
     tags: [botanical, journal, ruled]
   paper:
     color: "#f4f0da"

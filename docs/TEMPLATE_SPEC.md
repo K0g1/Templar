@@ -26,6 +26,22 @@ page:
 
 This separation is intentional: all templates must support both modes.
 
+Applied notes may also contain implementation-owned provenance:
+
+```yaml
+provenance:
+  source-snapshot: # complete normalized template as it existed when applied/synchronized
+    version: 1
+    style-name: Classic Ruled
+    template-id: classic-ruled
+    # ...all template-derived sections...
+  applied-by-rule:
+    id: research-notes
+    name: Research Notes
+```
+
+`source-snapshot` makes update status and three-way merging deterministic while the current style remains fully self-contained. `applied-by-rule` is informational. Neither field is included in a reusable `.templar` export, and note-only `page` and `attachments` are always excluded from source comparisons.
+
 ## Complete export shape
 
 ```yaml
@@ -250,6 +266,26 @@ templar-template:
 | watermark opacity | 0.05–1 |
 | custom CSS | maximum 50 KB and safe virtual selectors only |
 
+## Template pack format
+
+A `.templar-pack` file is YAML with a top-level `templar-pack` mapping:
+
+```yaml
+templar-pack:
+  version: 1 # pack format identifier
+  name: Academic Writing
+  description: Portable research and publishing styles.
+  author: Example Author
+  tags: [academic, writing]
+  templates:
+    - version: 1
+      style-name: Thesis Draft
+      template-id: thesis-draft
+      # ...complete normalized template...
+```
+
+Folder values inside templates remain display metadata and never create vault folders. Every member is normalized and validated independently through the standalone import path. An invalid member is blocked without invalidating otherwise valid members. Built-in IDs cannot be replaced by imported content; conflicts must be kept or imported as a custom copy.
+
 ## Baseline behavior
 
 - `strict`: body, blocks, headings, and image exits snap to the grid.
@@ -273,6 +309,8 @@ The additional patterns are decorative overlays, not baseline rules: ledger adds
 `blocks.callout-variants` is keyed by Obsidian callout type (for example, `warning` for `> [!warning]`). A variant can override any subset of `accent`, `background`, `textColor`, `titleColor`, and `iconColor`; omitted values inherit the base callout palette. These nested keys are camelCase even though top-level persisted field names use kebab-case. The six nested heading objects also use the internal camelCase keys `letterSpacing` and `textTransform` because the canonical serializer preserves their object shape; `normalizeTemplate()` accepts the same internal form.
 
 In both gridded modes, every inter-block offset is a whole multiple of the grid unit. Reading View list items and Live Preview list lines explicitly use the body line-height, with Obsidian's theme list padding removed. This prevents paragraphs, bullets, and later blocks from drifting between Graph Paper lines.
+
+Horizontal rules are rhythm blocks in strict and balanced modes. The complete Reading `<hr>` or Live Preview horizontal-rule line occupies exactly one baseline unit, external theme margins are removed, and the configured stroke is centered inside the row. Solid, dashed, dotted, double, and fade variants have identical vertical footprints. If the stored divider width is too large, rendering clamps only the visible stroke to at most one third of the active unit; the persisted value is not rewritten. Free mode and disabled baselines keep normal divider spacing.
 
 Reading View preserves source blank-line counts with plugin-owned, grid-sized spacer blocks. The Markdown remains unchanged; removing Templar returns to standard Markdown whitespace behavior. Fenced-code blank lines are ignored by the spacer parser because they already render inside the code block.
 
@@ -346,4 +384,4 @@ Current overrides support frame metadata, rotation, and pixel width. The rendere
 
 ## Compatibility and migrations
 
-Template exports identify v1. H4, the expanded quote/code/table palette, and the 1.1 feature batch (h5/h6, heading letter spacing and text transform, lists and watermark, new paper patterns, image float/object-fit/duotone, and the extended block palette) are backward-compatible v1 additions: older styles receive defaults during normalization. A future v2 importer must explicitly migrate known v1 fields before normalization. Never silently reinterpret a v1 field with new units or semantics.
+Template exports identify v1. H4, the expanded quote/code/table palette, and the 1.1 feature batch (h5/h6, heading letter spacing and text transform, lists and watermark, new paper patterns, image float/object-fit/duotone, and the extended block palette) are backward-compatible v1 additions: older styles receive defaults during normalization. Note provenance and `.templar-pack` are wrappers around normalized v1 templates, not a reinterpretation of their design fields. Notes without provenance remain renderable and receive explicit legacy choices during synchronization. A future v2 importer must explicitly migrate known v1 fields before normalization. Never silently reinterpret a v1 field with new units or semantics.

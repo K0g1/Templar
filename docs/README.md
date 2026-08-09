@@ -2,7 +2,7 @@
 
 Technical documentation for the Templar Obsidian plugin.
 
-The current implementation snapshot is `1.1.0-alpha.3`: 132 built-in styles, portable single-level folders, paged/pageless notes, and manual installation only. [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md) is the handoff document for the complete feature map, source map, persistence rules, test/release runbook, and known limitations.
+The current implementation snapshot is `1.2.0-alpha.1`: 132 built-in styles, leaf-scoped live try-on, note customization, source synchronization, event-driven style rules and usage indexing, pack import/export, print preparation, keyboard-first browsing, three density modes, paged/pageless notes, and manual installation only. [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md) is the handoff document for the complete feature map, source map, persistence rules, test/release runbook, and known limitations.
 
 ## Getting started
 
@@ -18,6 +18,7 @@ The current implementation snapshot is `1.1.0-alpha.3`: 132 built-in styles, por
 - [`SECURITY.md`](SECURITY.md) — trust boundaries, CSS validation model, privacy, and denial-of-service considerations.
 - [`MAINTAINER_GUIDE.md`](MAINTAINER_GUIDE.md) — test layout, manual smoke tests, the mobile release gate, schema change recipe, and release steps.
 - [`releases/`](releases/) — versioned GitHub release notes, including validation status and known alpha limitations.
+- [`releases/1.2.0-alpha.1.md`](releases/1.2.0-alpha.1.md) — UX expansion prerelease notes, test evidence, and pending physical-mobile gates.
 
 ## Reading order
 

@@ -38,7 +38,18 @@ one scoped <style> in one Markdown view
       └─ PageLayoutService (paged only)
 ```
 
-Library templates enter the same path after being copied into a note. Preview UI enters the same compilers with an isolated preview scope.
+Library templates enter the same path after being copied into a note. `PreviewSessionService` installs a leaf-local renderer override, so try-on and inspector drafts use this exact production path without changing frontmatter or other panes showing the same file.
+
+Metadata-driven workflow services sit beside the renderer rather than inside it:
+
+```text
+MetadataCache events ── NoteStyleIndex ── usage/folder/update counts
+                    └── StyleRules ───── first eligible rule for unstyled notes
+
+Library snapshot + note provenance ── Synchronization ── status/merge/replace
+Untrusted YAML/pack ── Schema + CSS validation ── accepted library templates
+Renderer settled state ── PrintService ── temporary print scope → host print
+```
 
 ## Entry point
 
@@ -57,7 +68,7 @@ It must remain orchestration code. Parsing, compilation, persistence, and comple
 `src/types.ts` defines two related objects:
 
 - `TemplarTemplate`: reusable design data. It intentionally has no page mode.
-- `TemplarNoteStyle`: a complete template copy plus note-only `page`, optional attachment overrides, and source-template metadata.
+- `TemplarNoteStyle`: a complete template copy plus note-only `page`, optional attachment overrides, and provenance containing the source snapshot and optional rule attribution.
 
 This separation guarantees that paged/pageless is a note choice. The same template renders in both modes.
 
@@ -74,6 +85,8 @@ The service exposes:
 - `writeStyle()`;
 - `removeStyle()`;
 - cache settlement for metadata, rename, and delete events.
+
+Applying a template always preserves attachment overrides. Ordinary one-click apply also preserves every existing page option; unstyled notes use the global default page flow. A source snapshot is embedded at apply time so later synchronization can distinguish source changes from local design edits.
 
 No UI class should hand-edit YAML text for persistence.
 
@@ -122,6 +135,8 @@ Paper and watermark pseudo-elements sit at negative z-indices inside an isolated
 
 The rhythm compiler never emits a fractional-grid block offset in a gridded mode: strict reserves one extra grid row, balanced reserves none, and list items explicitly inherit the body line-height with theme list padding neutralized. Consequently, every following block remains congruent with the paper pattern.
 
+In strict and balanced modes, Reading `<hr>` blocks and Live Preview `HyperMD-hr` lines own exactly one baseline unit with zero theme margins. The visible solid/dashed/dotted/double/fade stroke is centered inside that row and its rendered thickness is clamped without mutating the stored template value. Free or disabled baseline modes retain ordinary divider spacing.
+
 Heading padding makes the heading baseline congruent with the body baseline modulo the grid and adds complementary padding so the total remains a grid multiple. Structured block colors also compile explicit background and foreground colors for Markdown highlights, covering Reading View's `mark` and Live Preview's highlight spans without inheriting theme defaults.
 
 Reading code blocks use the same complementary baseline-padding calculation as headings, but retain a configurable monospace font. `reading-whitespace.ts` provides the pure helpers for source blank lines that standard Markdown normally collapses: `internalBlankLineRuns` counts runs inside a section while ignoring fenced-code bodies, `blankLinesBetweenSections` derives the inter-section gap from exact line ranges, and `createBlankLineSpacer` builds the owned grid-sized element. `PageRenderer` owns the reconciliation policy:
@@ -140,6 +155,8 @@ Two residual behaviors follow from Obsidian's measurement model (heights are re-
 - Adds/removes classes and the owned style element.
 - Configures image and page-layout observers.
 - Records validation issues per file for settings diagnostics.
+- Owns leaf-scoped temporary style overrides and generation checks, so a stale async measurement from preview A cannot overwrite preview B.
+- Exposes an explicit print-preparation refresh that waits for the current compiler/layout state.
 - Per Reading root, tracks the post-processor context and a source-ordered section list (including temporarily detached virtual-scroller elements) that feeds blank-line reconciliation; discarded sections are compacted after `getSectionInfo` marks them stale, and replaced roots are pruned with their scheduled frames.
 
 ### Image compensation
@@ -149,6 +166,15 @@ A `ResizeObserver` measures rendered image boxes. In strict/balanced gridded mod
 ### PageLayoutService
 
 Paged notes are described fully in [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md). The service owns scale calculation, rendered-block page breaks, DOM observers, animation-frame coalescing, and cleanup.
+
+### Workflow services
+
+- `PreviewSessionService`: one temporary style per owner and leaf, animation-frame coalescing, exact restoration, and explicit cleanup on cancel/sidebar close/plugin unload.
+- `NoteStyleIndex`: lazy in-memory source-template/path index, built once from MetadataCache and updated in O(1)-scope on metadata, create, delete, and rename events.
+- `style-rules.ts`: pure AND-condition matching and first-enabled-rule selection. Rules are triggered only by vault/metadata events and never poll or overwrite a styled note.
+- `synchronization.ts`: source status calculation, legacy detection, note-template extraction, safe replace, and recursive three-way merge.
+- `template-pack.ts`: portable pack parsing/export and conflict-copy ID generation; individual members still traverse normal template validation.
+- `PrintService`: waits for compiler, fonts, images, and pagination, appends temporary scoped print rules to the renderer-owned style element, invokes the host print action, then restores screen layout.
 
 ## Editor metadata hiding
 
@@ -168,13 +194,13 @@ The built-in catalog is assembled from the original hand-tuned designs plus data
 - IDs are stable, slugged, and uniquified.
 - Deleting a library entry does not touch notes because notes contain full copies.
 
-The Page Styles view takes one catalog snapshot per shell render, indexes its search strings and folder counts once, and renders folder summaries by default. Search input is coalesced to one animation frame, and only the selected/searched result cards enter the DOM. This keeps the 132-style catalog inexpensive without compiling full note previews for every card; cards use CSS-only paper swatches and the production preview remains on demand.
+The Page Styles view takes one catalog snapshot per render and uses CSS-only paper swatches. Recent, Favorites, Built-in, and My Styles sections can be searched, folder-filtered, usage-sorted, and rendered as Compact, Comfortable, or Gallery cards. Search input and preview updates are coalesced; no card compiles a production document. Only the selected actual-note preview enters the full renderer.
 
 ## UI modules
 
-- `styles-view.ts`: searchable, folder-organized sidebar library with Favorites / Built-in styles / My custom styles sections, plus active-note controls.
-- `settings-tab.ts`: global behavior, library/creator entry points, baseline diagnostics, authoring kit, selector reference, and the reset-all-settings flow.
-- `modals.ts`: selection, application, page mode, new note, creator (including reset-to-default for built-ins), raw YAML, import, batch, and confirmation flows.
+- `styles-view.ts`: Current Note state/actions; Recent/Favorites/Built-in/My Styles; search, folder/usage filters and density; lightweight cards; live preview; and roving keyboard navigation.
+- `settings-tab.ts`: rendering/default-page behavior, Style Rules management, library/creator entry points, diagnostics, authoring kit, selector reference, and reset.
+- `modals.ts`: selection, page options, creator/raw editor, explicit-session note inspector, standalone/pack import, pack export, synchronization review, rules and dry runs, chunked bulk application, and confirmation flows.
 - `template-preview.ts`: isolated sample document that uses the production compiler.
 - `issues.ts`: consistent human-readable validation output.
 
@@ -195,9 +221,13 @@ Current settings:
 - default creator grid unit;
 - font cache capacity;
 - favorite template IDs;
+- latest 10 unique successfully applied template IDs;
+- default page flow for newly styled notes;
+- persistent library density;
+- ordered style rules;
 - custom templates.
 
-`loadSettings` merges defaults with persisted data and normalizes arrays, so new fields (such as favorites) migrate without a settings migration step. Resetting all settings mutates the settings object in place — the `TemplateLibrary` holds a reference to it — while preserving `userTemplates`.
+`normalizeSettings()` merges defaults with persisted data, normalizes templates/rules/enums, and sanitizes ID arrays. Resetting all settings mutates the settings object in place — the `TemplateLibrary` holds a reference to it — while preserving `userTemplates`.
 
 ## Adding a feature
 

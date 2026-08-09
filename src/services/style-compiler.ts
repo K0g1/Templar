@@ -409,6 +409,41 @@ function dividerDeclarations(style: TemplarNoteStyle): string {
   }
 }
 
+function griddedDividerDeclarations(style: TemplarNoteStyle, unit: number): string {
+  const color = safeValue(style.blocks.dividerColor, 'rgba(48, 46, 43, 0.35)');
+  const thickness = Math.max(1, Math.min(style.blocks.dividerWidth, unit / 3));
+  const size = px(thickness);
+  let background: string;
+  switch (style.blocks.dividerStyle) {
+    case 'dashed':
+      background = `repeating-linear-gradient(to right, ${color} 0 12px, transparent 12px 20px) center / 100% ${size} no-repeat`;
+      break;
+    case 'dotted':
+      background = `radial-gradient(circle closest-side, ${color} 90%, transparent) left center / ${px(thickness * 2.4)} ${size} repeat-x`;
+      break;
+    case 'double': {
+      const stroke = Math.max(1, thickness / 3);
+      const offset = Math.max(stroke, thickness / 3);
+      background = `linear-gradient(${color}, ${color}) center calc(50% - ${px(offset)}) / 100% ${px(stroke)} no-repeat, linear-gradient(${color}, ${color}) center calc(50% + ${px(offset)}) / 100% ${px(stroke)} no-repeat`;
+      break;
+    }
+    case 'fade':
+      background = `linear-gradient(to right, transparent, ${color} 10%, ${color} 90%, transparent) center / 100% ${size} no-repeat`;
+      break;
+    case 'solid':
+    default:
+      background = `linear-gradient(${color}, ${color}) center / 100% ${size} no-repeat`;
+      break;
+  }
+  return `background: ${background};
+  border: 0 !important;
+  box-sizing: border-box;
+  height: ${px(unit)} !important;
+  min-height: ${px(unit)} !important;
+  margin-block: 0 !important;
+  padding: 0 !important;`;
+}
+
 function calloutRules(style: TemplarNoteStyle, scope: string): string {
   const { blocks } = style;
   const accent = safeValue(blocks.calloutAccent, '#9fb8ca');
@@ -778,18 +813,22 @@ ${style.blocks.tableStriped ? `${scope} .templar-page tbody tr:nth-child(even) {
 }
 
 ` : ''}${scope} .templar-page :is(hr, .HyperMD-hr) {
-  ${dividerDeclarations(style)}
+  ${gridded
+    ? griddedDividerDeclarations(style, unit)
+    : `${dividerDeclarations(style)}
   border-bottom: 0;
   border-inline: 0;
-  margin-block: ${px(blockSpacing)} !important;
+  margin-block: ${px(blockSpacing)} !important;`}
 }
 
 ${scope} .templar-page .cm-hr {
-  background-color: ${safeValue(style.blocks.dividerColor, 'rgba(48, 46, 43, 0.35)')};
-  height: ${px(Math.max(style.blocks.dividerWidth, 1))};
+  ${gridded
+    ? 'background: transparent; border: 0; height: 100%; width: 100%;'
+    : `background-color: ${safeValue(style.blocks.dividerColor, 'rgba(48, 46, 43, 0.35)')};
+  height: ${px(Math.max(style.blocks.dividerWidth, 1))};`}
   margin: 0;
   padding: 0;
-  ${style.blocks.dividerStyle === 'fade'
+  ${!gridded && style.blocks.dividerStyle === 'fade'
     ? `-webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
   mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);`
     : ''}

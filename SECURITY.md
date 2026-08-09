@@ -23,6 +23,8 @@ Never include private vault content, exploit details, or secrets in a public iss
 - The plugin reads and writes only inside the vault, through Obsidian Vault/FileManager APIs.
 - Note and template content is never sent to any service.
 - Imported YAML and CSS are treated as untrusted and are validated before use; invalid input is rejected with human-readable diagnostics.
+- Every template inside an imported `.templar-pack` is validated independently, conflicts are explicit, and imported built-in IDs can never replace shipped definitions.
 - Custom CSS is size-limited, selector-scoped, and compiled onto plugin-owned classes.
+- Temporary previews remain leaf-local and in memory; printing delegates to the host and adds no PDF engine or network service.
 
 The detailed threat model lives in [`docs/SECURITY.md`](docs/SECURITY.md); the current runtime/source map is in [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md).

@@ -20,12 +20,13 @@ These are real Markdown notes rendered by Templar inside Obsidian—not mockups.
 
 ## A style library you can actually explore
 
-Templar includes **132 built-in styles** organized into themed folders, with instant search and favorites. Browse calm neutrals, rich color stories, seasonal palettes, celebrations, academic papers, professional layouts, wellness journals, travel notebooks, vintage editorials, dark neon systems, fantasy pages, and more.
+Templar includes **132 built-in styles** organized into themed folders, with instant search, Recent, Favorites, usage-aware sorting, and Compact, Comfortable, or Gallery layouts. Browse calm neutrals, rich color stories, seasonal palettes, celebrations, academic papers, professional layouts, wellness journals, travel notebooks, vintage editorials, dark neon systems, fantasy pages, and more.
 
-- Browse template packs by folder instead of scrolling through one endless list.
+- Press `/` to search, use the arrow keys to move, Space to preview on the real note, and Enter to apply.
+- Click a card to try a style without writing frontmatter; Apply is a separate, explicit action.
+- Surface recently applied, favorite, frequently used, and current-folder styles without rescanning the vault on every open.
 - Search by style name, folder, description, creator, or tag.
-- Star favorites and keep custom styles in their own library.
-- Duplicate any built-in, move your copy into a folder, and make it yours.
+- Star favorites, keep custom styles in their own library, and export any selection or folder as a portable `.templar-pack`.
 
 ## Designed for real notes
 
@@ -33,6 +34,8 @@ Templar includes **132 built-in styles** organized into themed folders, with ins
 - **Two page modes:** use a natural reflowing note or a fixed A4, Letter, or custom page that scales as one sheet on narrow screens.
 - **Visual depth:** paper patterns, baseline-aware typography, image treatments, watermarks, callout palettes, table styling, and more.
 - **Your own designs:** create a style with guided controls, edit its raw definition, or import and export portable `.templar` files.
+- **Safe evolution:** customize only the current note, review source-template updates with three-way merging, or automate unstyled notes with ordered folder/tag/name/property rules.
+- **Print-ready output:** prepare fonts, images, pagination, paper, patterns, watermarks, and page sizes before handing the styled note to Obsidian's print dialog.
 - **Desktop and mobile:** the same self-contained note design works across Obsidian desktop and mobile.
 
 ## Manual installation
@@ -49,10 +52,11 @@ Templar is not yet listed in the Obsidian Community Plugins directory, so it wil
 
 1. Open a Markdown note.
 2. Select the paintbrush ribbon icon or run **Open page styles** from the command palette.
-3. Choose a folder, preview the available styles, and select **Apply**.
-4. Pick **Pageless** or **Paged**, then keep writing normal Markdown.
+3. Search or browse, then click a card (or press Space) to preview it on the actual note.
+4. Select **Apply** (or press Enter). Templar preserves an existing note's page settings; a new note uses the default page-flow setting, so no page-mode dialog interrupts the common path.
+5. Use **Customize** for note-only adjustments, or a card's **Apply with page options…** action when you deliberately want a different page flow.
 
-Applying a style never rewrites the Markdown body. Removing Templar styling returns the note to its normal Obsidian appearance.
+Previewing never writes the note. Applying a style never rewrites the Markdown body, and removing Templar styling returns the note to its normal Obsidian appearance.
 
 ## Private, portable, and yours
 

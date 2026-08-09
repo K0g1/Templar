@@ -8,16 +8,16 @@ This is the current implementation reference for Templar. It is deliberately mor
 | --- | --- |
 | Product | Templar, an Obsidian plugin that gives each Markdown note a portable visual page style |
 | Repository | [`K0g1/Templar`](https://github.com/K0g1/Templar) |
-| Current release | `1.1.0-alpha.3` (corrective prerelease) |
+| Current release | `1.2.0-alpha.1` (UX expansion prerelease) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
 | Installation channel | Manual release artifacts; not listed in Community Plugins yet |
 | Built-in catalog | 132 styles: 28 hand-tuned core styles plus 104 data-driven pack styles |
 | Themed packs | 13 folders/packs, including Essentials, Color Stories, Seasons, Celebrations & Occasions, Academia, Professional, Journaling & Wellness, Travel, Nature, Vintage & Editorial, Dark & Neon, Fantasy & Whimsy, and Pastels |
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
-| Test status at this snapshot | 58 Vitest tests; `npm run check` and `npm audit` are the required gates |
+| Test status at this snapshot | 76 Vitest tests; `npm run check` and `npm audit` are the required gates |
 
-`1.1.0-alpha.3` fixes a Reading-view stacking-order regression: `.templar-page-content` creates an isolated stacking context so paper patterns and margin lines are above the solid page background but below Markdown content. The release note is [`releases/1.1.0-alpha.3.md`](releases/1.1.0-alpha.3.md), and the protecting regression test is in `tests/style-compiler.test.ts`.
+`1.2.0-alpha.1` adds leaf-scoped live try-on, a note inspector, provenance-aware synchronization, event-driven rules and usage, print preparation, template packs, keyboard-first/density-aware browsing, expanded context-sensitive commands, deterministic one-click apply, and the horizontal-rule baseline correction. The release note is [`releases/1.2.0-alpha.1.md`](releases/1.2.0-alpha.1.md).
 
 ### Source-of-truth rules
 
@@ -34,13 +34,14 @@ When the local checkout and a remote copy disagree, inspect the local checkout f
 
 ### Library and folders
 
-- **Page Styles view:** a ribbon icon or **Open page styles** command opens a sidebar with Favorites (active initially), Built-in styles, and My custom styles tabs.
+- **Page Styles view:** a ribbon icon or **Open page styles** command opens a sidebar with Current Note plus Recent, Favorites, Built-in, and My Styles sections.
 - **Folders:** each style has a portable, single-level display folder. Folder names are not vault directories. Missing or invalid names become `Unfiled`; matching is case-insensitive and preserves the first display spelling. Slashes, backslashes, control characters, and filesystem-reserved characters are flattened during normalization.
 - **Search:** the library searches name, description, author, folder, and tags. Search and folder selection can be combined.
-- **Favorites:** the star on a card stores the template ID in plugin settings. Removing a custom style also removes its favorite entry.
-- **Cards and previews:** the library initially renders folder summaries and CSS-only paper swatches. Full production previews are created on demand by the picker, creator, or preview modal. This is intentional for the 132-style catalog and for mobile.
-- **Built-in/custom distinction:** built-ins are immutable. Customize or duplicate creates a settings-backed custom copy; applying a style copies its design into the note, so later library edits do not silently change existing notes.
-- **Card actions:** cards can apply a style to the active note, create a new styled note, customize/edit, duplicate, and export. Custom cards can be deleted. Editing a built-in exposes **Reset to default**, which removes its saved custom override and restores the released definition.
+- **Personal relevance:** Recent stores the latest 10 unique successful user applies; Most Used and folder relevance come from currently styled notes' source IDs. Preview/click activity never increments them.
+- **Cards and previews:** cards use CSS-only swatches in Compact, Comfortable, and Gallery modes. Clicking the card body previews through the production renderer on only the originating leaf; Apply is separate. One preview exists per owner and stale async work is generation-guarded.
+- **Keyboard:** `/` focuses search; roving arrows/Home/End navigate filtered cards; Space previews; Enter applies; F toggles favorite; Escape cancels preview, then clears search, then leaves a folder, one level per press.
+- **Built-in/custom distinction:** built-ins are immutable. Customize or duplicate creates a settings-backed custom copy. Notes remain self-contained, but apply records a source snapshot so changes become reviewable rather than silently live-linked.
+- **Card actions:** visible Apply uses deterministic one-click behavior. Overflow contains Preview, Apply with page options, create-note, edit/customize, duplicate, export, and custom-only delete. Folder/arbitrary selection can export `.templar-pack` files.
 
 ### Applying styles and creating notes
 
@@ -48,15 +49,35 @@ The same operations are available from the Page Styles view, settings, the comma
 
 | Operation | Behavior |
 | --- | --- |
-| Choose page style… | Fuzzy-pick any built-in or custom style for the active Markdown note, then choose page flow. |
+| Choose page style… | Fuzzy-pick and immediately apply a built-in or custom style using normal one-click behavior. |
 | Apply default page style | Applies the configured default template, falling back to `classic-ruled` if the configured ID is unavailable. |
 | Create styled note… | Picks a style, asks for a vault-relative title/folder, creates a Markdown file, and writes its style frontmatter. Missing vault folders are created. |
 | Change page mode… | Changes only the active note's page options; the visual template remains the same. |
 | Remove page style | Deletes only `frontmatter.templar`; Markdown and unrelated frontmatter remain. |
 | Apply page style to multiple notes… | Targets the current note, the current folder recursively, notes with a tag, or the entire vault. It can preserve each note's mode or set pageless/paged and A4/Letter. A confirmation is required. |
 | Open page styles | Opens/reveals the library sidebar. |
+| Focus style search | Opens/reveals Page Styles and focuses search. |
+| Customize current note | Opens the note-only draft inspector; available only for styled notes. |
+| Apply last used style | Applies the most recently successfully applied template. |
+| Next/previous favorite style | Starts or advances a temporary favorite preview. |
+| Apply/cancel style preview | Commits or restores the active preview; context-sensitive. |
+| Toggle paged / pageless | Preserves design and recalls existing paged settings. |
+| Toggle fit narrow screens | Toggles scaling for a paged note only. |
+| Review template updates | Opens synchronization management. |
+| Manage style rules | Opens the ordered rule manager. |
+| Print / export styled note | Settles renderer/fonts/images/pagination, then invokes host print. |
 
-The active-note card also exposes **Edit raw**, **Page mode**, and **Remove style**. The editor context menu adds **Apply page style…** and, for styled notes, **Remove page style**.
+The active-note card exposes Customize, page settings, print, update review, raw edit, and removal. The editor context menu adds apply, note customization, and removal. Commands use Obsidian availability callbacks so impossible contextual actions are disabled instead of showing routine errors.
+
+One-click apply preserves all page options and attachments on a styled note. An unstyled note uses `defaultNewPageFlow` (`pageless`, `paged-a4`, or `paged-letter`; default `pageless`). **Apply with page options…** retains the explicit exceptional path.
+
+### Note state, synchronization, and automation
+
+- Current Note distinguishes Normal, Applied, Previewing, Modified, Update available, their combined state, and Source missing. Missing sources never affect ordinary rendering.
+- The inspector edits a draft copy live and writes once on Save. Reset Section uses the current source where available, or the opening state for a missing source; Discard restores the opening style.
+- Synchronization compares the note design, its embedded source snapshot, and the current library source. Clean notes replace safely; modified notes can recursively three-way merge unchanged fields, replace, or skip; legacy notes do not claim a safe merge.
+- Ordered style rules support folder (optional descendants), normalized tag, filename starts/ends/contains/exact, and simple frontmatter equality. Conditions within a rule are AND; the first enabled match wins. Automatic triggers react to vault/metadata events and only style unstyled Markdown notes.
+- Existing-note rule application is a dry-run plus explicit chunked bulk action. Synchronization/bulk confirmation reports exact safe/merge/replace/skip or eligible/styled/invalid counts.
 
 ### Template authoring and portability
 
@@ -65,6 +86,7 @@ The active-note card also exposes **Edit raw**, **Page mode**, and **Remove styl
 - **Advanced mode:** shows the normalized YAML and scoped custom CSS contract. The generated YAML can be copied without saving.
 - **Live preview:** creator and import dialogs use the production compiler in an isolated preview scope and can toggle paged/pageless preview.
 - **Import page style…:** accepts a complete `.templar`/YAML document, validates it, previews it, and saves only after explicit confirmation.
+- **Pack import/export:** `.templar-pack` carries metadata and multiple complete templates. Members are selected and validated independently; custom conflicts offer keep/replace/copy and built-in conflicts can only keep or import a custom copy. Full preview remains on-demand for one member.
 - **Export:** each library card can export a portable `.templar` document into a visible `Templar Templates/` vault folder. The page section is removed because page flow is note-specific.
 - **Raw Page Style editor:** edits only the active note's normalized `templar` mapping; it preserves the Markdown body and all other frontmatter.
 - **LLM authoring kit:** **Copy LLM template authoring skill** copies the versioned schema/safety instructions to the clipboard. Settings can also export it as a Markdown file in the vault. Templar never calls an AI service.
@@ -86,6 +108,8 @@ Every template is structured data first, with optional safe virtual CSS. The sup
 | Blocks | Links, paired highlight background/text colors, quote accent/background/text, code palette/font/size, table borders/header/body/stripes/padding, checkbox accent, divider style, callout base palette and per-type variants, and embed palette/radius. |
 | Watermark | Optional text behind content with color, size, rotation, and opacity. It is non-interactive. |
 | Custom CSS | Up to 50 KB, parsed and validated, rooted only at `.page` or `.page-content`, expanded to Reading/Live Preview equivalents, and keyframe-namespaced per note. |
+
+In strict/balanced baseline modes, every Markdown horizontal rule occupies exactly one grid unit in Reading and Live Preview. Its centered visible stroke is render-clamped when necessary; all divider styles keep the same vertical footprint and persisted widths remain unchanged.
 
 The complete YAML field contract and numeric ranges are in [`TEMPLATE_SPEC.md`](TEMPLATE_SPEC.md). Paged geometry and the page-break algorithm are in [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md).
 
@@ -111,6 +135,9 @@ templar:
   images: { ... }
   blocks: { ... }
   watermark: { ... }
+  provenance:
+    source-snapshot: { ...complete normalized reusable template... }
+    applied-by-rule: { id: research-notes, name: Research Notes }
   page:
     mode: pageless
     size: a4
@@ -121,9 +148,9 @@ templar:
   css: ''
 ```
 
-`FrontmatterService` reads MetadataCache with a small optimistic write-through map, then writes with `FileManager.processFrontMatter()`. It replaces only `frontmatter.templar`; unrelated properties and the Markdown body are preserved. `removeStyle()` deletes that property. Metadata-cache, rename, and delete events settle or move the optimistic entry.
+`FrontmatterService` reads MetadataCache with a small optimistic write-through map, then writes with `FileManager.processFrontMatter()`. It replaces only `frontmatter.templar`; unrelated properties and the Markdown body are preserved. Applying another template preserves page and attachments unless explicit page options are supplied. `removeStyle()` deletes that property. Metadata-cache, rename, and delete events settle or move the optimistic entry.
 
-Reusable exports use `templar-template` and omit `page`. Import accepts `templar-template`, `templar`, or the inner mapping. `normalizeTemplate()` accepts the persisted kebab-case aliases and the internal camel-case form, fills defaults for older v1 styles, clamps bounded values, drops unknown fields, and normalizes folder labels. `normalizeNoteStyle()` adds note page options and optional attachment overrides.
+Reusable exports use `templar-template` and omit `page`, `attachments`, and `provenance`. Import accepts `templar-template`, `templar`, or the inner mapping. Packs use a versioned `templar-pack` wrapper and an array of the same normalized template mappings. `normalizeTemplate()` accepts persisted kebab-case aliases and internal camel-case form, fills defaults for older v1 styles, clamps bounded values, drops unknown fields, and normalizes folder labels. `normalizeNoteStyle()` adds note page options, attachment overrides, and provenance.
 
 There is no separate migration file. Backward compatibility is implemented at normalization/serialization boundaries. A schema addition is not complete until it has defaults, aliases, validation, round-trip tests, and an update to [`TEMPLATE_SPEC.md`](TEMPLATE_SPEC.md) and the authoring kit.
 
@@ -140,9 +167,13 @@ Only global settings and custom library entries live in Obsidian's plugin data:
 | `defaultGridUnit` | `30` | Starting rhythm for newly created styles. Existing notes retain their embedded unit. |
 | `fontCacheSize` | `64` | Maximum measured font combinations retained by the bounded cache. |
 | `favouriteTemplateIds` | `[]` | Favorite style IDs. |
+| `recentTemplateIds` | `[]` | Latest 10 unique templates successfully applied by the user. |
+| `defaultNewPageFlow` | `pageless` | Deterministic page flow for applying to an unstyled note. |
+| `libraryDensity` | `comfortable` | Persistent Compact/Comfortable/Gallery card layout. |
+| `styleRules` | `[]` | Ordered event-driven automatic style rules. |
 | `userTemplates` | `[]` | Normalized custom templates, including customized built-ins. |
 
-Settings loading merges persisted data with defaults, normalizes user templates, and sanitizes favorite IDs. **Reset all settings** restores defaults, clears favorites, and deliberately keeps `userTemplates`.
+Settings loading uses `normalizeSettings()` to merge defaults, normalize templates and rules, validate enum choices, and sanitize favorite/recent IDs. **Reset all settings** restores defaults, clears favorites/recents/rules, and deliberately keeps `userTemplates`.
 
 The settings page also exposes the library, creator, importer, a baseline diagnostic preview for the configured default style, a font-cache clear action, the active-note validation issues (when a styled note is open), the virtual-selector reference, and the authoring-kit copy/export actions.
 
@@ -163,6 +194,7 @@ The runtime path is:
 ```text
 note metadata
   → FrontmatterService / normalizeNoteStyle
+  → optional leaf-scoped PreviewSession override
   → PageRenderer per-leaf scope and mode
   → FontMetricsService measurements
   → compilePageStyle (structured CSS + validated custom CSS)
@@ -179,13 +211,13 @@ The event responsibilities are:
 | Event/action | Refresh behavior |
 | --- | --- |
 | Active leaf or file open | Refresh visible rendering, sidebar state, and desktop status text. |
-| Metadata changed | Settle optimistic frontmatter, refresh the file, and refresh sidebar/status when active. |
+| Metadata changed | Settle optimistic frontmatter, update one usage-index entry, evaluate rules when metadata is ready, refresh the file/sidebar/status. |
 | CSS/theme changed or fonts loaded | Clear font metrics and refresh all styled leaves. |
 | Layout changed | Schedule a coalesced renderer refresh. |
-| Vault rename/delete | Move/forget optimistic style state and refresh. |
+| Vault create/rename/delete | Evaluate eligible rules or update/remove/transfer one index/frontmatter path. |
 | Plugin unload/leaf cleanup | Disconnect observers, cancel frames, remove owned style/scale/break properties, and prune Reading-root section state. |
 
-`PageRenderer` owns per-leaf generation tokens, style elements, image observers, page-layout services, and Reading-root registries. Generation tokens prevent late font measurements from overwriting a newer render. Reading sections are recorded during the post-processor, compacted when Obsidian marks them stale, and spacers are inserted synchronously inside their owning section so the virtual scroller retains them.
+`PageRenderer` owns per-leaf generation tokens, persistent/temporary style selection, style elements, image observers, page-layout services, and Reading-root registries. Generation tokens prevent late font measurements from overwriting a newer render. Preview state belongs to a leaf and owner, never a file, so a second pane remains persistent. Reading sections are recorded during the post-processor, compacted when Obsidian marks them stale, and spacers are inserted synchronously inside their owning section so the virtual scroller retains them.
 
 ### CSS and view isolation
 
@@ -198,6 +230,8 @@ Paper and watermark pseudo-elements use negative z-indices inside the isolated c
 The Reading post-processor derives exact source blank-line runs from current section ranges, ignoring blank lines inside fenced code. It creates owned grid-sized spacer elements synchronously and places them inside the following section. A deferred reconciliation pass handles style changes and cached Reading views. If both adjacent sections remain rendered while source whitespace changes, the new gap converges when either section is rendered again; this is an Obsidian measurement limitation, not a body rewrite.
 
 `FontMetricsService` waits for available fonts, measures body/H1–H6/code baselines with browser geometry, and stores a bounded cache. Strict/balanced grid helpers keep block offsets on whole grid rows; code, headings, lists, and images receive complementary corrections. See [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md) for the separate fixed-canvas algorithm.
+
+Strict/balanced horizontal rules are compiled as exactly one unit in both view adapters, with zero theme margins and a centered stroke. Print preparation forces the current renderer generation, fonts, image decode, and page fitting to settle before temporary scoped `@media print`/`@page` rules invoke the host print action.
 
 ## Source map
 
@@ -214,6 +248,7 @@ The Reading post-processor derives exact source blank-line runs from current sec
 | Path | Responsibility |
 | --- | --- |
 | `src/templates/defaults.ts` | Safe default template, default note page options, and default plugin settings. |
+| `src/templates/settings.ts` | Backward-compatible settings/rule/ID normalization. |
 | `src/templates/schema.ts` | Kebab/camel alias handling, normalization, folder sanitation, page-option normalization, source validation, numeric/color/CSS-value validation. |
 | `src/templates/note-format.ts` | Canonical internal-object ↔ readable YAML conversion for notes and `.templar` exports. |
 | `src/templates/builtins.ts` | Core hand-tuned catalog, folder assignments, expanded catalog assembly, and catalog-wide readability enforcement. |
@@ -227,6 +262,13 @@ The Reading post-processor derives exact source blank-line runs from current sec
 | --- | --- |
 | `src/services/frontmatter.ts` | Obsidian MetadataCache/process-frontmatter boundary and optimistic style state. |
 | `src/services/template-library.ts` | Built-in/custom catalog snapshots, folder discovery, IDs, save/duplicate/remove, and favorites. |
+| `src/services/preview-session.ts` | Owner/leaf-scoped draft preview sessions, frame coalescing, restore, and cleanup. |
+| `src/services/synchronization.ts` | Provenance snapshots, status classification, safe replacement, legacy handling, and recursive three-way merge. |
+| `src/services/style-rules.ts` | Pure rule condition matching, priority, metadata readiness, and page-flow presets. |
+| `src/services/note-style-index.ts` | Lazy in-memory usage/folder index with incremental metadata/delete/rename updates. |
+| `src/services/template-pack.ts` | Pack parse/export, member review, and conflict-copy IDs. |
+| `src/services/print-layout.ts` | Pure `@page` size selection for pageless/A4/Letter/custom output. |
+| `src/services/print-service.ts` | Renderer/font/image/page settlement, temporary print CSS, host invocation, and restoration. |
 | `src/services/style-compiler.ts` | Structured template → scoped CSS, paper patterns, typography/baseline, blocks, images, watermark, metadata hiding, and page guards. |
 | `src/services/css-validator.ts` | AST validation for custom CSS selectors, at-rules, values, geometry, resources, and performance hazards. |
 | `src/services/css-compiler.ts` | Virtual-selector expansion, per-note scope replacement, and keyframe namespacing. |
@@ -239,9 +281,9 @@ The Reading post-processor derives exact source blank-line runs from current sec
 
 | Path | Responsibility |
 | --- | --- |
-| `src/ui/styles-view.ts` | Folder-aware library sidebar, indexed search, cards/swatches, favorites, active-note controls, and lazy result rendering. |
-| `src/ui/settings-tab.ts` | Rendering toggles, default style, library/creator/import entry points, baseline diagnostics, authoring kit, selector reference, issues, and reset. |
-| `src/ui/modals.ts` | Fuzzy picker, apply/create note, page mode, import, raw editor, three-level creator, batch apply, and confirmation flows. |
+| `src/ui/styles-view.ts` | Current Note states/actions, four library sections, search/folder/usage/density, lightweight cards, live preview, and roving keyboard navigation. |
+| `src/ui/settings-tab.ts` | Rendering toggles, default style/page flow, rules, library/creator/import, diagnostics, authoring kit, selector reference, issues, and reset. |
+| `src/ui/modals.ts` | Pick/apply/create/page flows, draft inspector, standalone/pack import, pack export, synchronization, rules/dry runs, raw editor, creator, chunked batch apply, and confirmation. |
 | `src/ui/template-preview.ts` | Isolated sample content using the production compiler. |
 | `src/ui/issues.ts` | Human-readable validation issue rendering. |
 | `src/editor/hide-metadata.ts` | CodeMirror 6 line decorations for the root `templar:` YAML block; never mutates document text. |
@@ -253,7 +295,7 @@ The Reading post-processor derives exact source blank-line runs from current sec
 | `src/utils/grid.ts` | Grid fitting, heading/image correction, page-gap alignment, and geometry scale helpers. |
 | `src/utils/value.ts` | Safe unknown-value coercion, enum/array handling, cloning, slugification, CSS attribute escaping, and rounding. |
 | `src/utils/clipboard.ts` | Browser/mobile-safe clipboard write with a selection fallback. |
-| `tests/*.test.ts` | Pure schema, catalog, contrast, CSS, compiler, grid, font, whitespace, folder, and library regression suites. |
+| `tests/*.test.ts` | Pure schema/catalog/CSS/compiler/grid/font/whitespace plus synchronization, rules, index, settings, packs, and print regression suites. |
 | `scripts/verify-mobile-bundle.mjs` | Scans generated `main.js` for Node/Electron imports and runtime globals. |
 | `scripts/verify-release.mjs` | Confirms a release tag, package/manifest/versions metadata, and matching release-notes file agree. |
 | `version-bump.mjs` | Synchronizes `manifest.json` and `versions.json` from `package.json` during `npm version`. |
@@ -301,11 +343,11 @@ From the plugin root:
 npm install                 # first setup; npm ci is preferred in CI
 npm audit                   # zero known vulnerabilities is the release expectation
 npm run lint                # Obsidian-aware ESLint
-npm test                    # 58 pure Vitest tests at this snapshot
+npm test                    # 76 pure Vitest tests at this snapshot
 npm run build               # strict tsc, production browser bundle, mobile guard
 npm run check               # lint + test + build
 npm run verify:mobile       # scan the generated main.js directly
-npm run verify:release -- 1.1.0-alpha.3
+npm run verify:release -- 1.2.0-alpha.1
 git diff --check
 ```
 
@@ -339,7 +381,7 @@ Never repoint an existing release tag. If a released artifact is wrong, incremen
 
 - Templar is alpha software and manual-install only; it is not searchable in Obsidian's Community Plugins browser.
 - Physical iOS and Android release smoke testing is still a maintainer gate. The bundle guard and responsive CSS are automated checks, not proof of every device behavior.
-- A style is a snapshot copied into each note. Changing a library template does not update notes that already contain a copy.
+- A style is a self-contained snapshot copied into each note. Changing a source never changes notes automatically; provenance makes explicit review/merge/replace possible. Older notes without provenance receive conservative legacy choices.
 - Folder organization is one display level. It does not create or infer vault folders, and folder separators are flattened.
 - Reading View blank-line spacing is exact at section render time. If both adjacent sections remain cached while only the number of blank lines changes, convergence waits for one of those sections to render again.
 - Live Preview is virtualized. Page fitting handles rendered lines/widgets and deliberately does not split one giant widget across sheets.
@@ -347,6 +389,7 @@ Never repoint an existing release tag. If a released artifact is wrong, incremen
 - Paged mode preserves a fixed layout width and scales the whole sheet. When **Fit narrow screens** is disabled, a narrow pane may scroll horizontally by design.
 - Built-in palette correction enforces readable text/interactive surfaces. A custom import may still produce warnings or reduced readability if its colors rely on unsupported compositing or browser-specific values.
 - Obsidian's internal DOM adapters can change between app releases. Adapter changes should be localized and tested against the minimum supported version where possible.
+- Printing uses the host browser/Obsidian capability. Platforms without a supported print action may leave the command unavailable; custom physical page sizes remain subject to the system print driver.
 
 ## Documentation maintenance checklist
 
