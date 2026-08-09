@@ -49,7 +49,7 @@ interface ImageObservationState {
 export class PageRenderer {
   private destroyed = false;
   private scheduled = false;
-  private readonly leafGenerations = new Map<WorkspaceLeaf, number>();
+  private readonly leafGenerations = new WeakMap<WorkspaceLeaf, number>();
   private readonly styledViews = new Map<WorkspaceLeaf, StyledView>();
   private readonly imageObservers = new Map<WorkspaceLeaf, ImageObservationState>();
   private readonly issuesByFile = new Map<string, ValidationIssue[]>();
@@ -128,6 +128,7 @@ export class PageRenderer {
     ) {
       return;
     }
+    this.pruneDisconnectedReadingRoots();
     const info = context.getSectionInfo(element);
     const readingRoot = element.closest<HTMLElement>('.markdown-preview-view');
     if (!info || !readingRoot) {
@@ -169,7 +170,6 @@ export class PageRenderer {
       this.clearLeaf(leaf);
     }
     this.fontMetrics.clear();
-    this.leafGenerations.clear();
     this.issuesByFile.clear();
   }
 
@@ -177,6 +177,7 @@ export class PageRenderer {
     if (this.destroyed) {
       return;
     }
+    this.pruneDisconnectedReadingRoots();
     if (!(leaf.view instanceof MarkdownView)) {
       this.clearLeaf(leaf);
       return;
@@ -367,11 +368,7 @@ export class PageRenderer {
     this.imageObservers.get(leaf)?.resizeObserver.disconnect();
     this.imageObservers.get(leaf)?.mutationObserver.disconnect();
     this.imageObservers.delete(leaf);
-    for (const root of this.readingRoots.keys()) {
-      if (!root.isConnected) {
-        this.readingRoots.delete(root);
-      }
-    }
+    this.pruneDisconnectedReadingRoots();
     if (styled) {
       this.issuesByFile.delete(styled.filePath);
     }
@@ -394,6 +391,8 @@ export class PageRenderer {
       this.scheduledReadingRoots.delete(readingRoot);
       if (!this.destroyed && readingRoot.isConnected) {
         this.reconcileReadingWhitespace(readingRoot);
+      } else if (!readingRoot.isConnected) {
+        this.readingRoots.delete(readingRoot);
       }
     });
     this.scheduledReadingRoots.set(readingRoot, frame);
@@ -406,6 +405,20 @@ export class PageRenderer {
       this.readingRoots.set(readingRoot, state);
     }
     return state;
+  }
+
+  private pruneDisconnectedReadingRoots(): void {
+    for (const root of this.readingRoots.keys()) {
+      if (root.isConnected) {
+        continue;
+      }
+      const frame = this.scheduledReadingRoots.get(root);
+      if (frame !== undefined) {
+        root.ownerDocument.defaultView?.cancelAnimationFrame(frame);
+        this.scheduledReadingRoots.delete(root);
+      }
+      this.readingRoots.delete(root);
+    }
   }
 
   private sectionInfo(
@@ -496,8 +509,11 @@ export class PageRenderer {
     if (current && !state.sections.includes(current)) {
       state.sections.push(current);
     }
-    const sections = state.sections
-      .filter((element) => this.isAliveSection(state, element))
+    const aliveSections = state.sections.filter((element) =>
+      this.isAliveSection(state, element)
+    );
+    state.sections = aliveSections;
+    const sections = aliveSections
       .filter(
         (element) =>
           !element.parentElement?.closest('.templar-reading-section'),

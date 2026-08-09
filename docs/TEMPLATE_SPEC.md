@@ -6,7 +6,7 @@ A Page Style is structured visual data plus optional advanced CSS. Library expor
 
 Unknown fields are discarded during import. Missing fields receive defaults. Current import supports only version 1.
 
-The highlight color pair was added compatibly within v1: older v1 styles that omit it receive the safe default pair, while every new export writes both fields.
+The highlight color pair and template folder were added compatibly within v1: older v1 styles that omit them receive safe defaults, while every new export writes the fields explicitly. Folder names are portable display labels rather than filesystem paths; separators and reserved/control characters are flattened during import.
 
 The 1.1 feature batch extends the same compatibility rule: h5/h6, heading letter spacing and text transform, the lists/watermark sections, the new paper patterns and pattern controls, image float/object-fit/duotone, and the expanded block palette are all optional v1 additions. Old styles import unchanged; new exports write the new fields explicitly.
 
@@ -37,6 +37,7 @@ templar-template:
   metadata:
     author: Templar
     description: Warm ruled paper with a measured baseline.
+    folder: Essentials
     tags: [journal, ruled, warm]
   paper:
     color: "#fffdf4"
@@ -205,6 +206,7 @@ templar-template:
 | --- | --- |
 | version | exactly `1` |
 | template-id | lowercase letters/digits and single hyphens |
+| metadata.folder | single-level display label, sanitized and capped at 80 characters; missing values become `Unfiled` |
 | paper.pattern | `blank`, `ruled`, `ledger`, `dot-grid`, `graph`, `cross-hatch`, `diagonal`, `hex`, `scallop` |
 | paper.pattern-opacity | 0–1 |
 | paper.pattern-scale | 0.25–4 |

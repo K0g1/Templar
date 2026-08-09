@@ -25,6 +25,7 @@ import {
 import {
   normalizeNoteStyle,
   normalizeTemplate,
+  normalizeTemplateFolder,
   validateTemplate,
   validateTemplateSource,
 } from '../templates/schema';
@@ -62,7 +63,8 @@ export class StylePickerModal extends FuzzySuggestModal<TemplarTemplate> {
   }
 
   public getItemText(item: TemplarTemplate): string {
-    return `${item.name} — ${item.metadata.description}`;
+    const tags = item.metadata.tags.length > 0 ? ` · ${item.metadata.tags.join(', ')}` : '';
+    return `${item.metadata.folder} · ${item.name} — ${item.metadata.description}${tags}`;
   }
 
   public onChooseItem(item: TemplarTemplate): void {
@@ -498,6 +500,7 @@ export class TemplateCreatorModal extends Modal {
     this.textSetting('Description', 'Explain the intended aesthetic.', this.draft.metadata.description, (value) => {
       this.draft.metadata.description = value;
     });
+    this.folderSetting();
     this.textSetting('Author', 'Stored in exported template metadata.', this.draft.metadata.author, (value) => {
       this.draft.metadata.author = value;
     });
@@ -925,6 +928,7 @@ export class TemplateCreatorModal extends Modal {
         this.draft.metadata.description = value;
       },
     );
+    this.folderSetting();
 
     this.heading('Paper');
     this.colorSetting('Background', this.draft.paper.color, (value) => {
@@ -1068,6 +1072,8 @@ export class TemplateCreatorModal extends Modal {
   }
 
   private renderAdvancedEditor(): void {
+    this.heading('Library');
+    this.folderSetting();
     this.heading('Advanced CSS');
     this.editorEl.createEl('p', {
       text: 'Every selector must begin with .page or .page-content. Imported URLs and global Obsidian selectors are rejected.',
@@ -1091,6 +1097,32 @@ export class TemplateCreatorModal extends Modal {
 
   private heading(text: string): void {
     new Setting(this.editorEl).setName(text).setHeading();
+  }
+
+  private folderSetting(): void {
+    const listId = `templar-template-folders-${String(Date.now())}`;
+    const setting = new Setting(this.editorEl)
+      .setName('Folder')
+      .setDesc('Organize this style in the library or enter a new folder name.');
+    setting.addText((text) => {
+      text.inputEl.setAttribute('list', listId);
+      text.inputEl.setAttribute('placeholder', 'Unfiled');
+      text.setValue(this.draft.metadata.folder).onChange((next) => {
+        this.draft.metadata.folder = next;
+        void this.updatePreview();
+      });
+      text.inputEl.addEventListener('blur', () => {
+        const normalized = normalizeTemplateFolder(text.inputEl.value);
+        text.setValue(normalized);
+        this.draft.metadata.folder = normalized;
+      });
+    });
+    const folders = new Set(this.plugin.library.folders());
+    folders.add(normalizeTemplateFolder(this.draft.metadata.folder));
+    const dataList = this.editorEl.createEl('datalist', { attr: { id: listId } });
+    for (const folder of folders) {
+      dataList.createEl('option', { attr: { value: folder } });
+    }
   }
 
   private textSetting(
@@ -1161,7 +1193,10 @@ export class TemplateCreatorModal extends Modal {
     const normalized = normalizeTemplate(this.draft);
     normalized.id = this.originalId ?? slugify(this.draft.name);
     normalized.name = this.draft.name;
-    normalized.metadata = clone(this.draft.metadata);
+    normalized.metadata = {
+      ...clone(this.draft.metadata),
+      folder: normalizeTemplateFolder(this.draft.metadata.folder),
+    };
     normalized.css = this.draft.css;
     this.draft = normalized;
     const issues = validateCompleteTemplate(this.draft);

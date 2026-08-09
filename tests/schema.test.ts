@@ -78,7 +78,7 @@ describe('Templar v1 schema', () => {
   });
 
   it('ships only valid built-in styles and scoped custom CSS', () => {
-    expect(BUILT_IN_TEMPLATES).toHaveLength(28);
+    expect(BUILT_IN_TEMPLATES).toHaveLength(132);
     for (const template of BUILT_IN_TEMPLATES) {
       expect(validateTemplate(template).valid, template.name).toBe(true);
       expect(validateCustomCss(template.css).valid, template.name).toBe(true);

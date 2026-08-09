@@ -21,6 +21,9 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Verify release metadata
+        run: npm run verify:release -- "${{ github.ref_name }}"
+
       - name: Install dependencies
         run: npm ci
 

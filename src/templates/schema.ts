@@ -67,6 +67,7 @@ const textTransforms: readonly HeadingTextTransform[] = [
 const decorations = ['none', 'underline', 'rule', 'highlight'] as const;
 const pageModes: readonly PageMode[] = ['pageless', 'paged'];
 const pageSizes: readonly PageSize[] = ['a4', 'letter', 'custom'];
+const UNFILED_FOLDER = 'Unfiled';
 
 type RequiredField = readonly [canonical: string, ...aliases: string[]];
 
@@ -320,6 +321,33 @@ function normalizeCalloutVariants(raw: unknown): Record<string, CalloutVariant> 
   return variants;
 }
 
+/**
+ * Normalize a display-only template folder name. Folder metadata never maps to
+ * the vault filesystem, so separators and filesystem-reserved characters are
+ * flattened instead of being interpreted as real paths.
+ */
+export function normalizeTemplateFolder(raw: unknown): string {
+  if (typeof raw !== 'string') {
+    return UNFILED_FOLDER;
+  }
+  const folder = Array.from(raw.replace(/[\\/]+/g, ' '))
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127 || '<>:"|?*'.includes(character)
+        ? ' '
+        : character;
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+  return folder === '.' || folder === '..' ? UNFILED_FOLDER : folder || UNFILED_FOLDER;
+}
+
+export function templateFolderKey(raw: unknown): string {
+  return normalizeTemplateFolder(raw).toLocaleLowerCase();
+}
+
 export function normalizeTemplate(raw: unknown): TemplarTemplate {
   const source = record(raw);
   const metadata = record(source.metadata);
@@ -347,6 +375,7 @@ export function normalizeTemplate(raw: unknown): TemplarTemplate {
     metadata: {
       author: stringValue(metadata.author, DEFAULT_TEMPLATE.metadata.author),
       description: stringValue(metadata.description, DEFAULT_TEMPLATE.metadata.description),
+      folder: normalizeTemplateFolder(metadata.folder),
       tags: stringArray(metadata.tags, DEFAULT_TEMPLATE.metadata.tags),
     },
     paper: {

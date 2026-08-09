@@ -30,6 +30,7 @@ export type HeadingTextTransform = 'none' | 'uppercase' | 'lowercase' | 'capital
 export interface TemplateMetadata {
   author: string;
   description: string;
+  folder: string;
   tags: string[];
 }
 

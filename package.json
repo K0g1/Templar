@@ -1,6 +1,6 @@
 {
   "name": "templar",
-  "version": "1.1.0-alpha.1",
+  "version": "1.1.0-alpha.2",
   "description": "Self-contained per-note visual page design for Obsidian.",
   "main": "main.js",
   "type": "module",
@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "verify:mobile": "node scripts/verify-mobile-bundle.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
     "check": "npm run lint && npm run test && npm run build",
     "version": "node version-bump.mjs && git add manifest.json versions.json"
   },

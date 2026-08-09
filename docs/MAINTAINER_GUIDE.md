@@ -16,12 +16,16 @@ npm run check
 
 `npm run check` runs Obsidian-aware ESLint, Vitest, strict TypeScript, a minified browser-targeted esbuild bundle, and the mobile bundle guard. The guard fails if `main.js` retains Node/Electron imports, dynamic `require`, `Buffer`, or `process` access.
 
+The CI workflow runs the same check on every pull request and push to `main`; tagged releases repeat it before attaching artifacts.
+
 ## Test layout
 
 - `grid.test.ts`: grid fitting, heading correction, image compensation, aligned page gaps.
 - `font-metrics.test.ts`: baseline probe geometry and the no-DOM fallback.
 - `reading-whitespace.test.ts`: exact source-line gaps and fenced-code exclusion.
 - `schema.test.ts`: normalization, note/frontmatter round trips, built-in validity.
+- `folders.test.ts`: legacy migration, folder sanitization/round trips, library discovery, and case handling.
+- `builtins.test.ts`: catalog size and uniqueness, pack/folder diversity, schema/CSS validity, and palette contrast.
 - `css.test.ts`: virtual mapping, scope guarantees, keyframes, global/resource rejection, paged media-query rule.
 - `style-compiler.test.ts`: shared pattern origin, editor list normalization, measured Reading code padding, highlight palettes, injection containment, fixed-page CSS, extended headings, watermark/divider/table/list/callout declarations, duotone/float, and every pattern variant.
 
@@ -54,7 +58,7 @@ console.log('code block');
 ```
 ```
 
-Check every built-in in Reading and Live Preview. Confirm ordinary source text and undo/redo remain unchanged.
+Spot-check every themed pack in Reading and Live Preview, and run the complete catalog tests. Confirm ordinary source text and undo/redo remain unchanged.
 
 Add one, three, and five empty source lines between paragraphs; confirm Reading View preserves those exact counts. Test an already-styled note, applying a style while an unstyled note is open, and reloading the plugin while Reading View is already cached. These protect the section-registry and deferred-reconcile paths. Add a multi-line fenced code block with an internal blank line and confirm every code baseline follows the ruling without creating an external spacer.
 
@@ -96,12 +100,14 @@ Record app version, OS version, device, orientation, and result in the release c
 ## Adding a built-in template
 
 - Use `builtIn()` in `src/templates/builtins.ts`.
+- Prefer a data seed in `src/templates/packs/catalog.ts` when the design belongs to a themed pack.
 - Pick a permanent unique ID.
+- Assign a concise folder and useful search tags.
 - Configure only structured modules and safe virtual CSS.
 - Test pageless and paged preview.
 - Keep font stacks portable with fallbacks.
-- Run the built-in schema/CSS test.
-- Add it to README and screenshots when a public repository exists.
+- Run the built-in schema/CSS and contrast tests; do not bypass the readability correction for decorative palette fidelity.
+- Update the gallery only when a new screenshot materially broadens what the landing page demonstrates.
 
 ## Obsidian DOM changes
 
@@ -133,9 +139,10 @@ When an Obsidian release changes DOM:
 2. Run `npm version <exact-version> --no-git-tag-version`; the version script synchronizes `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`.
 3. Move the shipped entries from **Unreleased** to a dated changelog heading and add `docs/releases/<exact-version>.md`.
 4. Run `npm audit` and `npm run check`.
-5. Complete and record the manual desktop/mobile verification. A prerelease may ship with clearly documented manual gates still pending; a community-directory-ready stable release may not.
-6. Commit and push the release state.
-7. Create and push a tag that exactly matches `manifest.json`, without a `v` prefix (for example, `1.1.0` or `1.1.0-alpha.1`).
-8. Wait for the release workflow and verify that the GitHub release contains `main.js`, `manifest.json`, and `styles.css`.
+5. Run `npm run verify:release -- <exact-version>` to catch mismatched metadata before tagging.
+6. Complete and record the manual desktop/mobile verification. A prerelease may ship with clearly documented manual gates still pending; a community-directory-ready stable release may not.
+7. Commit and push the release state.
+8. Create and push a tag that exactly matches `manifest.json`, without a `v` prefix (for example, `1.1.0` or `1.1.0-alpha.2`).
+9. Wait for the release workflow and verify that the GitHub release contains `main.js`, `manifest.json`, and `styles.css`.
 
 The release workflow uses `docs/releases/<tag>.md` as the release body and automatically marks any tag containing `-` as a GitHub prerelease. Never repoint or overwrite an existing release tag; increment the prerelease suffix instead.

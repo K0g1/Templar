@@ -201,16 +201,33 @@
 
 .templar-library-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--size-4-2);
   margin-bottom: var(--size-4-3);
+  overflow-x: auto;
+  padding-bottom: var(--size-4-1);
+  scrollbar-width: thin;
 }
 
 .templar-library-tabs button {
+  align-items: center;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   color: var(--text-muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--size-4-2);
   padding: var(--size-4-1) var(--size-4-2);
+  white-space: nowrap;
+}
+
+.templar-tab-count {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0.2em 0.5em;
 }
 
 .templar-library-tabs button:hover {
@@ -225,10 +242,166 @@
 }
 
 .templar-library-empty {
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: var(--radius-m);
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
-  padding: var(--size-4-4);
+  margin-top: var(--size-4-3);
+  padding: var(--size-4-6) var(--size-4-4);
   text-align: center;
+}
+
+.templar-library-empty p {
+  margin: var(--size-4-2) auto var(--size-4-3);
+  max-width: 34rem;
+}
+
+.templar-library-empty-title {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+}
+
+.templar-library-search {
+  display: flex;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-4-3);
+}
+
+.templar-library-search input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.templar-library-search .clickable-icon {
+  flex: 0 0 auto;
+}
+
+.templar-folder-navigation {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  margin-bottom: var(--size-4-3);
+  padding: var(--size-4-2);
+}
+
+.templar-folder-navigation .templar-section-label {
+  margin: 0 var(--size-4-1) var(--size-4-2);
+}
+
+.templar-folder-buttons {
+  display: flex;
+  gap: var(--size-4-1);
+  overflow-x: auto;
+  padding-bottom: var(--size-4-1);
+  scrollbar-width: thin;
+}
+
+.templar-folder-buttons button {
+  align-items: center;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--size-4-2);
+  max-width: min(19rem, 75vw);
+  padding: var(--size-4-1) var(--size-4-2);
+}
+
+.templar-folder-buttons button:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover);
+  color: var(--text-normal);
+}
+
+.templar-folder-buttons button.is-active {
+  background: color-mix(in srgb, var(--interactive-accent) 15%, var(--background-primary));
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.templar-folder-button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.templar-folder-button-count,
+.templar-folder-count {
+  background: var(--background-modifier-hover);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0.2em 0.5em;
+}
+
+.templar-library-summary {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  margin: 0 var(--size-4-1) var(--size-4-3);
+}
+
+.templar-folder-overview {
+  display: grid;
+  gap: var(--size-4-2);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.templar-folder-tile {
+  align-items: flex-start;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  min-height: 5.25rem;
+  padding: var(--size-4-3);
+  text-align: start;
+}
+
+.templar-folder-tile:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover);
+}
+
+.templar-folder-tile-name {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+  overflow-wrap: anywhere;
+}
+
+.templar-folder-tile-count {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.templar-folder-section + .templar-folder-section {
+  margin-top: var(--size-4-5);
+}
+
+.templar-folder-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  gap: var(--size-4-2);
+  justify-content: space-between;
+  margin-bottom: var(--size-4-3);
+  padding: 0 var(--size-4-1) var(--size-4-2);
+}
+
+.templar-folder-title {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .templar-favourite-toggle {
@@ -267,10 +440,13 @@
   flex-direction: column;
   gap: var(--size-4-2);
   padding: var(--size-4-2);
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
 .templar-style-card:hover {
   border-color: var(--background-modifier-border-hover);
+  box-shadow: var(--shadow-s);
+  transform: translateY(-1px);
 }
 
 .templar-style-swatch {
@@ -307,8 +483,77 @@
   background-size: 12px 12px;
 }
 
+.templar-style-swatch[data-pattern="ledger"] {
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 0 20px,
+      var(--templar-swatch-margin, var(--templar-swatch-major)) 20px 21px,
+      transparent 21px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 13px,
+      var(--templar-swatch-line, var(--background-modifier-border)) 13px 14px
+    );
+}
+
+.templar-style-swatch[data-pattern="cross-hatch"] {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      transparent 0 8px,
+      var(--templar-swatch-line, var(--background-modifier-border)) 8px 9px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0 8px,
+      var(--templar-swatch-major, var(--templar-swatch-line)) 8px 9px
+    );
+}
+
+.templar-style-swatch[data-pattern="diagonal"] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 10px,
+    var(--templar-swatch-line, var(--background-modifier-border)) 10px 11px
+  );
+}
+
+.templar-style-swatch[data-pattern="hex"] {
+  background-image:
+    linear-gradient(30deg, var(--templar-swatch-line) 12%, transparent 12.5%, transparent 87%, var(--templar-swatch-line) 87.5%),
+    linear-gradient(150deg, var(--templar-swatch-line) 12%, transparent 12.5%, transparent 87%, var(--templar-swatch-line) 87.5%),
+    linear-gradient(30deg, var(--templar-swatch-line) 12%, transparent 12.5%, transparent 87%, var(--templar-swatch-line) 87.5%),
+    linear-gradient(150deg, var(--templar-swatch-line) 12%, transparent 12.5%, transparent 87%, var(--templar-swatch-line) 87.5%);
+  background-position: 0 0, 0 0, 9px 16px, 9px 16px;
+  background-size: 18px 32px;
+}
+
+.templar-style-swatch[data-pattern="scallop"] {
+  background-image:
+    radial-gradient(circle at 9px 0, transparent 8px, var(--templar-swatch-line) 8.5px 9px, transparent 9.5px),
+    radial-gradient(circle at 0 16px, transparent 8px, var(--templar-swatch-major) 8.5px 9px, transparent 9.5px);
+  background-size: 18px 16px;
+}
+
 .templar-style-name {
   font-weight: var(--font-semibold);
+}
+
+.templar-folder-badge {
+  align-self: flex-start;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.2em 0.55em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .templar-style-description {
@@ -373,13 +618,51 @@
   .templar-preview-shell {
     height: 320px;
   }
+
+  .templar-styles-view {
+    padding-inline: var(--size-4-2);
+  }
+
+  .templar-view-toolbar > button {
+    flex: 1 1 calc(50% - var(--size-4-2));
+  }
+
+  .templar-style-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(165px, 100%), 1fr));
+  }
+
+  .templar-folder-buttons {
+    margin-inline: calc(var(--size-4-2) * -1);
+    padding-inline: var(--size-4-2);
+  }
+
+  .templar-library-tabs button,
+  .templar-folder-buttons button,
+  .templar-library-search button,
+  .templar-card-actions button,
+  .templar-card-more-actions button {
+    min-height: 44px;
+  }
+
+  .templar-favourite-toggle {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .templar-style-card,
   .templar-scope *,
   .templar-preview-shell * {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
+  }
+
+  .templar-style-card:hover {
+    transform: none;
   }
 }

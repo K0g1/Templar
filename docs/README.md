@@ -5,6 +5,7 @@ Technical documentation for the Templar Obsidian plugin.
 ## Getting started
 
 - [`../README.md`](../README.md) — user-facing behavior, installation, and commands.
+- [`../examples/Templar Showcase/`](../examples/Templar%20Showcase/) — copy-ready Markdown showcase notes and their local image assets.
 
 ## Reference
 

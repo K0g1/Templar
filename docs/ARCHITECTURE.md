@@ -112,7 +112,7 @@ The style element is a direct child of the leaf's content root and is removed wh
 - Creates an invisible inline marker whose bottom border-box edge is the browser's real baseline within the requested line box.
 - Uses Canvas text metrics for ascent/descent diagnostics.
 - Caches family/size/weight/line-height/device-scale combinations with a bounded LRU policy.
-- Measures body, H1–H4, and fenced-code typography separately.
+- Measures body, H1–H6, and fenced-code typography separately.
 
 The compiler derives one paper coordinate system from the measured body baseline plus the effective content padding. Ruled strokes, dot centers, and graph intersections share that origin in both page modes. A ruled stroke begins at the baseline and paints downward, keeping normal glyph bodies above the line while allowing descenders to cross it.
 
@@ -136,7 +136,7 @@ Two residual behaviors follow from Obsidian's measurement model (heights are re-
 - Adds/removes classes and the owned style element.
 - Configures image and page-layout observers.
 - records validation issues per file for settings diagnostics.
-- Per Reading root, tracks the post-processor context and a source-ordered section list (including detached elements) that feeds the blank-line reconciliation; stale elements are pruned via `getSectionInfo` so discarded sections never join gap chains.
+- Per Reading root, tracks the post-processor context and a source-ordered section list (including temporarily detached virtual-scroller elements) that feeds blank-line reconciliation; discarded sections are compacted after `getSectionInfo` marks them stale, and replaced roots are pruned with their scheduled frames.
 
 ### Image compensation
 
@@ -156,15 +156,19 @@ It does not mutate the editor document. The raw style command edits a normalized
 
 `TemplateLibrary` combines immutable built-ins and settings-backed custom templates. Returned objects are deep clones to prevent accidental shared mutation.
 
+The built-in catalog is assembled from the original hand-tuned designs plus data-driven themed packs in `src/templates/packs/`. Pack seeds remain compact, while the factory applies shared defaults and a catalog-wide readability pass. Folder metadata is a portable, single-level label—not a vault directory—and comparisons are case-insensitive while preserving the first display spelling.
+
 - Saving normalizes and validates.
 - Editing a built-in first duplicates it; customizing always writes a new `-custom` id, which is what "reset to default" removes.
 - Favorites are a settings-level list of template IDs; `remove()` also prunes them.
 - IDs are stable, slugged, and uniquified.
 - Deleting a library entry does not touch notes because notes contain full copies.
 
+The Page Styles view takes one catalog snapshot per shell render, indexes its search strings and folder counts once, and renders folder summaries by default. Search input is coalesced to one animation frame, and only the selected/searched result cards enter the DOM. This keeps the 132-style catalog inexpensive without compiling full note previews for every card; cards use CSS-only paper swatches and the production preview remains on demand.
+
 ## UI modules
 
-- `styles-view.ts`: sidebar library organized into Favorites / Built-in styles / My custom styles pages with a tab header, plus active-note controls.
+- `styles-view.ts`: searchable, folder-organized sidebar library with Favorites / Built-in styles / My custom styles sections, plus active-note controls.
 - `settings-tab.ts`: global behavior, library/creator entry points, baseline diagnostics, authoring kit, selector reference, and the reset-all-settings flow.
 - `modals.ts`: selection, application, page mode, new note, creator (including reset-to-default for built-ins), raw YAML, import, batch, and confirmation flows.
 - `template-preview.ts`: isolated sample document that uses the production compiler.

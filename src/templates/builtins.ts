@@ -1,6 +1,8 @@
 import type { TemplarTemplate } from '../types';
 import { clone } from '../utils/value';
+import { ensureReadableTemplate } from './accessibility';
 import { DEFAULT_TEMPLATE } from './defaults';
+import { PACKED_BUILT_IN_TEMPLATES } from './packs/catalog';
 
 function builtIn(
   id: string,
@@ -15,6 +17,7 @@ function builtIn(
   template.metadata = {
     author: 'Templar',
     description,
+    folder: 'Essentials',
     tags: [],
   };
   configure(template);
@@ -449,7 +452,46 @@ const EXPANDED_BUILT_IN_TEMPLATES: readonly TemplarTemplate[] = [
   }),
 ] as const;
 
+const EXISTING_TEMPLATE_FOLDERS: Readonly<Record<string, string>> = {
+  'classic-ruled': 'Essentials',
+  'vintage-journal': 'Vintage & Editorial',
+  'minimal-journal': 'Essentials',
+  'dot-grid': 'Essentials',
+  'graph-paper': 'Academia',
+  sketchbook: 'Journaling & Wellness',
+  'legal-pad': 'Professional',
+  'dark-academia': 'Academia',
+  'botanical-field-notes': 'Nature',
+  'midnight-blueprint': 'Professional',
+  'sakura-study': 'Pastels',
+  'solarized-lab': 'Academia',
+  'nordic-snow': 'Color Stories',
+  'cyber-neon': 'Dark & Neon',
+  'lavender-letters': 'Pastels',
+  'ocean-log': 'Travel',
+  'desert-explorer': 'Travel',
+  'cafe-manuscript': 'Vintage & Editorial',
+  'art-deco-ledger': 'Vintage & Editorial',
+  'cottage-recipe': 'Celebrations & Occasions',
+  'monochrome-zine': 'Vintage & Editorial',
+  'forest-ranger': 'Nature',
+  'candy-pop': 'Pastels',
+  'museum-catalog': 'Vintage & Editorial',
+  'lunar-research': 'Dark & Neon',
+  'coral-classroom': 'Academia',
+  'zen-ink': 'Journaling & Wellness',
+  'retro-terminal': 'Dark & Neon',
+};
+
+for (const template of [...CORE_BUILT_IN_TEMPLATES, ...EXPANDED_BUILT_IN_TEMPLATES]) {
+  Object.assign(template.metadata, {
+    folder: EXISTING_TEMPLATE_FOLDERS[template.id] ?? 'Essentials',
+  });
+  ensureReadableTemplate(template);
+}
+
 export const BUILT_IN_TEMPLATES: readonly TemplarTemplate[] = [
   ...CORE_BUILT_IN_TEMPLATES,
   ...EXPANDED_BUILT_IN_TEMPLATES,
+  ...PACKED_BUILT_IN_TEMPLATES,
 ] as const;

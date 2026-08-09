@@ -1,206 +1,84 @@
 # Templar
 
-> Give each Markdown note its own self-contained visual page design.
+> Give every Markdown note its own visual identity.
 
-Templar is an [Obsidian](https://obsidian.md) plugin that styles Markdown notes independently, one design per note. A styled note is still an ordinary `.md` file. The body stays plain Markdown and the whole design lives under a single `templar` frontmatter property, so it is easy to read, copy, and version.
-
-Templar works on desktop and mobile. It makes no network requests, needs no account or API key, collects no telemetry, and never reads or writes outside the vault.
+Templar turns ordinary Obsidian notes into polished journals, study sheets, project briefs, travel logs, scrapbooks, and more—without taking ownership of your writing. Your note stays Markdown. Its design travels with it.
 
 [![Release](https://img.shields.io/github/v/release/K0g1/Templar?include_prereleases&sort=semver&style=for-the-badge)](https://github.com/K0g1/Templar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 > [!IMPORTANT]
-> Templar is currently available as an alpha release for manual testing. Back up your vault and test it in a dedicated vault before relying on it for important notes. Physical iOS and Android release-gate testing is still pending.
+> Templar is currently an alpha and is available through manual installation only. Back up important vaults before testing prerelease software.
 
-## Features
+## See what your notes can become
 
-- Styles Reading view and Live Preview independently, per note.
-- Compiles a stable `.page` / `.page-content` CSS vocabulary onto plugin-owned view classes.
-- Measures the browser's real text baseline so ruled, dot-grid, and graph paper all line up with your text.
-- Fits headings to whole grid units and returns images to the next baseline.
-- Keeps intentional blank lines in Reading View and aligns lists and fenced code the same way in both views.
-- Every template sets its own background and foreground colors for `==highlighted text==`.
-- Nine paper patterns (ruled, ledger, dot grid, graph, cross-hatch, diagonal, hex, scallop, blank) with adjustable opacity, scale, dot radius, and major-grid interval.
-- Full heading stack through H6 with per-level letter spacing and text transform, plus optional drop caps and first-line indents.
-- Styles unordered list markers, indentation guides, horizontal dividers, tables (borders, stripes, typography), callouts (with per-type variants), and embedded notes.
-- Image frames, floats, object-fit, duotone, sepia/contrast, and baseline snapping.
-- Optional per-note watermark text with size, rotation, and opacity.
-- Pageless notes reflow like normal notes. Paged notes use a fixed A4, Letter, or custom canvas that scales as a whole on narrow panes and phones.
-- Comes with 28 built-in styles, from classic journals and botanical paper to blueprint grids, pastel study pages, and terminal dark modes.
-- Create a new styled note or apply a style to an existing note without touching its body.
-- Includes a sidebar library, a three-level Template Creator, a raw style editor, import/export, batch application, and diagnostics.
-- Imported CSS is validated before use. Global selectors, resource loading, fixed overlays, and anything that could break the page canvas are rejected.
-- Ships a versioned LLM authoring kit you can paste into any capable model. Templar itself has no AI integration.
+| Botanical field notes | Alpine travel log | Neon creative brief |
+| :---: | :---: | :---: |
+| [![A botanical journal note in Obsidian with fern photography, warm paper, a heading, highlighted text, a table, and checklist](docs/assets/gallery/botanical-field-notes.png)](docs/assets/gallery/botanical-field-notes.png) | [![An alpine travel note in Obsidian with mountain photography, cool paper styling, highlighted route notes, a numbered list, and a table](docs/assets/gallery/alpine-field-log.png)](docs/assets/gallery/alpine-field-log.png) | [![A dark neon creative brief in Obsidian with cyberpunk photography, magenta and cyan accents, code, a palette table, checklist, and callouts](docs/assets/gallery/neon-night-brief.png)](docs/assets/gallery/neon-night-brief.png) |
 
-## Installation
+These are real Markdown notes rendered by Templar inside Obsidian—not mockups. The example notes and original artwork are included in [`examples/`](examples/).
 
-### From the community directory
+## A style library you can actually explore
 
-Once Templar is listed in the Obsidian community plugins directory:
+Templar includes **132 built-in styles** organized into themed folders, with instant search and favorites. Browse calm neutrals, rich color stories, seasonal palettes, celebrations, academic papers, professional layouts, wellness journals, travel notebooks, vintage editorials, dark neon systems, fantasy pages, and more.
 
-1. Open **Settings → Community plugins** in Obsidian.
-2. Select **Turn on community plugins** if Restricted Mode is enabled.
-3. Select **Browse**, search for **Templar**, and install it.
-4. Enable the plugin under **Installed plugins**.
+- Browse template packs by folder instead of scrolling through one endless list.
+- Search by style name, folder, description, creator, or tag.
+- Star favorites and keep custom styles in their own library.
+- Duplicate any built-in, move your copy into a folder, and make it yours.
 
-### Manual installation
+## Designed for real notes
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the desired entry on the [releases page](https://github.com/K0g1/Templar/releases). Prereleases are intended for testing.
-2. Create a folder named `templar` inside `<vault>/.obsidian/plugins/`.
-3. Place the three files in that folder.
-4. Reload Obsidian and enable **Templar** under Settings → Community plugins.
+- **Rich Markdown:** headings through H6, emphasis, highlights, links, lists, tasks, quotes, code, tables, callouts, embeds, dividers, and images.
+- **Two page modes:** use a natural reflowing note or a fixed A4, Letter, or custom page that scales as one sheet on narrow screens.
+- **Visual depth:** paper patterns, baseline-aware typography, image treatments, watermarks, callout palettes, table styling, and more.
+- **Your own designs:** create a style with guided controls, edit its raw definition, or import and export portable `.templar` files.
+- **Desktop and mobile:** the same self-contained note design works across Obsidian desktop and mobile.
 
-### Building from source
+## Manual installation
+
+1. Open the [Templar releases page](https://github.com/K0g1/Templar/releases).
+2. Download `main.js`, `manifest.json`, and `styles.css` from the release you want to test.
+3. Create `<your-vault>/.obsidian/plugins/templar/`.
+4. Place all three downloaded files in that folder.
+5. Reload Obsidian, then enable **Templar** under **Settings → Community plugins → Installed plugins**.
+
+Templar is not yet listed in the Obsidian Community Plugins directory, so it will not appear in Browse or search results there.
+
+## Your first styled note
+
+1. Open a Markdown note.
+2. Select the paintbrush ribbon icon or run **Open page styles** from the command palette.
+3. Choose a folder, preview the available styles, and select **Apply**.
+4. Pick **Pageless** or **Paged**, then keep writing normal Markdown.
+
+Applying a style never rewrites the Markdown body. Removing Templar styling returns the note to its normal Obsidian appearance.
+
+## Private, portable, and yours
+
+Templar has no account, telemetry, ads, API key, or network traffic. It reads and writes through Obsidian's vault APIs, keeps each note's complete design in one frontmatter property, and validates imported styles before using them.
+
+## Project links
+
+- [Documentation](docs/README.md)
+- [Template specification](docs/TEMPLATE_SPEC.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+
+<details>
+<summary><strong>Build from source</strong></summary>
 
 ```bash
 git clone https://github.com/K0g1/Templar.git
-cd templar
+cd Templar
 npm install
-npm run build
+npm run check
 ```
 
-Copy the generated `main.js` (plus `manifest.json` and `styles.css`) into `<vault>/.obsidian/plugins/templar/` and reload Obsidian.
+Copy the generated `main.js`, `manifest.json`, and `styles.css` into `<your-vault>/.obsidian/plugins/templar/`, then reload Obsidian.
 
-## First use
-
-1. Open the command palette and run **Open page styles**, or select the paintbrush ribbon icon.
-2. Open a Markdown note.
-3. Select **Apply** on any style.
-4. Choose **Pageless** or **Paged**. Paged mode also offers A4, US Letter, and custom dimensions.
-5. Continue writing normal Markdown.
-
-Select **New note** on a style card to create a note from that style. The creation dialog asks for a title, folder, page mode, and page size before writing the note.
-
-## Page modes
-
-### Pageless
-
-Pageless notes behave like normal Obsidian documents. The writing area adapts to the pane, so lines can wrap differently when the window changes size.
-
-### Paged
-
-Paged notes use a fixed CSS-pixel canvas. Text is laid out at that fixed width, page breaks are fitted around rendered blocks, and narrow panes change only a whole-page scale factor. The page behaves like a PDF sheet: resizing the window changes its apparent size, not the location of words on the sheet.
-
-The note stores its choice under `templar.page`; switching modes never changes the Markdown body. Inter-page gaps are automatically adjusted to a baseline-grid multiple so ruled paper begins at the same measured baseline on every sheet.
-
-## Commands
-
-- Open page styles
-- Choose page style…
-- Apply default page style
-- Remove page style
-- Edit raw style…
-- Create page style…
-- Create styled note…
-- Change page mode…
-- Import page style…
-- Apply page style to multiple notes…
-- Copy LLM template authoring skill
-
-No command claims a default hotkey.
-
-## What a styled note contains
-
-The exact structure is documented in [`docs/TEMPLATE_SPEC.md`](docs/TEMPLATE_SPEC.md). A shortened example:
-
-```yaml
----
-templar:
-  version: 1
-  style-name: Classic Ruled
-  template-id: classic-ruled
-  page:
-    mode: paged
-    size: a4
-    width: 794
-    height: 1123
-    gap: 32
-    scale-to-fit: true
-  paper:
-    color: "#fffdf4"
-    pattern: ruled
-  baseline:
-    enabled: true
-    mode: strict
-    unit: 30
-    snap-images: true
-  typography:
-    body-font: 'Georgia, "Times New Roman", serif'
-    body-size: 18
-  css: |
-    .page h1 {
-      letter-spacing: -0.025em;
-    }
----
-
-# Ordinary Markdown begins here
-```
-
-Applying another library template replaces only the `templar` property. Removing a style deletes only that property. Existing properties, links, embeds, tags, tasks, callouts, and attachments are preserved.
-
-## Template library behavior
-
-The sidebar library is organized into three pages — **Favorites**, **Built-in styles**, and **My custom styles** — switched with the tab row at the top. The ★ button on any card adds or removes it from Favorites.
-
-Built-in styles are immutable. **Customize** duplicates a built-in style before editing it; **Reset to default** (in the Customize dialog) restores the built-in's original definition and removes any saved customization of it from your library. Custom styles can be edited, duplicated, exported, or deleted.
-
-Applying a style copies its entire normalized design into the note. A note therefore does not depend on the library entry continuing to exist. Deleting a library entry never changes notes that already use it.
-
-The settings page's **Reset all settings** restores every option to its default value while keeping your custom styles.
-
-Exports are written as `.templar` YAML files in `Templar Templates/`. The authoring kit can be copied or exported as `Templar Template Authoring Skill.md`.
-
-## AI / LLM workflow
-
-Templar has no AI integration. The settings page provides a versioned instruction document that can be pasted into any capable model. Paste the returned YAML into **Import page style**, inspect the human-readable validation and the isolated preview, then explicitly save it to the library.
-
-## Mobile
-
-The runtime contains no Node.js or Electron imports and `manifest.json` declares `isDesktopOnly: false`. The sidebar, settings, modals, and creator collapse to a single-column layout on narrow screens. Paged mode uses standard DOM observers and CSS whole-page scaling.
-
-Desktop mobile emulation is useful, but a physical iOS and Android smoke test is still required before community-directory submission. See [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md).
-
-## Privacy and security
-
-- No telemetry, analytics, ads, accounts, payments, or network traffic.
-- No external filesystem access.
-- No `innerHTML` use for imported or note data.
-- Atomic frontmatter mutation through Obsidian's `FileManager`.
-- Parsed, size-limited, note-scoped CSS with namespaced keyframes.
-- Runtime production dependencies are audited by `npm audit`.
-
-The full threat model is in [`docs/SECURITY.md`](docs/SECURITY.md). To report a vulnerability, see [`SECURITY.md`](SECURITY.md).
-
-## Documentation
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design, services, and data flow.
-- [`docs/TEMPLATE_SPEC.md`](docs/TEMPLATE_SPEC.md) — the Templar v1 schema and CSS vocabulary.
-- [`docs/PAGED_LAYOUT.md`](docs/PAGED_LAYOUT.md) — fixed-page layout and mobile scaling algorithm.
-- [`docs/SECURITY.md`](docs/SECURITY.md) — trust boundaries, validation, and privacy model.
-- [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md) — testing, extension recipes, and release steps.
-
-See [`docs/README.md`](docs/README.md) for the full index.
-
-## Development
-
-```bash
-npm run dev          # watch build
-npm run lint         # Obsidian-aware lint rules
-npm test             # unit tests
-npm run build        # strict type-check and production bundle
-npm run verify:mobile # reject Node/Electron imports and globals in main.js
-npm run check        # lint + test + build
-npm audit            # dependency advisory check
-```
-
-Contributors should read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/MAINTAINER_GUIDE.md`](docs/MAINTAINER_GUIDE.md).
-
-## Known boundaries
-
-- Reading-view pagination moves whole rendered blocks. A single block taller than the printable area starts at a sheet's content top and remains intact; future work may add safe paragraph/table fragmentation.
-- CodeMirror virtualizes very long Live Preview documents. Templar repaginates the currently rendered editor blocks as the viewport changes.
-- A fixed page guarantees stable layout for a given device/font installation and Obsidian zoom. Missing fonts fall back according to the template's font stack and can therefore change metrics.
-- Physical-device mobile validation is a release gate, not something unit tests or desktop emulation can fully replace.
+</details>
 
 ## License
 

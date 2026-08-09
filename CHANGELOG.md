@@ -4,6 +4,19 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.1.0-alpha.2 — 2026-08-08
+
+- Expanded the built-in library from 28 to 132 styles across 13 themed packs covering color stories, seasons, celebrations, academia, professional work, wellness, travel, nature, editorial, neon, fantasy, and pastels.
+- Added folders to the portable template schema, Template Creator, fuzzy picker, and Page Styles browser, with legacy templates migrating safely to `Unfiled`.
+- Rebuilt the Page Styles browser around folder summaries, indexed search, coalesced updates, and on-demand cards so the expanded library remains responsive on desktop and mobile.
+- Added lightweight thumbnail rendering for every paper pattern, searchable folder/tag metadata, case-insensitive folder handling, clearer semantics, and 44px mobile controls.
+- Added catalog-wide validation for unique identities, folder coverage, CSS/schema integrity, and readable color contrast across text and interactive surfaces.
+- Added three rich Markdown showcase notes, original artwork, and a real in-Obsidian screenshot gallery to the project landing page.
+- Fixed renderer lifecycle cleanup for closed leaves and replaced Reading roots, preventing detached Obsidian DOM trees from being retained.
+- Added release metadata verification so tags, package/manifest versions, compatibility entries, and release notes must agree before publishing.
+- Added pull-request and main-branch CI for linting, tests, strict TypeScript, production bundling, and the mobile runtime guard.
+- Reworked the README as a concise, gallery-first introduction and clarified that Templar is currently available only through manual installation.
+
 ## 1.1.0-alpha.1 — 2026-08-08
 
 - Added headings through H6 with per-level letter spacing and text transform, plus optional drop caps and first-line indents (reading view only for indents).

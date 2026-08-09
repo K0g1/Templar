@@ -1,7 +1,12 @@
 import { BUILT_IN_TEMPLATES } from '../templates/builtins';
 import type { TemplarSettings, TemplarTemplate } from '../types';
 import { clone, slugify } from '../utils/value';
-import { normalizeTemplate, validateTemplate } from '../templates/schema';
+import {
+  normalizeTemplate,
+  normalizeTemplateFolder,
+  templateFolderKey,
+  validateTemplate,
+} from '../templates/schema';
 import { validateCustomCss } from './css-validator';
 
 export class TemplateLibrary {
@@ -23,6 +28,22 @@ export class TemplateLibrary {
 
   public userTemplates(): TemplarTemplate[] {
     return this.settings.userTemplates.map((template) => clone(template));
+  }
+
+  public folders(templates: readonly TemplarTemplate[] = this.all()): string[] {
+    const foldersByKey = new Map<string, string>();
+    for (const template of templates) {
+      const folder = normalizeTemplateFolder(template.metadata.folder);
+      const key = templateFolderKey(folder);
+      if (!foldersByKey.has(key)) {
+        foldersByKey.set(key, folder);
+      }
+    }
+    return Array.from(foldersByKey.values()).sort((left, right) => {
+      if (left === 'Unfiled') return 1;
+      if (right === 'Unfiled') return -1;
+      return left.localeCompare(right, undefined, { sensitivity: 'base' });
+    });
   }
 
   public get(id: string): TemplarTemplate | null {

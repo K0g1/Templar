@@ -18,6 +18,7 @@ export const DEFAULT_TEMPLATE: TemplarTemplate = {
   metadata: {
     author: 'Templar user',
     description: 'A custom Templar style.',
+    folder: 'Unfiled',
     tags: [],
   },
   paper: {

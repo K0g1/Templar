@@ -21,6 +21,7 @@ export default defineConfig(
             'eslint.config.mts',
             'manifest.json',
             'scripts/verify-mobile-bundle.mjs',
+            'scripts/verify-release.mjs',
           ],
         },
         tsconfigRootDir: import.meta.dirname,
@@ -31,8 +32,12 @@ export default defineConfig(
   ...obsidianmd.configs.recommended,
   {
     files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
     rules: {
       'obsidianmd/no-nodejs-modules': 'off',
+      'obsidianmd/rule-custom-message': 'off',
     },
   },
   {
