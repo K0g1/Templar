@@ -235,4 +235,21 @@ describe('structured style compiler', () => {
       expect(css, pattern).toContain('background-image');
     }
   });
+
+  it('keeps pageless paper and margin layers above the page background', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.page.mode = 'pageless';
+    style.paper.pattern = 'ruled';
+    style.paper.marginLine = true;
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-pattern-layer"]',
+      'pattern-layer',
+      metrics,
+    ).css;
+    expect(css).toContain('.templar-page-content {');
+    expect(css).toContain('isolation: isolate;');
+    expect(css).toContain('.templar-page-content::before {');
+    expect(css).toContain('background-image: linear-gradient(to right');
+  });
 });

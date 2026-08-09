@@ -116,6 +116,8 @@ The style element is a direct child of the leaf's content root and is removed wh
 
 The compiler derives one paper coordinate system from the measured body baseline plus the effective content padding. Ruled strokes, dot centers, and graph intersections share that origin in both page modes. A ruled stroke begins at the baseline and paints downward, keeping normal glyph bodies above the line while allowing descenders to cross it.
 
+Paper and watermark pseudo-elements sit at negative z-indices inside an isolated `.templar-page-content` stacking context. This keeps them behind note content while preventing the Reading-view page background from covering pattern and margin layers.
+
 The rhythm compiler never emits a fractional-grid block offset in a gridded mode: strict reserves one extra grid row, balanced reserves none, and list items explicitly inherit the body line-height with theme list padding neutralized. Consequently, every following block remains congruent with the paper pattern.
 
 Heading padding makes the heading baseline congruent with the body baseline modulo the grid and adds complementary padding so the total remains a grid multiple. Structured block colors also compile explicit background and foreground colors for Markdown highlights, covering Reading View's `mark` and Live Preview's highlight spans without inheriting theme defaults.

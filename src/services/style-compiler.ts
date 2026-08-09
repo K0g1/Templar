@@ -574,6 +574,7 @@ ${scope} .markdown-source-view.mod-cm6 .cm-scroller.templar-page {
 ${scope} .templar-page-content {
   ${paged ? '' : 'background-color: transparent;'}
   box-sizing: border-box;
+  isolation: isolate;
   margin-inline: auto;
   max-width: ${paged ? 'none' : px(style.layout.maxWidth)};
   min-height: ${paged ? `var(--templar-canvas-height, ${px(style.page.height)})` : '100%'};
@@ -610,11 +611,7 @@ ${paged ? '' : `${scope} .templar-page-content::before {
   z-index: -1;
 }
 
-${paged ? `${scope} .templar-page-content {
-  isolation: isolate;
-}
-
-${scope} .templar-page-content::before {
+${paged ? `${scope} .templar-page-content::before {
   ${pattern}
   -webkit-mask-image: repeating-linear-gradient(to bottom, #000 0, #000 ${px(style.page.height)}, transparent ${px(style.page.height)}, transparent ${px(pageSpan)});
   background-color: ${paperColor};

@@ -66,6 +66,8 @@ The blank-line spacers must appear on the very first frame, with no flash: switc
 
 For ruled, dot-grid, and graph templates, zoom in far enough to confirm that the ordinary glyph body sits immediately above the pattern anchor, the one-pixel rule extends downward, and descenders cross it naturally. Confirm consecutive bullets use the same line-height as ordinary text and that the block after a list still lands on the grid. Confirm each built-in supplies a readable highlight background and foreground in both views.
 
+In pageless Reading view, confirm the paper pattern and optional margin line remain visible over the full content height. This protects the isolated stacking context that keeps negative-z-index paper layers above the solid page background.
+
 Spot-check the extended features in both views: H5/H6 rendering, heading letter spacing/text transform and drop caps, list markers and indentation guides, divider styles, striped tables, callout variants (`!warning` etc.), image float/object-fit/duotone, and the watermark (confirm it sits behind the text and never intercepts pointer events). Verify the new patterns — ledger, cross-hatch, diagonal, hex, scallop — tile correctly at extreme `pattern-scale` values in pageless and paged modes.
 
 Open the Template Creator's Simple, Detailed, and Advanced tabs. In Detailed mode exercise H2–H6 font controls, pattern controls, margin color/offset, code typography, table/divider/callout/embed settings, lists, watermark, image float/object-fit/duotone, and paged/pageless preview.

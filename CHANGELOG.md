@@ -4,6 +4,10 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.1.0-alpha.3 — 2026-08-08
+
+- Fixed ruled, grid, decorative paper patterns, and margin lines being painted behind the solid page background in pageless Reading view. The page content now creates an isolated stacking context, with a compiler regression test protecting the paper layer.
+
 ## 1.1.0-alpha.2 — 2026-08-08
 
 - Expanded the built-in library from 28 to 132 styles across 13 themed packs covering color stories, seasons, celebrations, academia, professional work, wellness, travel, nature, editorial, neon, fantasy, and pastels.
