@@ -11,7 +11,6 @@ import {
 } from 'obsidian';
 import { createHideMetadataExtension } from './editor/hide-metadata';
 import {
-  DEFAULT_TEMPLATE_ID,
   TEMPLAR_ICON,
   TEMPLAR_VIEW_TYPE,
 } from './constants';
@@ -61,9 +60,11 @@ export default class TemplarPlugin extends Plugin {
   public usageIndex = new NoteStyleIndex();
   public printService!: PrintService;
   public styleController!: NoteStyleController;
+  public eventController!: WorkspaceEventController;
 
   private statusBarEl: HTMLElement | null = null;
   public lastMarkdownLeaf: WorkspaceLeaf | null = null;
+  private unloaded = false;
 
   public async onload(): Promise<void> {
     await this.loadSettings();
@@ -93,7 +94,8 @@ export default class TemplarPlugin extends Plugin {
     );
     this.addSettingTab(new TemplarSettingTab(this.app, this));
     new CommandRegistrar(this).register();
-    new WorkspaceEventController(this).register();
+    this.eventController = new WorkspaceEventController(this);
+    this.eventController.register();
     this.registerDomEvent(document, 'keydown', (event) => {
       if (event.defaultPrevented || event.key !== 'Escape') return;
       const session = this.preview.current();
@@ -119,18 +121,18 @@ export default class TemplarPlugin extends Plugin {
     this.register(() => fonts.removeEventListener('loadingdone', handleFontsLoaded));
 
     this.app.workspace.onLayoutReady(() => {
-      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-      if (activeView) this.lastMarkdownLeaf = activeView.leaf;
-      this.styleController.markRulesReady();
-      this.registerEvent(this.app.vault.on('create', (file) => {
-        if (file instanceof TFile && file.extension === 'md') void this.styleController.evaluateStyleRules(file, false);
-      }));
+      // Guard against a deferred layout-ready callback firing after disable.
+      if (this.unloaded) {
+        return;
+      }
+      this.eventController.registerDeferred();
       this.renderer.scheduleRefreshAll();
       this.updateStatusBar();
     });
   }
 
   public onunload(): void {
+    this.unloaded = true;
     this.printService.destroy();
     this.preview.destroy();
     this.renderer.destroy();
@@ -182,10 +184,6 @@ export default class TemplarPlugin extends Plugin {
 
   public async evaluateStyleRules(file: TFile, metadataReady: boolean): Promise<void> {
     await this.styleController.evaluateStyleRules(file, metadataReady);
-  }
-
-  public defaultTemplateId(): string {
-    return this.settings.defaultTemplateId || DEFAULT_TEMPLATE_ID;
   }
 
   public showStylePicker(file = this.activeFile()): void {

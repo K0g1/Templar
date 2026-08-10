@@ -146,3 +146,61 @@ describe('CSS security regression suite', () => {
     });
   });
 });
+
+describe('CSS semantic bypass regression suite', () => {
+  it('rejects var() indirection for position', () => {
+    const result = errors('.page p { --p: fixed; position: var(--p); }');
+    expect(result.some((m) => m.includes('variable'))).toBe(true);
+  });
+
+  it('rejects var() indirection for display', () => {
+    const result = errors('.page { --d: none; display: var(--d); }');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('rejects calc(0) opacity on whole-note selector', () => {
+    const result = errors('.page { opacity: calc(0); }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects huge finite animation iteration counts', () => {
+    const result = errors('.page p { animation: spin 0.1s 1000000000; }');
+    expect(result.some((m) => m.toLowerCase().includes('iteration'))).toBe(true);
+  });
+
+  it('rejects long durations in later comma-separated animations', () => {
+    const result = errors('.page p { animation: a 0.1s, b 3600s; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects animation var() indirection', () => {
+    const result = errors('.page p { --n: infinite; animation-iteration-count: var(--n); }');
+    expect(result.some((m) => m.includes('variable'))).toBe(true);
+  });
+
+  it('rejects @layer statement ordering', () => {
+    const result = errors('@layer theme, base, templar;');
+    expect(result.some((m) => m.includes('not allowed'))).toBe(true);
+  });
+
+  it('rejects transform scale(0) on whole-note selector', () => {
+    const result = errors('.page * { transform: scale(0); }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects filter opacity(0) on whole-note selector', () => {
+    const result = errors('.page-content :is(*) { filter: opacity(0); }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects escaping keyframes name in at-rule allowlist handling', () => {
+    const escaped = errors('.page p { animation: spin 1s; } @\\6b eyframes spin { to { opacity: 1; } }');
+    expect(escaped.length).toBeGreaterThan(0);
+  });
+
+  it('rejects selector lists with huge nesting via :is()', () => {
+    const nested = '.page :is(a, b, c, d, e, f, g, h) > span > em > strong { color: red; }';
+    const result = errors(nested);
+    expect(result.some((m) => m.includes('not scoped'))).toBe(false);
+  });
+});

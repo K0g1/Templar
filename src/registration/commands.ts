@@ -1,4 +1,5 @@
 import type TemplarPlugin from '../main';
+import { DEFAULT_TEMPLATE_ID } from '../constants';
 
 /**
  * Registers all Templar Obsidian commands.
@@ -101,7 +102,7 @@ export class CommandRegistrar {
         if (!checking) {
           const template =
             plugin.library.get(plugin.settings.defaultTemplateId) ??
-            plugin.library.get(plugin.defaultTemplateId());
+            plugin.library.get(DEFAULT_TEMPLATE_ID);
           if (template) {
             void plugin.applyTemplate(template, file);
           }

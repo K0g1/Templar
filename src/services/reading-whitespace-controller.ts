@@ -9,6 +9,8 @@ import {
 interface ReadingRootState {
   context: MarkdownPostProcessorContext | null;
   sections: HTMLElement[];
+  /** Source path this root currently displays (set from context or cache). */
+  sourcePath: string;
 }
 
 interface ReadingSectionInfo {
@@ -50,6 +52,7 @@ export class ReadingViewWhitespaceController {
     }
     const state = this.rootState(readingRoot);
     state.context = context;
+    state.sourcePath = context.sourcePath;
     if (!state.sections.includes(element)) {
       state.sections.push(element);
     }
@@ -114,6 +117,7 @@ export class ReadingViewWhitespaceController {
       return;
     }
     state.sections = renderedBlocks;
+    state.sourcePath = file.path;
     for (let index = 0; index < renderedBlocks.length; index += 1) {
       const element = renderedBlocks[index];
       const section = cachedSections[index];
@@ -134,21 +138,46 @@ export class ReadingViewWhitespaceController {
       if (root.isConnected) {
         continue;
       }
+      this.release(root);
+    }
+  }
+
+  /**
+   * Releases every reading root inside a content element (or a single root):
+   * cancels pending frames, drops root/section state, and removes
+   * controller-owned section markers and spacers. Called on style removal,
+   * leaf clear, root replacement, and unload so no connected root outlives
+   * its owner.
+   */
+  public release(target: HTMLElement): void {
+    const roots = target.hasClass('markdown-preview-view')
+      ? [target]
+      : [...this.readingRoots.keys()].filter((root) => target.contains(root));
+    for (const root of roots) {
       const frame = this.scheduledReadingRoots.get(root);
       if (frame !== undefined) {
         root.ownerDocument.defaultView?.cancelAnimationFrame(frame);
         this.scheduledReadingRoots.delete(root);
       }
-      this.readingRoots.delete(root);
+      const state = this.readingRoots.get(root);
+      if (state) {
+        for (const section of state.sections) {
+          section.removeClass('templar-reading-section');
+        }
+        this.readingRoots.delete(root);
+      }
+      for (const spacer of root.querySelectorAll('.templar-blank-line-spacer')) {
+        spacer.remove();
+      }
     }
   }
 
   public clear(): void {
-    for (const [root, frame] of this.scheduledReadingRoots) {
-      root.ownerDocument.defaultView?.cancelAnimationFrame(frame);
+    for (const root of [...this.readingRoots.keys()]) {
+      this.release(root);
     }
-    this.scheduledReadingRoots.clear();
     this.readingRoots.clear();
+    this.scheduledReadingRoots.clear();
   }
 
   private destroyed = false;
@@ -161,7 +190,7 @@ export class ReadingViewWhitespaceController {
   private rootState(readingRoot: HTMLElement): ReadingRootState {
     let state = this.readingRoots.get(readingRoot);
     if (!state) {
-      state = { context: null, sections: [] };
+      state = { context: null, sections: [], sourcePath: '' };
       this.readingRoots.set(readingRoot, state);
     }
     return state;
@@ -184,7 +213,10 @@ export class ReadingViewWhitespaceController {
    * chains, or their stale positions would shift the spacers of live ones.
    */
   private isAliveSection(state: ReadingRootState, element: HTMLElement): boolean {
-    if (state.context) {
+    // A live post-processor context is the freshest source, but a reused
+    // cached root may carry a stale context for a different file. Only trust
+    // the context when it still refers to the same source path.
+    if (state.context && state.context.sourcePath === state.sourcePath) {
       return state.context.getSectionInfo(element) !== null;
     }
     return this.readingSections.has(element);
@@ -195,7 +227,10 @@ export class ReadingViewWhitespaceController {
     current?: HTMLElement,
   ): void {
     const state = this.rootState(readingRoot);
-    if (!state.context && !current) {
+    // Reconcile when we have a live post-processor context, an explicit
+    // current section, or authoritative cached sections from the section
+    // cache. A cached root without any of these has nothing to do.
+    if (!state.context && !current && state.sections.length === 0) {
       return;
     }
     if (current && !state.sections.includes(current)) {

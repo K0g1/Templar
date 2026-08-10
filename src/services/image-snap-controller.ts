@@ -63,6 +63,7 @@ export class ImageSnapController {
       for (const image of state.observedImages) {
         if (!nextImages.has(image)) {
           resizeObserver.unobserve(image);
+          image.style.removeProperty('--templar-image-snap');
         }
       }
       for (const image of nextImages) {
@@ -83,6 +84,12 @@ export class ImageSnapController {
     if (!state) {
       return;
     }
+    // Release observation and clear the owned compensation property so a
+    // detached/reparented image cannot retain a stale snap offset.
+    for (const image of state.observedImages) {
+      state.resizeObserver.unobserve(image);
+      image.style.removeProperty('--templar-image-snap');
+    }
     state.resizeObserver.disconnect();
     state.mutationObserver.disconnect();
     this.observers.delete(contentEl);
@@ -90,6 +97,10 @@ export class ImageSnapController {
 
   public disconnectAll(): void {
     for (const state of this.observers.values()) {
+      for (const image of state.observedImages) {
+        state.resizeObserver.unobserve(image);
+        image.style.removeProperty('--templar-image-snap');
+      }
       state.resizeObserver.disconnect();
       state.mutationObserver.disconnect();
     }

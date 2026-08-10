@@ -38,8 +38,15 @@ export class PreviewStyleStore {
     return this.previews.has(leaf);
   }
 
-  public entries(): IterableIterator<[WorkspaceLeaf, PreviewState]> {
-    return this.previews.entries();
+  /**
+   * Yields cloned preview states so callers cannot mutate the store through
+   * iteration (same guarantee as {@link get}).
+   */
+  public clonedEntries(): Array<[WorkspaceLeaf, PreviewState]> {
+    return [...this.previews.entries()].map(([leaf, state]) => [
+      leaf,
+      { ...state, style: clone(state.style) },
+    ]);
   }
 
   public deleteByOwner(owner: string): WorkspaceLeaf[] {

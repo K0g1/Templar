@@ -12,6 +12,8 @@ import {
   headingBaselinePadding,
 } from '../utils/grid';
 import { round } from '../utils/value';
+import { decodeCssEscapes } from '../utils/css';
+import postcss from 'postcss';
 import { compileCustomCss } from './css-compiler';
 
 export interface PageMetricSet {
@@ -31,40 +33,34 @@ export interface StyleCompilation {
 }
 
 /**
- * Decodes CSS escape sequences (hex and single-character) so security checks
- * see the canonical form. Without this, `u\72l(...)` bypasses a literal
- * `url(` check.
- */
-function decodeCssEscapes(value: string): string {
-  return value.replace(
-    /\\(?:([0-9a-f]{1,6})\s?|([^\r\n0-9a-f]))/gi,
-    (_match, hex: string | undefined, character: string | undefined) => {
-      if (hex) {
-        const codePoint = Number.parseInt(hex, 16);
-        return codePoint === 0 || codePoint > 0x10ffff
-          ? '\uFFFD'
-          : String.fromCodePoint(codePoint);
-      }
-      return character ?? '';
-    },
-  );
-}
-
-/**
  * Guards a single structured scalar value before it is interpolated into
- * compiled CSS. The guard canonicalizes CSS escapes first, then rejects:
- * - empty or whitespace-only values;
- * - CSS syntax breakouts (`;`, `{`, `}`, `<`, `>`);
- * - resource-loading functions (`url()`, `image()`, `image-set()`, `src()`,
- *   `-webkit-image-set()`) and `expression()`;
- * - any protocol-ish URL pattern (`http:`, `data:`, `blob:`, `file:`, `app:`,
- *   `//`).
+ * compiled CSS.
+ *
+ * The guard is two-layered:
+ * 1. Lexical rejection of CSS syntax breakouts (`;`, `{`, `}`, `<`, `>`),
+ *    comments, control characters, and resource-loading functions
+ *    (`url()`, `image()`, `image-set()`, `src()`, `-webkit-image-set()`,
+ *    `expression()`) and protocol-ish URL patterns, after canonicalizing
+ *    CSS escapes so `u\72l(...)` cannot bypass the check.
+ * 2. PostCSS parse of a synthetic declaration to prove the value is one
+ *    syntactically complete declaration value (no dangling functions,
+ *    unterminated strings, or trailing garbage).
  *
  * Property-specific allowlists live in the callers; this function is the
  * shared injection fence for every interpolated structured field.
  */
+function hasControlCharacters(value: string): boolean {
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function safeValue(value: string, fallback: string): string {
-  if (!value.trim() || /[;{}<>]/.test(value)) {
+  if (!value.trim() || /[;{}<>]/.test(value) || hasControlCharacters(value)) {
     return fallback;
   }
   const decoded = decodeCssEscapes(value);
@@ -72,6 +68,26 @@ function safeValue(value: string, fallback: string): string {
     /(?:url|src|image|image-set|-webkit-image-set|expression)\s*\(/i.test(decoded) ||
     /(?:https?:|data:|blob:|file:|app:)|(?:\/\/)/i.test(decoded)
   ) {
+    return fallback;
+  }
+  // Reject comments: an unterminated comment would swallow the rest of the
+  // generated stylesheet.
+  if (decoded.includes('/*') || decoded.includes('*/')) {
+    return fallback;
+  }
+  // Prove the value parses as exactly one complete declaration value.
+  try {
+    const parsed = postcss.parse(`x:${value}`, { from: undefined, map: false });
+    let declarationCount = 0;
+    let valueText = '';
+    parsed.walkDecls((declaration) => {
+      declarationCount += 1;
+      valueText = declaration.value;
+    });
+    if (declarationCount !== 1 || valueText !== value) {
+      return fallback;
+    }
+  } catch {
     return fallback;
   }
   return value;

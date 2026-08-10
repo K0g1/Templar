@@ -1,6 +1,7 @@
 import postcss, { type AtRule, type Rule } from 'postcss';
 import type { CompiledPageStyle, ValidationIssue } from '../types';
 import { validateCustomCss } from './css-validator';
+import { isKeyframesAtRuleName } from '../utils/css';
 
 const livePreviewElements: Readonly<Record<string, string>> = {
   h1: ':is(h1, .HyperMD-header-1, .inline-title)',
@@ -25,7 +26,7 @@ const livePreviewElements: Readonly<Record<string, string>> = {
 };
 
 function isInsideKeyframes(rule: Rule): boolean {
-  return rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as AtRule).name);
+  return rule.parent?.type === 'atrule' && isKeyframesAtRuleName((rule.parent as AtRule).name);
 }
 
 function expandVirtualElements(selector: string): string {
@@ -58,7 +59,7 @@ export function transformVirtualSelector(selector: string, scope: string): strin
 function scopeKeyframes(root: ReturnType<typeof postcss.parse>, scopeId: string): void {
   const names = new Map<string, string>();
   root.walkAtRules((atRule) => {
-    if (/keyframes$/i.test(atRule.name)) {
+    if (isKeyframesAtRuleName(atRule.name)) {
       const original = atRule.params.trim();
       const scoped = `templar-${scopeId}-${original}`;
       names.set(original, scoped);

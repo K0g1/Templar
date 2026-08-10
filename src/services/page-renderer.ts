@@ -35,12 +35,14 @@ export class PageRenderer {
   private scheduled = false;
   private readonly leafGenerations = new WeakMap<WorkspaceLeaf, number>();
   private readonly styledViews = new Map<WorkspaceLeaf, StyledView>();
-  private readonly issuesByFile = new Map<string, ValidationIssue[]>();
+  private readonly leafScopeIds = new WeakMap<WorkspaceLeaf, string>();
+  private readonly issuesByLeaf = new Map<WorkspaceLeaf, { filePath: string; issues: ValidationIssue[] }>();
   private readonly pageLayout = new PageLayoutService();
   private readonly previews = new PreviewStyleStore();
   private readonly imageSnap = new ImageSnapController();
   private readonly whitespace: ReadingViewWhitespaceController;
   private readonly styleHost: ViewStyleHost;
+  private scopeCounter = 0;
 
   public constructor(
     private readonly app: App,
@@ -112,7 +114,15 @@ export class PageRenderer {
   }
 
   public issuesFor(file: TFile): ValidationIssue[] {
-    return [...(this.issuesByFile.get(file.path) ?? [])];
+    // Aggregate per-leaf issues for the file; a diagnostics panel wants all
+    // open views' issues, while lifecycle cleanup stays leaf-scoped.
+    const all: ValidationIssue[] = [];
+    for (const entry of this.issuesByLeaf.values()) {
+      if (entry.filePath === file.path) {
+        all.push(...entry.issues);
+      }
+    }
+    return all;
   }
 
   public async setPreview(
@@ -179,7 +189,7 @@ export class PageRenderer {
       this.clearLeaf(leaf);
     }
     this.fontMetrics.clear();
-    this.issuesByFile.clear();
+    this.issuesByLeaf.clear();
   }
 
   private async refreshLeaf(leaf: WorkspaceLeaf): Promise<void> {
@@ -219,12 +229,21 @@ export class PageRenderer {
     }
 
     this.styleHost.prepareViewRoots(view.contentEl);
-    const scopeId = hashPath(file.path);
+    // If the leaf's content element changed since the last render (Obsidian
+    // can replace the view root on mode switches), release the previous
+    // root's DOM artifacts and observers before styling the new one.
+    const previous = this.styledViews.get(leaf);
+    if (previous && previous.contentEl !== view.contentEl) {
+      this.styleHost.clearView(previous.contentEl);
+      this.imageSnap.disconnect(previous.contentEl);
+      this.whitespace.release(previous.contentEl);
+    }
+    const scopeId = this.scopeIdFor(leaf);
     const scopeValue = `templar-${scopeId}`;
     this.styleHost.applyScopedStyle(view.contentEl, '', scopeValue, file.path);
     const scope = `[data-templar-scope="${escapeCssAttribute(scopeValue)}"]`;
     const compiled = compilePageStyle(style, scope, scopeId, metrics);
-    this.issuesByFile.set(file.path, compiled.issues);
+    this.issuesByLeaf.set(leaf, { filePath: file.path, issues: compiled.issues });
 
     const styleEl = view.contentEl.querySelector<HTMLStyleElement>(
       `:scope > style.${TEMPLAR_STYLE_ELEMENT_CLASS}`,
@@ -257,20 +276,25 @@ export class PageRenderer {
     if (contentEl) {
       this.styleHost.clearView(contentEl);
       this.imageSnap.disconnect(contentEl);
+      this.whitespace.release(contentEl);
     }
     this.whitespace.pruneDisconnectedRoots();
-    if (styled) {
-      this.issuesByFile.delete(styled.filePath);
-    }
+    this.issuesByLeaf.delete(leaf);
     this.styledViews.delete(leaf);
   }
-}
 
-function hashPath(path: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < path.length; index += 1) {
-    hash ^= path.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+  /**
+   * Returns a stable, collision-resistant scope ID that is unique per leaf
+   * (not per file path). Two leaves showing the same note must never share a
+   * CSS scope, otherwise a preview in one leaf would style the other.
+   */
+  private scopeIdFor(leaf: WorkspaceLeaf): string {
+    let scopeId = this.leafScopeIds.get(leaf);
+    if (!scopeId) {
+      this.scopeCounter += 1;
+      scopeId = `leaf${String(this.scopeCounter)}-${Math.random().toString(36).slice(2, 8)}`;
+      this.leafScopeIds.set(leaf, scopeId);
+    }
+    return scopeId;
   }
-  return (hash >>> 0).toString(36);
 }

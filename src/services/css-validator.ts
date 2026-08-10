@@ -2,11 +2,11 @@ import postcss, { type AtRule, type Rule } from 'postcss';
 import selectorParser, { type Selector } from 'postcss-selector-parser';
 import { MAX_CUSTOM_CSS_BYTES } from '../constants';
 import type { ValidationIssue, ValidationResult } from '../types';
+import { decodeCssEscapes, isKeyframesAtRuleName, normalizeAtRuleName } from '../utils/css';
 
 const allowedAtRules = new Set([
   'keyframes',
   '-webkit-keyframes',
-  'layer',
   'media',
   'supports',
 ]);
@@ -100,7 +100,7 @@ const MAX_SELECTOR_DEPTH = 6;
 const MAX_ANIMATION_DURATION_SECONDS = 30;
 
 function isInsideKeyframes(rule: Rule): boolean {
-  return rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as AtRule).name);
+  return rule.parent?.type === 'atrule' && isKeyframesAtRuleName((rule.parent as AtRule).name);
 }
 
 function selectorStartsWithVirtualRoot(selector: string): boolean {
@@ -109,21 +109,6 @@ function selectorStartsWithVirtualRoot(selector: string): boolean {
 
 function selectorTargetsVirtualRoot(selector: string): boolean {
   return /^\.page(?:-content)?(?=$|[.:#[])/.test(selector.trim());
-}
-
-function decodeCssEscapes(value: string): string {
-  return value.replace(
-    /\\(?:([0-9a-f]{1,6})\s?|([^\r\n0-9a-f]))/gi,
-    (_match, hex: string | undefined, character: string | undefined) => {
-      if (hex) {
-        const codePoint = Number.parseInt(hex, 16);
-        return codePoint === 0 || codePoint > 0x10ffff
-          ? '\uFFFD'
-          : String.fromCodePoint(codePoint);
-      }
-      return character ?? '';
-    },
-  );
 }
 
 function globalSelectorToken(selector: Selector): string | null {
@@ -285,7 +270,7 @@ export function validateCustomCss(css: string): ValidationResult {
   }
 
   root.walkAtRules((atRule) => {
-    const name = decodeCssEscapes(atRule.name).toLowerCase();
+    const name = normalizeAtRuleName(atRule.name);
     if (!allowedAtRules.has(name)) {
       issues.push({
         severity: 'error',
@@ -357,13 +342,24 @@ export function validateCustomCss(css: string): ValidationResult {
         fix: 'Templar CSS must be self-contained; use CSS colors and gradients.',
       });
     }
-    if (property === 'position' && value.trim() === 'fixed') {
-      issues.push({
-        severity: 'error',
-        path: 'css.position',
-        message: 'Fixed positioning can cover Obsidian controls and is not allowed.',
-        fix: 'Use relative, absolute, or sticky positioning inside the page.',
-      });
+    if (property === 'position') {
+      // var()/attr()/calc() can resolve to `fixed` at runtime; only literal
+      // safe position keywords are acceptable.
+      if (/var\s*\(|attr\s*\(|calc\s*\(/.test(value)) {
+        issues.push({
+          severity: 'error',
+          path: 'css.position',
+          message: 'Calculated or variable position values cannot be safety-bounded.',
+          fix: 'Use a literal position keyword (relative, absolute, or sticky).',
+        });
+      } else if (value.trim() === 'fixed') {
+        issues.push({
+          severity: 'error',
+          path: 'css.position',
+          message: 'Fixed positioning can cover Obsidian controls and is not allowed.',
+          fix: 'Use relative, absolute, or sticky positioning inside the page.',
+        });
+      }
     }
     if (property === 'z-index' && Number.parseFloat(value) > 20) {
       issues.push({
@@ -387,18 +383,45 @@ export function validateCustomCss(css: string): ValidationResult {
     if (
       declaration.parent?.type === 'rule' &&
       selectorCanHideWholePage(declaration.parent) &&
-      ((property === 'display' && value.trim() === 'none') ||
-        (property === 'visibility' && value.trim() === 'hidden') ||
-        (property === 'content-visibility' && value.trim() === 'hidden') ||
-        (property === 'opacity' && Number.parseFloat(value) === 0) ||
-        (property === 'pointer-events' && value.trim() === 'none') ||
-        (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())))
+      ((property === 'display' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
+        (property === 'visibility' && (value.trim() === 'hidden' || /var\s*\(/.test(value))) ||
+        (property === 'content-visibility' && (value.trim() === 'hidden' || /var\s*\(/.test(value))) ||
+        (property === 'opacity' &&
+          (Number.parseFloat(value) === 0 || /var\s*\(|calc\s*\(/.test(value))) ||
+        (property === 'pointer-events' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
+        (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())) ||
+        (property === 'transform' && /scale\s*\(\s*0(?:\s|\)|,)/.test(value)) ||
+        (property === 'filter' && /opacity\s*\(\s*0(?:\s|\)|,)/.test(value)) ||
+        (property === 'clip-path' && /inset\s*\(\s*0\s*\)/.test(value)))
     ) {
       issues.push({
         severity: 'error',
         path: `css.${property}`,
         message: `“${property}: ${declaration.value}” would hide or disable the whole note.`,
         fix: 'Target a specific Markdown element without making the page inaccessible.',
+      });
+    }
+    // Reject unresolved var()/attr()/calc() for hiding-sensitive properties
+    // anywhere: a custom property could resolve to a hiding value at runtime.
+    const hidingSensitive = new Set([
+      'display',
+      'visibility',
+      'opacity',
+      'pointer-events',
+      'content-visibility',
+      'transform',
+      'filter',
+      'clip-path',
+      'mask',
+      'position',
+      'z-index',
+    ]);
+    if (hidingSensitive.has(property) && /var\s*\(|attr\s*\(/.test(value)) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” uses a variable or attribute value that cannot be safety-bounded.`,
+        fix: 'Use a literal value for this property.',
       });
     }
     if (property.includes('animation')) {
@@ -410,18 +433,39 @@ export function validateCustomCss(css: string): ValidationResult {
           fix: 'Use a finite animation count or remove the animation.',
         });
       }
-      const durationMatch = value.match(/(\d+(?:\.\d+)?)(ms|s)\b/);
-      if (durationMatch) {
-        const duration = durationMatch[1] === undefined
-          ? 0
-          : Number.parseFloat(durationMatch[1]);
-        const seconds = durationMatch[2] === 'ms' ? duration / 1000 : duration;
-        if (seconds > MAX_ANIMATION_DURATION_SECONDS) {
+      // Bound total runtime for every comma-separated animation: duration x
+      // iterations. Iteration counts must be literal numbers (var() rejected).
+      if (/var\s*\(|attr\s*\(/.test(value)) {
+        issues.push({
+          severity: 'error',
+          path: `css.${property}`,
+          message: 'Animation values using variables cannot be safety-bounded.',
+          fix: 'Use literal animation durations and iteration counts.',
+        });
+      }
+      for (const part of value.split(',')) {
+        const durations = [...part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)];
+        const iterations = part.match(/(\d+(?:\.\d+)?)\s*$/);
+        let totalSeconds = 0;
+        for (const match of durations) {
+          const amount = Number.parseFloat(match[1] ?? '0');
+          totalSeconds += match[2] === 'ms' ? amount / 1000 : amount;
+        }
+        const iterationCount = iterations ? Number.parseFloat(iterations[1] ?? '1') : 1;
+        if (iterationCount > 1000) {
           issues.push({
             severity: 'error',
             path: `css.${property}`,
-            message: `Animation longer than ${String(MAX_ANIMATION_DURATION_SECONDS)} seconds is not allowed.`,
-            fix: 'Shorten the animation duration.',
+            message: `Animation iteration count ${String(iterationCount)} exceeds the limit of 1000.`,
+            fix: 'Reduce the iteration count or use a small finite count.',
+          });
+        }
+        if (totalSeconds * iterationCount > MAX_ANIMATION_DURATION_SECONDS) {
+          issues.push({
+            severity: 'error',
+            path: `css.${property}`,
+            message: `Animation total runtime (${String(Math.round(totalSeconds * iterationCount))}s) exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
+            fix: 'Shorten the duration or reduce the iteration count.',
           });
         }
       }
@@ -475,7 +519,7 @@ export function validateCustomCss(css: string): ValidationResult {
 
   let keyframeBlockCount = 0;
   root.walkAtRules((atRule) => {
-    if (/keyframes$/i.test(atRule.name)) {
+    if (isKeyframesAtRuleName(atRule.name)) {
       keyframeBlockCount += 1;
     }
   });
@@ -515,13 +559,22 @@ function selectorDepth(selectors: string[]): number {
   for (const selector of selectors) {
     let depth = 0;
     let inParens = 0;
+    let lastWasCombinator = false;
     for (const char of selector) {
       if (char === '(') {
         inParens += 1;
       } else if (char === ')') {
         inParens = Math.max(0, inParens - 1);
-      } else if (inParens === 0 && /\s/.test(char)) {
-        depth += 1;
+      } else if (inParens === 0) {
+        if (char === '>' || char === '+' || char === '~') {
+          // Explicit combinator: the next compound starts a new depth level.
+          lastWasCombinator = true;
+        } else if (/\s/.test(char)) {
+          lastWasCombinator = true;
+        } else if (lastWasCombinator) {
+          depth += 1;
+          lastWasCombinator = false;
+        }
       }
     }
     maxDepth = Math.max(maxDepth, depth + 1);
