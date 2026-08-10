@@ -95,6 +95,16 @@ export class ReadingViewWhitespaceController {
 
   public registerCachedSections(readingRoot: HTMLElement, file: TFile): void {
     const state = this.rootState(readingRoot);
+    // If this root is being reused for a different file, drop all stale
+    // sections and context before installing the new cache mapping.
+    if (state.sourcePath && state.sourcePath !== file.path) {
+      for (const section of state.sections) {
+        section.removeClass('templar-reading-section');
+        this.readingSections.delete(section);
+      }
+      state.sections = [];
+      state.context = null;
+    }
     const pageContent = readingRoot.querySelector<HTMLElement>(
       ':scope > .markdown-preview-sizer',
     );
@@ -163,6 +173,7 @@ export class ReadingViewWhitespaceController {
       if (state) {
         for (const section of state.sections) {
           section.removeClass('templar-reading-section');
+          this.readingSections.delete(section);
         }
         this.readingRoots.delete(root);
       }
@@ -200,9 +211,14 @@ export class ReadingViewWhitespaceController {
     state: ReadingRootState,
     element: HTMLElement,
   ): ReadingSectionInfo | null {
-    const fresh = state.context?.getSectionInfo(element);
-    if (fresh) {
-      return fresh;
+    // Only trust a live post-processor context when it still refers to the
+    // same source path; a reused root may carry a stale context for another
+    // file.
+    if (state.context && state.context.sourcePath === state.sourcePath) {
+      const fresh = state.context.getSectionInfo(element);
+      if (fresh) {
+        return fresh;
+      }
     }
     return this.readingSections.get(element) ?? null;
   }

@@ -1,5 +1,6 @@
 import type TemplarPlugin from '../main';
 import { DEFAULT_TEMPLATE_ID } from '../constants';
+import { runTask } from '../utils/task';
 
 /**
  * Registers all Templar Obsidian commands.
@@ -16,7 +17,7 @@ export class CommandRegistrar {
     plugin.addCommand({
       id: 'open-page-styles',
       name: 'Open page styles',
-      callback: () => void plugin.openStylesView(),
+      callback: () => void runTask(() => plugin.openStylesView(), 'open styles view'),
     });
     plugin.addCommand({
       id: 'choose-page-style',
@@ -32,7 +33,7 @@ export class CommandRegistrar {
     plugin.addCommand({
       id: 'focus-style-search',
       name: 'Focus style search',
-      callback: () => void plugin.focusStyleSearch(),
+      callback: () => void runTask(() => plugin.focusStyleSearch(), 'focus style search'),
     });
     plugin.addCommand({
       id: 'customize-current-note',
@@ -51,7 +52,7 @@ export class CommandRegistrar {
         const file = plugin.activeFile();
         const template = plugin.library.get(plugin.settings.recentTemplateIds[0] ?? '');
         const available = file !== null && template !== null;
-        if (available && !checking) void plugin.applyTemplate(template, file);
+        if (available && !checking) void runTask(() => plugin.applyTemplate(template, file), 'apply template');
         return available;
       },
     });
@@ -60,7 +61,7 @@ export class CommandRegistrar {
       name: 'Next favorite style',
       checkCallback: (checking) => {
         const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0;
-        if (available && !checking) void plugin.cycleFavouritePreview(1);
+        if (available && !checking) void runTask(() => plugin.cycleFavouritePreview(1), 'cycle favourite preview');
         return available;
       },
     });
@@ -69,7 +70,7 @@ export class CommandRegistrar {
       name: 'Previous favorite style',
       checkCallback: (checking) => {
         const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0;
-        if (available && !checking) void plugin.cycleFavouritePreview(-1);
+        if (available && !checking) void runTask(() => plugin.cycleFavouritePreview(-1), 'cycle favourite preview');
         return available;
       },
     });
@@ -78,7 +79,7 @@ export class CommandRegistrar {
       name: 'Apply previewed style',
       checkCallback: (checking) => {
         const available = plugin.preview.current() !== null;
-        if (available && !checking) void plugin.applyCurrentPreview();
+        if (available && !checking) void runTask(() => plugin.applyCurrentPreview(), 'apply current preview');
         return available;
       },
     });
@@ -87,7 +88,7 @@ export class CommandRegistrar {
       name: 'Cancel style preview',
       checkCallback: (checking) => {
         const available = plugin.preview.current() !== null;
-        if (available && !checking) void plugin.preview.cancelAll().then(() => plugin.refreshSidebars());
+        if (available && !checking) void runTask(async () => { await plugin.preview.cancelAll(); plugin.refreshSidebars(); }, 'cancel preview');
         return available;
       },
     });
@@ -104,7 +105,7 @@ export class CommandRegistrar {
             plugin.library.get(plugin.settings.defaultTemplateId) ??
             plugin.library.get(DEFAULT_TEMPLATE_ID);
           if (template) {
-            void plugin.applyTemplate(template, file);
+            void runTask(() => plugin.applyTemplate(template, file), 'apply template');
           }
         }
         return true;
@@ -117,7 +118,7 @@ export class CommandRegistrar {
         const file = plugin.activeFile();
         const available = file !== null && plugin.frontmatter.hasStyle(file);
         if (available && !checking) {
-          void plugin.removeStyle(file);
+          void runTask(() => plugin.removeStyle(file), 'remove style');
         }
         return available;
       },
@@ -164,7 +165,7 @@ export class CommandRegistrar {
         const style = file ? plugin.frontmatter.getStyle(file) : null;
         if (file && style && !checking) {
           style.page.mode = style.page.mode === 'paged' ? 'pageless' : 'paged';
-          void plugin.writeAndRefresh(file, style);
+          void runTask(() => plugin.writeAndRefresh(file, style), 'write and refresh');
         }
         return Boolean(file && style);
       },
@@ -178,7 +179,7 @@ export class CommandRegistrar {
         const available = Boolean(file && style?.page.mode === 'paged');
         if (available && !checking && file && style) {
           style.page.scaleToFit = !style.page.scaleToFit;
-          void plugin.writeAndRefresh(file, style);
+          void runTask(() => plugin.writeAndRefresh(file, style), 'write and refresh');
         }
         return available;
       },
@@ -200,7 +201,7 @@ export class CommandRegistrar {
         const file = plugin.activeFile();
         const leaf = plugin.activeMarkdownLeaf();
         const available = Boolean(file && leaf && plugin.frontmatter.hasStyle(file) && plugin.printService.available(leaf));
-        if (available && !checking) void plugin.printStyledNote(file);
+        if (available && !checking) void runTask(() => plugin.printStyledNote(file), 'print styled note');
         return available;
       },
     });
@@ -217,7 +218,7 @@ export class CommandRegistrar {
     plugin.addCommand({
       id: 'copy-template-authoring-skill',
       name: 'Copy LLM template authoring skill',
-      callback: () => void plugin.copyAuthoringKit(),
+      callback: () => void runTask(() => plugin.copyAuthoringKit(), 'copy authoring kit'),
     });
   }
 }

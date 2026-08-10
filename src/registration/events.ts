@@ -31,7 +31,7 @@ export class WorkspaceEventController {
         const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
         if (activeView) {
           if (plugin.lastMarkdownLeaf && plugin.lastMarkdownLeaf !== activeView.leaf) {
-            void plugin.preview.cancelAll();
+            void runTask(() => plugin.preview.cancelAll(), 'preview cancel');
           }
           plugin.lastMarkdownLeaf = activeView.leaf;
         }
@@ -69,7 +69,7 @@ export class WorkspaceEventController {
           });
         }
         void runTask(() => plugin.evaluateStyleRules(file, true), 'evaluate style rules');
-        void plugin.renderer.refreshFile(file);
+        void runTask(() => plugin.renderer.refreshFile(file), 'refresh file');
         if (plugin.activeFile()?.path === file.path) {
           plugin.refreshSidebars();
           plugin.updateStatusBar();
@@ -125,7 +125,7 @@ export class WorkspaceEventController {
             item
               .setTitle('Remove page style')
               .setIcon('eraser')
-              .onClick(() => void plugin.removeStyle(file)),
+              .onClick(() => void runTask(() => plugin.removeStyle(file), 'remove style')),
           );
         }
       }),
@@ -150,7 +150,7 @@ export class WorkspaceEventController {
     plugin.styleController.markRulesReady();
     plugin.registerEvent(plugin.app.vault.on('create', (file) => {
       if (file instanceof TFile && file.extension === 'md') {
-        void plugin.styleController.evaluateStyleRules(file, false);
+        void runTask(() => plugin.styleController.evaluateStyleRules(file, false), 'evaluate style rules');
       }
     }));
   }

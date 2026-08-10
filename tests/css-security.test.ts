@@ -198,9 +198,38 @@ describe('CSS semantic bypass regression suite', () => {
     expect(escaped.length).toBeGreaterThan(0);
   });
 
-  it('rejects selector lists with huge nesting via :is()', () => {
-    const nested = '.page :is(a, b, c, d, e, f, g, h) > span > em > strong { color: red; }';
+  it('rejects deeply nested functional selectors', () => {
+    const nested = '.page :is(.a .b .c .d .e .f .g .h .i .j) { color: red; }';
     const result = errors(nested);
-    expect(result.some((m) => m.includes('not scoped'))).toBe(false);
+    expect(result.some((m) => m.includes('nesting depth'))).toBe(true);
+  });
+
+  it('rejects scaleX(0) and scale(calc(0)) whole-note hiding', () => {
+    const a = errors('.page * { transform: scaleX(0); }');
+    expect(a.some((m) => m.includes('hide or disable'))).toBe(true);
+    const b = errors('.page * { scale: 0; }');
+    expect(b.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects filter opacity variants on whole-note selectors', () => {
+    const a = errors('.page * { filter: opacity(0%); }');
+    expect(a.some((m) => m.includes('hide or disable'))).toBe(true);
+    const b = errors('.page * { filter: opacity(0.0); }');
+    expect(b.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects clip-path circle(0) on whole-note selectors', () => {
+    const result = errors('.page * { clip-path: circle(0); }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects animation runtime via longhand combination', () => {
+    const result = errors('.page p { animation-duration: 30s; animation-iteration-count: 1000; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects animation shorthand with duration before iteration count', () => {
+    const result = errors('.page p { animation: spin 30s 1000 linear; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
   });
 });

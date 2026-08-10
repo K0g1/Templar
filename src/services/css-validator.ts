@@ -390,9 +390,17 @@ export function validateCustomCss(css: string): ValidationResult {
           (Number.parseFloat(value) === 0 || /var\s*\(|calc\s*\(/.test(value))) ||
         (property === 'pointer-events' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
         (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())) ||
-        (property === 'transform' && /scale\s*\(\s*0(?:\s|\)|,)/.test(value)) ||
-        (property === 'filter' && /opacity\s*\(\s*0(?:\s|\)|,)/.test(value)) ||
-        (property === 'clip-path' && /inset\s*\(\s*0\s*\)/.test(value)))
+        // Transform/filter/clip/mask can visually erase the note through
+        // many spellings (scale(0), scaleX(0), opacity(0%), circle(0),
+        // inset(50%)...). On a whole-page-capable selector, reject the
+        // property outright rather than enumerating every hiding form.
+        (property === 'transform' ||
+          property === 'scale' ||
+          property === 'filter' ||
+          property === 'clip-path' ||
+          property === 'mask' ||
+          property === 'mask-image' ||
+          property === 'backdrop-filter'))
     ) {
       issues.push({
         severity: 'error',
@@ -444,14 +452,22 @@ export function validateCustomCss(css: string): ValidationResult {
         });
       }
       for (const part of value.split(',')) {
+        // Durations can appear anywhere in the shorthand, not only first.
         const durations = [...part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)];
-        const iterations = part.match(/(\d+(?:\.\d+)?)\s*$/);
+        // Iteration count: any bare number that is NOT a duration token.
+        // `animation: spin 30s 1000 linear` has 30s (duration) and 1000
+        // (iterations). Take the largest bare number as the count.
+        const bareNumbers = [...part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?)(?=\s|$)/g)]
+          .map((match) => Number.parseFloat(match[2] ?? '0'))
+          .filter((amount) => !durations.some((d) => Number.parseFloat(d[1] ?? '0') === amount));
         let totalSeconds = 0;
         for (const match of durations) {
           const amount = Number.parseFloat(match[1] ?? '0');
           totalSeconds += match[2] === 'ms' ? amount / 1000 : amount;
         }
-        const iterationCount = iterations ? Number.parseFloat(iterations[1] ?? '1') : 1;
+        const iterationCount = bareNumbers.length > 0
+          ? Math.max(...bareNumbers)
+          : 1;
         if (iterationCount > 1000) {
           issues.push({
             severity: 'error',
@@ -482,6 +498,52 @@ export function validateCustomCss(css: string): ValidationResult {
         severity: 'error',
         path: `css.${property}`,
         message: `The legacy “${property}” property is not allowed.`,
+      });
+    }
+  });
+
+  // Combined animation longhand check: animation-duration x
+  // animation-iteration-count in the same rule can exceed the runtime budget
+  // even when each declaration passes independently.
+  root.walkRules((rule) => {
+    let durationSeconds = 0;
+    let iterationCount = 1;
+    let sawDuration = false;
+    let sawIterations = false;
+    let unsafeVar = false;
+    rule.walkDecls((declaration) => {
+      const property = decodeCssEscapes(declaration.prop).toLowerCase();
+      const value = decodeCssEscapes(declaration.value);
+      if (property === 'animation-duration' || property === 'animation') {
+        for (const part of value.split(',')) {
+          const match = part.match(/(\d+(?:\.\d+)?)(ms|s)\b/);
+          if (match) {
+            const amount = Number.parseFloat(match[1] ?? '0');
+            durationSeconds += match[2] === 'ms' ? amount / 1000 : amount;
+          }
+        }
+        sawDuration = true;
+      }
+      if (property === 'animation-iteration-count') {
+        const match = value.match(/(\d+(?:\.\d+)?)\s*$/);
+        if (match) {
+          iterationCount = Math.max(iterationCount, Number.parseFloat(match[1] ?? '1'));
+        }
+        sawIterations = true;
+      }
+      if (/var\s*\(|attr\s*\(/.test(value)) {
+        unsafeVar = true;
+      }
+    });
+    if (unsafeVar) {
+      return; // var() case already reported by the declaration-level check.
+    }
+    if (sawDuration && sawIterations && durationSeconds * iterationCount > MAX_ANIMATION_DURATION_SECONDS) {
+      issues.push({
+        severity: 'error',
+        path: 'css.animation',
+        message: `Animation total runtime (${String(Math.round(durationSeconds * iterationCount))}s) exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
+        fix: 'Shorten the duration or reduce the iteration count.',
       });
     }
   });
@@ -553,31 +615,51 @@ export function validateCustomCss(css: string): ValidationResult {
   };
 }
 
-/** Computes the maximum compound selector depth across a rule's selectors. */
+/**
+ * Computes the maximum compound selector depth across a rule's selectors.
+ * Uses the selector AST so nested functional pseudos (:is/:where/:not) are
+ * counted recursively instead of being skipped by a string scan.
+ */
 function selectorDepth(selectors: string[]): number {
   let maxDepth = 0;
   for (const selector of selectors) {
-    let depth = 0;
-    let inParens = 0;
-    let lastWasCombinator = false;
-    for (const char of selector) {
-      if (char === '(') {
-        inParens += 1;
-      } else if (char === ')') {
-        inParens = Math.max(0, inParens - 1);
-      } else if (inParens === 0) {
-        if (char === '>' || char === '+' || char === '~') {
-          // Explicit combinator: the next compound starts a new depth level.
-          lastWasCombinator = true;
-        } else if (/\s/.test(char)) {
-          lastWasCombinator = true;
-        } else if (lastWasCombinator) {
-          depth += 1;
-          lastWasCombinator = false;
-        }
-      }
+    let ast;
+    try {
+      ast = selectorParser().astSync(selector);
+    } catch {
+      // Unparseable selectors are already reported as errors elsewhere;
+      // fall back to a conservative string count.
+      maxDepth = Math.max(maxDepth, 8);
+      continue;
     }
-    maxDepth = Math.max(maxDepth, depth + 1);
+    for (const node of ast.nodes) {
+      maxDepth = Math.max(maxDepth, selectorNodeDepth(node));
+    }
   }
   return maxDepth;
+}
+
+function selectorNodeDepth(node: import('postcss-selector-parser').Node): number {
+  let depth = 0;
+  if (node.type === 'selector' && 'nodes' in node && Array.isArray(node.nodes)) {
+    // Count compounds separated by combinators inside this selector list.
+    let compounds = 1;
+    for (const child of node.nodes) {
+      depth = Math.max(depth, selectorNodeDepth(child));
+      if (child.type === 'combinator' || (child.type === 'comment' && /^\s+$/.test(child.value ?? ''))) {
+        compounds += 1;
+      }
+    }
+    return depth + compounds;
+  }
+  if ('nodes' in node && Array.isArray(node.nodes)) {
+    for (const child of node.nodes) {
+      depth = Math.max(depth, selectorNodeDepth(child));
+    }
+  }
+  // A functional pseudo (:is(...)) introduces a new compound context.
+  if (node.type === 'pseudo' && 'nodes' in node && Array.isArray(node.nodes)) {
+    return depth + 1;
+  }
+  return depth;
 }

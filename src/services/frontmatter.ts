@@ -4,26 +4,34 @@ import { frontmatterToNoteStyle, noteStyleToFrontmatter, templateToNoteStyle } f
 import { normalizePageOptions } from '../templates/schema';
 import { clone } from '../utils/value';
 
+interface OptimisticEntry {
+  style: TemplarNoteStyle | null;
+  /** Serialized snapshot used to match the metadata cache on settle. */
+  frontmatterSnapshot: Record<string, unknown> | null;
+}
+
 /**
  * Reads and writes the `templar` frontmatter property through Obsidian's
  * file manager, with a small optimistic map so the active view renders
  * immediately without re-reading the note.
  *
  * Mutation safety:
- * - Every write is serialized per file path through a promise chain, so
- *   apply/remove/write operations cannot interleave inside
- *   `processFrontMatter`.
- * - Optimistic entries carry the write revision that produced them.
- *   `settle()` only clears an entry when the metadata event refers to the
- *   same revision, so a late event from write A cannot delete write B's
- *   optimistic state.
+ * - Every write is serialized per file through a promise chain keyed by the
+ *   `TFile` object itself (a WeakMap), so apply/remove/write operations
+ *   cannot interleave inside `processFrontMatter`, and renames cannot split
+ *   the chain.
+ * - Queued entries are removed when their own tail settles, so the map
+ *   cannot grow without bound and active chains are never bulk-cleared.
+ * - `settle()` compares the normalized metadata-cache value against the
+ *   optimistic frontmatter snapshot. Only a matching value clears the
+ *   entry, so a late metadata event for an older write cannot delete a
+ *   newer write's optimistic state, and external edits eventually surface.
  * - Styles are cloned at the repository boundary so callers cannot mutate
  *   in-flight or optimistic state by editing the object they passed in.
  */
 export class FrontmatterService {
-  private readonly optimisticStyles = new Map<string, { style: TemplarNoteStyle | null; revision: number }>();
-  private readonly writeQueues = new Map<string, Promise<unknown>>();
-  private revision = 0;
+  private readonly optimisticStyles = new Map<string, OptimisticEntry>();
+  private readonly writeQueues = new WeakMap<TFile, Promise<unknown>>();
 
   public constructor(private readonly app: App) {}
 
@@ -89,12 +97,16 @@ export class FrontmatterService {
 
   public settle(file: TFile): void {
     const entry = this.optimisticStyles.get(file.path);
-    // Only settle the entry written by the same revision the metadata event
-    // reflects. The revision recorded at persist time is compared against
-    // the current global revision: a late event from an older write must not
-    // delete a newer optimistic state. In practice Obsidian settles metadata
-    // after the write completes, so matching the stored revision is enough.
-    if (entry && entry.revision === this.revision) {
+    if (!entry) {
+      return;
+    }
+    const cache = this.app.metadataCache.getFileCache(file);
+    const cachedValue: unknown = cache?.frontmatter?.templar;
+    // Clear only when the metadata cache reflects the exact snapshot we
+    // wrote. This avoids a global revision counter (which cannot identify a
+    // specific write across files) and keeps external edits from being
+    // shadowed forever by a stale optimistic entry.
+    if (deepEqualNormalized(cachedValue, entry.frontmatterSnapshot)) {
       this.optimisticStyles.delete(file.path);
     }
   }
@@ -113,14 +125,15 @@ export class FrontmatterService {
   }
 
   private async persist(file: TFile, style: TemplarNoteStyle | null): Promise<void> {
-    this.revision += 1;
-    const writeRevision = this.revision;
+    const snapshot = style ? clone(style) : null;
+    const frontmatterSnapshot = snapshot
+      ? noteStyleToFrontmatter(snapshot)
+      : null;
     this.optimisticStyles.set(file.path, {
-      style: style ? clone(style) : null,
-      revision: writeRevision,
+      style: snapshot,
+      frontmatterSnapshot,
     });
     try {
-      const snapshot = style ? clone(style) : null;
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
         if (snapshot) {
           frontmatter.templar = noteStyleToFrontmatter(snapshot);
@@ -129,8 +142,8 @@ export class FrontmatterService {
         }
       });
     } catch (error) {
-      const current = this.optimisticStyles.get(file.path);
-      if (current && current.revision === writeRevision) {
+      // Only drop the optimistic entry if it still belongs to this write.
+      if (this.optimisticStyles.get(file.path)?.style === snapshot) {
         this.optimisticStyles.delete(file.path);
       }
       throw error;
@@ -138,21 +151,56 @@ export class FrontmatterService {
   }
 
   /**
-   * Serializes writes to the same file: the returned promise resolves only
-   * after the previous queued write for that path has settled, so
+   * Serializes writes to the same `TFile` (keyed by object identity so a
+   * rename cannot split the chain). The returned promise resolves only
+   * after the previous queued write for that file has settled, so
    * `processFrontMatter` callbacks never interleave for one note.
    */
   private enqueue(file: TFile, operation: () => Promise<void>): Promise<void> {
-    const previous = this.writeQueues.get(file.path) ?? Promise.resolve();
+    const previous = this.writeQueues.get(file) ?? Promise.resolve();
     const next = previous.then(operation);
     // Keep the chain alive even when the operation rejects so later writes
     // are not blocked forever by an earlier failure.
-    this.writeQueues.set(file.path, next.catch(() => undefined));
-    if (this.writeQueues.size > 500) {
-      // Bound memory: drop settled entries for paths that are no longer
-      // being written (best-effort cleanup).
-      this.writeQueues.clear();
-    }
+    const tail = next.catch(() => undefined);
+    this.writeQueues.set(file, tail);
+    // Remove the settled tail from the WeakMap so the queue cannot grow
+    // without bound; the identity check guarantees we never delete a newer
+    // chain that replaced this tail.
+    void tail.then(() => {
+      if (this.writeQueues.get(file) === tail) {
+        this.writeQueues.delete(file);
+      }
+    });
     return next;
   }
+}
+
+/**
+ * Normalized deep equality for metadata-cache frontmatter values. Obsidian's
+ * YAML parser may produce slightly different key ordering or omit undefined
+ * values, so compare structurally with plain objects and arrays.
+ */
+function deepEqualNormalized(left: unknown, right: unknown): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    return false;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) => deepEqualNormalized(value, right[index]));
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord).sort();
+  const rightKeys = Object.keys(rightRecord).sort();
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) =>
+    deepEqualNormalized(leftRecord[key], rightRecord[key]),
+  );
 }
