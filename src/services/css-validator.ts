@@ -103,6 +103,21 @@ function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && isKeyframesAtRuleName((rule.parent as AtRule).name);
 }
 
+/** Least common multiple, used to cover one full CSS list-repetition cycle. */
+function lcm(left: number, right: number): number {
+  if (left === 0 || right === 0) {
+    return Math.max(left, right);
+  }
+  let a = left;
+  let b = right;
+  while (b !== 0) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return (left / a) * right;
+}
+
 /**
  * Splits a CSS value on commas at parenthesis depth 0, so commas inside
  * function arguments (cubic-bezier, rgba, var) never split animation parts.
@@ -204,9 +219,12 @@ function selectorCanHideWholePage(rule: Rule): boolean {
     if (/^\.page(?:-content)?\s*:\s*(?:is|where|not)\s*\(\s*:?\s*(?:is|where|not)?\s*\(\s*\*/.test(trimmed)) {
       return true;
     }
-    // Universal with a structural pseudo that matches every element:
-    // `.page *:nth-child(n)`, `.page *:first-child`, `.page *:last-child`.
-    if (/^\.page(?:-content)?\s*\*\s*:(?:nth-child|nth-of-type|first-child|last-child|only-child)\s*\(?\s*(?:n|[12n])?\s*\)?/.test(trimmed)) {
+    // Universal with a structural pseudo that can match every element:
+    // `*:nth-child(n)`, `*:nth-child(1n)`, `*:nth-child(n+1)`, and the
+    // single-match forms (`:first-child`, `:last-child`). Enumerating An+B
+    // spellings is error-prone, so classify any structural pseudo on a
+    // universal descendant conservatively.
+    if (/^\.page(?:-content)?\s*\*\s*:(?:nth-child|nth-of-type|first-child|last-child|only-child)\s*\(?/.test(trimmed)) {
       return true;
     }
     return false;
@@ -540,31 +558,49 @@ export function validateCustomCss(css: string): ValidationResult {
     }
   });
 
-  // Combined animation longhand check: animation-duration x
-  // animation-iteration-count in the same rule can exceed the runtime budget
-  // even when each declaration passes independently. Lists pair by CSS list
-  // repetition semantics (1st with 1st, 2nd with 2nd, short list repeats).
+  // Combined animation check: after shorthand/longhand cascade, effective
+  // duration x iteration per animation can exceed the runtime budget even
+  // when each declaration passes independently. Longhands override the
+  // shorthand's corresponding component; lists pair by CSS repetition
+  // semantics (shorter list repeats cyclically).
   root.walkRules((rule) => {
-    let durations: number[] = [];
-    let iterations: number[] = [];
+    let shorthandDurations: number[] = [];
+    let shorthandIterations: number[] = [];
+    let durationOverride: number[] | null = null;
+    let iterationOverride: number[] | null = null;
     let unsafeVar = false;
     rule.walkDecls((declaration) => {
       const property = decodeCssEscapes(declaration.prop).toLowerCase();
       const value = decodeCssEscapes(declaration.value);
-      if (property === 'animation-duration' || property === 'animation') {
+      if (property === 'animation') {
         for (const part of splitTopLevel(value)) {
           let partSeconds = 0;
           for (const match of part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)) {
             const amount = Number.parseFloat(match[1] ?? '0');
             partSeconds += match[2] === 'ms' ? amount / 1000 : amount;
           }
-          durations.push(partSeconds);
+          shorthandDurations.push(partSeconds);
+          const bareNumbers = [...part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?)(?=[\s,]|$)/g)]
+            .map((match) => Number.parseFloat(match[2] ?? '0'));
+          shorthandIterations.push(bareNumbers.length > 0 ? Math.max(...bareNumbers) : 1);
+        }
+      }
+      if (property === 'animation-duration') {
+        durationOverride = [];
+        for (const part of splitTopLevel(value)) {
+          let partSeconds = 0;
+          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)) {
+            const amount = Number.parseFloat(match[1] ?? '0');
+            partSeconds += match[2] === 'ms' ? amount / 1000 : amount;
+          }
+          durationOverride.push(partSeconds);
         }
       }
       if (property === 'animation-iteration-count') {
+        iterationOverride = [];
         for (const part of splitTopLevel(value)) {
           const match = part.match(/(\d+(?:\.\d+)?)\s*$/);
-          iterations.push(match ? Number.parseFloat(match[1] ?? '1') : 1);
+          iterationOverride.push(match ? Number.parseFloat(match[1] ?? '1') : 1);
         }
       }
       if (/var\s*\(|attr\s*\(/.test(value)) {
@@ -574,19 +610,39 @@ export function validateCustomCss(css: string): ValidationResult {
     if (unsafeVar) {
       return; // var() case already reported by the declaration-level check.
     }
-    if (durations.length > 0 && iterations.length > 0) {
-      const count = Math.max(durations.length, iterations.length);
-      for (let index = 0; index < count; index += 1) {
-        const duration = durations[index % durations.length] ?? 0;
-        const iteration = iterations[index % iterations.length] ?? 1;
-        if (duration * iteration > MAX_ANIMATION_DURATION_SECONDS) {
-          issues.push({
-            severity: 'error',
-            path: 'css.animation',
-            message: `Animation total runtime (${String(Math.round(duration * iteration))}s) exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
-            fix: 'Shorten the duration or reduce the iteration count.',
-          });
-          break;
+    // CSS cascade: the `animation` shorthand resets unspecified longhands to
+    // their initial values, and longhands declared after override the
+    // shorthand. Rather than model source order, check every plausible
+    // effective pairing conservatively: if any exceeds the budget, reject.
+    const durationSets = [
+      durationOverride ?? shorthandDurations,
+      shorthandDurations,
+    ];
+    const iterationSets = [
+      iterationOverride ?? shorthandIterations,
+      shorthandIterations,
+    ];
+    for (const durations of durationSets) {
+      if (durations.length === 0) {
+        continue;
+      }
+      for (const iterations of iterationSets) {
+        if (iterations.length === 0) {
+          continue;
+        }
+        const count = lcm(durations.length, iterations.length);
+        for (let index = 0; index < count; index += 1) {
+          const duration = durations[index % durations.length] ?? 0;
+          const iteration = iterations[index % iterations.length] ?? 1;
+          if (duration * iteration > MAX_ANIMATION_DURATION_SECONDS) {
+            issues.push({
+              severity: 'error',
+              path: 'css.animation',
+              message: `Animation total runtime (${String(Math.round(duration * iteration))}s) exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
+              fix: 'Shorten the duration or reduce the iteration count.',
+            });
+            break;
+          }
         }
       }
     }

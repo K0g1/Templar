@@ -212,3 +212,26 @@ describe('FrontmatterService settle semantics', () => {
     expect(cached?.name).toBe('Snapshot Match');
   });
 });
+
+describe('FrontmatterService external edit handling', () => {
+  it('settle surfaces unmatched external edits over optimistic state', async () => {
+    const { service, gate } = makeService();
+    const file = makeFile();
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.name = 'Internal Write';
+    const write = service.writeStyle(file, style);
+    gate.resolve();
+    await write;
+
+    // An external edit changes the note to a style we never wrote.
+    const external = templateToNoteStyle(BUILT_IN_TEMPLATES[1]!);
+    external.name = 'External Edit';
+    const { noteStyleToFrontmatter } = await import('../../src/templates/note-format');
+    (service as unknown as { app: { metadataCache: { getFileCache: ReturnType<typeof vi.fn> } } }).app.metadataCache.getFileCache = vi.fn().mockReturnValue({
+      frontmatter: { templar: noteStyleToFrontmatter(external) },
+    });
+    service.settle(file);
+    const surfaced = service.getStyle(file);
+    expect(surfaced?.name).toBe('External Edit');
+  });
+});

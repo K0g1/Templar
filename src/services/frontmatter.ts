@@ -120,13 +120,16 @@ export class FrontmatterService {
       return;
     }
 
-    // The cache value matches no expected write. If we still have pending
-    // writes, keep the optimistic state (a stale event can arrive before
-    // the newest write's event). If there are no pending snapshots left,
-    // this is an external edit and supersedes our optimistic state.
-    if (entry.expectedSnapshots.length === 0) {
-      this.optimisticStyles.delete(file.path);
-    }
+    // The cache value matches no expected snapshot. This can be:
+    // - a stale event for an already-drained write (cache still shows an
+    //   older value); or
+    // - an external edit that superseded our writes before their metadata
+    //   events arrived.
+    // In both cases the disk is the source of truth: drop the optimistic
+    // state so the next read reflects the metadata cache. Optimistic state
+    // is only a rendering optimization, and converging to disk is always
+    // correct.
+    this.optimisticStyles.delete(file.path);
   }
 
   public rename(oldPath: string, newPath: string): void {

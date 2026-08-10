@@ -260,3 +260,22 @@ describe('CSS round 3 bypass regression suite', () => {
     expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
   });
 });
+
+describe('CSS round 4 bypass regression suite', () => {
+  it('rejects nth-child(1n) and nth-child(n+1) whole-note hiding', () => {
+    const a = errors('.page *:nth-child(1n) { display: none; }');
+    expect(a.some((m) => m.includes('hide or disable'))).toBe(true);
+    const b = errors('.page *:nth-child(n+1) { opacity: 0; }');
+    expect(b.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects shorthand iteration combined with longhand duration', () => {
+    const result = errors('.page p { animation: spin .1s 100; animation-duration: 1s; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects mismatched list lengths with repetition semantics', () => {
+    const result = errors('.page p { animation-duration: 10s, 1s; animation-iteration-count: 4; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+});
