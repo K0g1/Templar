@@ -62,7 +62,9 @@ export class PageRenderer {
     queueMicrotask(() => {
       this.scheduled = false;
       if (!this.destroyed) {
-        void this.refreshAll();
+        void this.refreshAll().catch((error) => {
+          console.error('[Templar] refreshAll failed:', error);
+        });
       }
     });
   }
@@ -144,7 +146,9 @@ export class PageRenderer {
 
   public cancelPreviewsByOwner(owner: string): void {
     for (const leaf of this.previews.deleteByOwner(owner)) {
-      void this.refreshLeaf(leaf);
+      void this.refreshLeaf(leaf).catch((error) => {
+        console.error('[Templar] refreshLeaf failed:', error);
+      });
     }
   }
 

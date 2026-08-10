@@ -165,3 +165,50 @@ describe('FrontmatterService mutation serialization', () => {
     void failGate;
   });
 });
+
+describe('FrontmatterService settle semantics', () => {
+  it('settle clears optimistic removal when cache value is absent', async () => {
+    const { service, processCalls, gate } = makeService();
+    const file = makeFile();
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    const write = service.writeStyle(file, style);
+    gate.resolve();
+    await write;
+
+    const remove = service.removeStyle(file);
+    // First write settled; second gate resolves removal.
+    gate.resolve();
+    await remove;
+
+    // Simulate the metadata event after removal: templar is absent.
+    (service as unknown as { app: { metadataCache: { getFileCache: ReturnType<typeof vi.fn> } } }).app.metadataCache.getFileCache = vi.fn().mockReturnValue({
+      frontmatter: {},
+    });
+    service.settle(file);
+    // Optimistic state must be cleared (no stale shadowing).
+    expect(service.hasStyle(file)).toBe(false);
+    void processCalls;
+  });
+
+  it('settle clears optimistic style when cache matches snapshot', async () => {
+    const { service, gate } = makeService();
+    const file = makeFile();
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.name = 'Snapshot Match';
+    const write = service.writeStyle(file, style);
+    gate.resolve();
+    await write;
+
+    // Metadata cache now reflects the exact written snapshot.
+    const snapshot = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    snapshot.name = 'Snapshot Match';
+    const { noteStyleToFrontmatter } = await import('../../src/templates/note-format');
+    (service as unknown as { app: { metadataCache: { getFileCache: ReturnType<typeof vi.fn> } } }).app.metadataCache.getFileCache = vi.fn().mockReturnValue({
+      frontmatter: { templar: noteStyleToFrontmatter(snapshot) },
+    });
+    service.settle(file);
+    expect(service.hasStyle(file)).toBe(true); // falls through to cache
+    const cached = service.getStyle(file);
+    expect(cached?.name).toBe('Snapshot Match');
+  });
+});

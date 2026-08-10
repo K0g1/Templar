@@ -6,9 +6,11 @@ import { clone } from '../utils/value';
 
 interface OptimisticEntry {
   style: TemplarNoteStyle | null;
-  /** Serialized snapshot used to match the metadata cache on settle. */
-  frontmatterSnapshot: Record<string, unknown> | null;
+  /** FIFO of snapshots still expected from metadata events. */
+  expectedSnapshots: Array<Record<string, unknown> | null>;
 }
+
+const MAX_EXPECTED_SNAPSHOTS = 8;
 
 /**
  * Reads and writes the `templar` frontmatter property through Obsidian's
@@ -22,10 +24,12 @@ interface OptimisticEntry {
  *   the chain.
  * - Queued entries are removed when their own tail settles, so the map
  *   cannot grow without bound and active chains are never bulk-cleared.
- * - `settle()` compares the normalized metadata-cache value against the
- *   optimistic frontmatter snapshot. Only a matching value clears the
- *   entry, so a late metadata event for an older write cannot delete a
- *   newer write's optimistic state, and external edits eventually surface.
+ * - `settle()` matches the metadata-cache value against the FIFO of
+ *   expected write snapshots. Missing values (`undefined` from a deleted
+ *   property and `null` from a removal snapshot) are treated as the same
+ *   "absent" state. A cache value that matches an older expected write only
+ *   drains that entry; a value matching none of the expected snapshots is
+ *   treated as an external edit that supersedes optimistic state.
  * - Styles are cloned at the repository boundary so callers cannot mutate
  *   in-flight or optimistic state by editing the object they passed in.
  */
@@ -102,11 +106,25 @@ export class FrontmatterService {
     }
     const cache = this.app.metadataCache.getFileCache(file);
     const cachedValue: unknown = cache?.frontmatter?.templar;
-    // Clear only when the metadata cache reflects the exact snapshot we
-    // wrote. This avoids a global revision counter (which cannot identify a
-    // specific write across files) and keeps external edits from being
-    // shadowed forever by a stale optimistic entry.
-    if (deepEqualNormalized(cachedValue, entry.frontmatterSnapshot)) {
+    const normalized = normalizeAbsent(cachedValue);
+
+    // Drain any expected snapshot that matches the incoming cache value.
+    const matchingIndex = entry.expectedSnapshots.findIndex((snapshot) =>
+      deepEqualNormalized(normalizeAbsent(snapshot), normalized),
+    );
+    if (matchingIndex >= 0) {
+      entry.expectedSnapshots.splice(0, matchingIndex + 1);
+      if (entry.expectedSnapshots.length === 0) {
+        this.optimisticStyles.delete(file.path);
+      }
+      return;
+    }
+
+    // The cache value matches no expected write. If we still have pending
+    // writes, keep the optimistic state (a stale event can arrive before
+    // the newest write's event). If there are no pending snapshots left,
+    // this is an external edit and supersedes our optimistic state.
+    if (entry.expectedSnapshots.length === 0) {
       this.optimisticStyles.delete(file.path);
     }
   }
@@ -129,10 +147,16 @@ export class FrontmatterService {
     const frontmatterSnapshot = snapshot
       ? noteStyleToFrontmatter(snapshot)
       : null;
-    this.optimisticStyles.set(file.path, {
-      style: snapshot,
-      frontmatterSnapshot,
-    });
+    const entry = this.optimisticStyles.get(file.path) ?? {
+      style: null,
+      expectedSnapshots: [],
+    };
+    entry.style = snapshot;
+    entry.expectedSnapshots.push(frontmatterSnapshot);
+    if (entry.expectedSnapshots.length > MAX_EXPECTED_SNAPSHOTS) {
+      entry.expectedSnapshots.splice(0, entry.expectedSnapshots.length - MAX_EXPECTED_SNAPSHOTS);
+    }
+    this.optimisticStyles.set(file.path, entry);
     try {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
         if (snapshot) {
@@ -143,7 +167,8 @@ export class FrontmatterService {
       });
     } catch (error) {
       // Only drop the optimistic entry if it still belongs to this write.
-      if (this.optimisticStyles.get(file.path)?.style === snapshot) {
+      const current = this.optimisticStyles.get(file.path);
+      if (current && current.style === snapshot) {
         this.optimisticStyles.delete(file.path);
       }
       throw error;
@@ -173,6 +198,14 @@ export class FrontmatterService {
     });
     return next;
   }
+}
+
+/**
+ * Treats `undefined` (property absent from metadata cache) and `null` (our
+ * removal snapshot) as the same "absent" representation so removal settles.
+ */
+function normalizeAbsent(value: unknown): unknown {
+  return value === undefined ? null : value;
 }
 
 /**

@@ -233,3 +233,30 @@ describe('CSS semantic bypass regression suite', () => {
     expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
   });
 });
+
+describe('CSS round 3 bypass regression suite', () => {
+  it('rejects translate offscreen on whole-note selectors', () => {
+    const result = errors('.page * { translate: -100000px 0; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects whole-note hiding via *:nth-child(n)', () => {
+    const result = errors('.page *:nth-child(n) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects animation with matching duration and iteration values', () => {
+    const result = errors('.page p { animation: spin 6s 6 linear; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects animation with commas inside function parameters', () => {
+    const result = errors('.page p { animation: spin 10s cubic-bezier(.1,.2,.3,.4) 4; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects longhand list pairing duration x iteration', () => {
+    const result = errors('.page p { animation-duration: 10s, 1s; animation-iteration-count: 4, 1; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+});

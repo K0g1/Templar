@@ -103,6 +103,31 @@ function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && isKeyframesAtRuleName((rule.parent as AtRule).name);
 }
 
+/**
+ * Splits a CSS value on commas at parenthesis depth 0, so commas inside
+ * function arguments (cubic-bezier, rgba, var) never split animation parts.
+ */
+function splitTopLevel(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of value) {
+    if (char === '(') {
+      depth += 1;
+    } else if (char === ')') {
+      depth = Math.max(0, depth - 1);
+    }
+    if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current);
+  return parts;
+}
+
 function selectorStartsWithVirtualRoot(selector: string): boolean {
   return /^\.page(?:-content)?(?=$|[\s.:#[])/.test(selector.trim());
 }
@@ -177,6 +202,11 @@ function selectorCanHideWholePage(rule: Rule): boolean {
     }
     // A bare :is(:where(*)) or :not(*) that can degrade to universal.
     if (/^\.page(?:-content)?\s*:\s*(?:is|where|not)\s*\(\s*:?\s*(?:is|where|not)?\s*\(\s*\*/.test(trimmed)) {
+      return true;
+    }
+    // Universal with a structural pseudo that matches every element:
+    // `.page *:nth-child(n)`, `.page *:first-child`, `.page *:last-child`.
+    if (/^\.page(?:-content)?\s*\*\s*:(?:nth-child|nth-of-type|first-child|last-child|only-child)\s*\(?\s*(?:n|[12n])?\s*\)?/.test(trimmed)) {
       return true;
     }
     return false;
@@ -392,14 +422,19 @@ export function validateCustomCss(css: string): ValidationResult {
         (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())) ||
         // Transform/filter/clip/mask can visually erase the note through
         // many spellings (scale(0), scaleX(0), opacity(0%), circle(0),
-        // inset(50%)...). On a whole-page-capable selector, reject the
-        // property outright rather than enumerating every hiding form.
+        // inset(50%), translate offscreen...). On a whole-page-capable
+        // selector, reject the property outright rather than enumerating
+        // every hiding form.
         (property === 'transform' ||
+          property === 'translate' ||
           property === 'scale' ||
+          property === 'rotate' ||
           property === 'filter' ||
           property === 'clip-path' ||
           property === 'mask' ||
           property === 'mask-image' ||
+          property === '-webkit-mask' ||
+          property === '-webkit-mask-image' ||
           property === 'backdrop-filter'))
     ) {
       issues.push({
@@ -451,15 +486,18 @@ export function validateCustomCss(css: string): ValidationResult {
           fix: 'Use literal animation durations and iteration counts.',
         });
       }
-      for (const part of value.split(',')) {
-        // Durations can appear anywhere in the shorthand, not only first.
+      for (const part of splitTopLevel(value)) {
+        // Durations are identified by their unit (ms|s), NOT by numeric
+        // comparison, so `spin 6s 6 linear` keeps 6 as the iteration count.
         const durations = [...part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)];
-        // Iteration count: any bare number that is NOT a duration token.
-        // `animation: spin 30s 1000 linear` has 30s (duration) and 1000
-        // (iterations). Take the largest bare number as the count.
-        const bareNumbers = [...part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?)(?=\s|$)/g)]
-          .map((match) => Number.parseFloat(match[2] ?? '0'))
-          .filter((amount) => !durations.some((d) => Number.parseFloat(d[1] ?? '0') === amount));
+        // Iteration count: a bare number token (not carrying a time unit and
+        // not part of a function's parameters). The regex only matches
+        // numbers whose next char is whitespace, a comma, or end-of-part,
+        // so unit-carrying durations never appear here.
+        const bareNumbers: number[] = [];
+        for (const match of part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?)(?=[\s,]|$)/g)) {
+          bareNumbers.push(Number.parseFloat(match[2] ?? '0'));
+        }
         let totalSeconds = 0;
         for (const match of durations) {
           const amount = Number.parseFloat(match[1] ?? '0');
@@ -504,32 +542,30 @@ export function validateCustomCss(css: string): ValidationResult {
 
   // Combined animation longhand check: animation-duration x
   // animation-iteration-count in the same rule can exceed the runtime budget
-  // even when each declaration passes independently.
+  // even when each declaration passes independently. Lists pair by CSS list
+  // repetition semantics (1st with 1st, 2nd with 2nd, short list repeats).
   root.walkRules((rule) => {
-    let durationSeconds = 0;
-    let iterationCount = 1;
-    let sawDuration = false;
-    let sawIterations = false;
+    let durations: number[] = [];
+    let iterations: number[] = [];
     let unsafeVar = false;
     rule.walkDecls((declaration) => {
       const property = decodeCssEscapes(declaration.prop).toLowerCase();
       const value = decodeCssEscapes(declaration.value);
       if (property === 'animation-duration' || property === 'animation') {
-        for (const part of value.split(',')) {
-          const match = part.match(/(\d+(?:\.\d+)?)(ms|s)\b/);
-          if (match) {
+        for (const part of splitTopLevel(value)) {
+          let partSeconds = 0;
+          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)) {
             const amount = Number.parseFloat(match[1] ?? '0');
-            durationSeconds += match[2] === 'ms' ? amount / 1000 : amount;
+            partSeconds += match[2] === 'ms' ? amount / 1000 : amount;
           }
+          durations.push(partSeconds);
         }
-        sawDuration = true;
       }
       if (property === 'animation-iteration-count') {
-        const match = value.match(/(\d+(?:\.\d+)?)\s*$/);
-        if (match) {
-          iterationCount = Math.max(iterationCount, Number.parseFloat(match[1] ?? '1'));
+        for (const part of splitTopLevel(value)) {
+          const match = part.match(/(\d+(?:\.\d+)?)\s*$/);
+          iterations.push(match ? Number.parseFloat(match[1] ?? '1') : 1);
         }
-        sawIterations = true;
       }
       if (/var\s*\(|attr\s*\(/.test(value)) {
         unsafeVar = true;
@@ -538,13 +574,21 @@ export function validateCustomCss(css: string): ValidationResult {
     if (unsafeVar) {
       return; // var() case already reported by the declaration-level check.
     }
-    if (sawDuration && sawIterations && durationSeconds * iterationCount > MAX_ANIMATION_DURATION_SECONDS) {
-      issues.push({
-        severity: 'error',
-        path: 'css.animation',
-        message: `Animation total runtime (${String(Math.round(durationSeconds * iterationCount))}s) exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
-        fix: 'Shorten the duration or reduce the iteration count.',
-      });
+    if (durations.length > 0 && iterations.length > 0) {
+      const count = Math.max(durations.length, iterations.length);
+      for (let index = 0; index < count; index += 1) {
+        const duration = durations[index % durations.length] ?? 0;
+        const iteration = iterations[index % iterations.length] ?? 1;
+        if (duration * iteration > MAX_ANIMATION_DURATION_SECONDS) {
+          issues.push({
+            severity: 'error',
+            path: 'css.animation',
+            message: `Animation total runtime (${String(Math.round(duration * iteration))}s) exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
+            fix: 'Shorten the duration or reduce the iteration count.',
+          });
+          break;
+        }
+      }
     }
   });
 
