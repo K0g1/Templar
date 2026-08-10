@@ -139,3 +139,23 @@ describe('built-in template catalog', () => {
     expect(failures).toEqual([]);
   });
 });
+
+describe('built-in template validation under hardened rules', () => {
+  it('every built-in template still passes the hardened validator', async () => {
+    const { validateCustomCss } = await import('../src/services/css-validator');
+    const failures: string[] = [];
+    for (const template of BUILT_IN_TEMPLATES) {
+      if (!template.css) continue;
+      const result = validateCustomCss(template.css);
+      if (!result.valid) {
+        failures.push(
+          `${template.id}: ${result.issues
+            .filter((issue) => issue.severity === 'error')
+            .map((issue) => issue.message)
+            .join('; ')}`,
+        );
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+});

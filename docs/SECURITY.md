@@ -40,11 +40,21 @@ Every non-keyframe selector must start with `.page` or `.page-content`. The vali
 - viewport media queries that would make a fixed page reflow;
 - viewport/container/environment-dependent lengths, container queries, `!important`, and private runtime selectors that could override the fixed canvas.
 
-Infinite animations and backdrop filters produce warnings. Validation errors omit advanced CSS from rendering.
+Infinite animations, `:has()` selectors, selectors deeper than 6 compound
+levels, more than 250 rules, more than 40 declarations in one rule, more
+than 16 keyframe blocks, and animations longer than 30 seconds are rejected
+as errors. Backdrop filters produce warnings. Validation errors omit
+advanced CSS from rendering.
 
 The compiler replaces virtual roots with a unique view scope and plugin-owned page class. It maps stable element vocabulary onto Reading/Live Preview adapters and prefixes keyframe names per note. CSS is assigned with `style.textContent`, not HTML parsing.
 
-Structured fields pass through a conservative scalar CSS-value guard that rejects declaration terminators, braces, markup delimiters, `url()`, and `expression()` before interpolation.
+Structured fields pass through a conservative scalar CSS-value guard that
+first canonicalizes CSS escapes, then rejects declaration terminators,
+braces, markup delimiters, resource-loading functions (`url()`, `src()`,
+`image()`, `image-set()`, `-webkit-image-set()`, `expression()`), and any
+protocol-ish URL pattern (`http:`, `data:`, `blob:`, `file:`, `app:`, `//`)
+before interpolation. The same canonicalization prevents escaped
+`u\72l(...)` forms from bypassing the literal `url(` check.
 
 ## Network and privacy
 

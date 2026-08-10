@@ -30,8 +30,48 @@ export interface StyleCompilation {
   issues: ValidationIssue[];
 }
 
+/**
+ * Decodes CSS escape sequences (hex and single-character) so security checks
+ * see the canonical form. Without this, `u\72l(...)` bypasses a literal
+ * `url(` check.
+ */
+function decodeCssEscapes(value: string): string {
+  return value.replace(
+    /\\(?:([0-9a-f]{1,6})\s?|([^\r\n0-9a-f]))/gi,
+    (_match, hex: string | undefined, character: string | undefined) => {
+      if (hex) {
+        const codePoint = Number.parseInt(hex, 16);
+        return codePoint === 0 || codePoint > 0x10ffff
+          ? '\uFFFD'
+          : String.fromCodePoint(codePoint);
+      }
+      return character ?? '';
+    },
+  );
+}
+
+/**
+ * Guards a single structured scalar value before it is interpolated into
+ * compiled CSS. The guard canonicalizes CSS escapes first, then rejects:
+ * - empty or whitespace-only values;
+ * - CSS syntax breakouts (`;`, `{`, `}`, `<`, `>`);
+ * - resource-loading functions (`url()`, `image()`, `image-set()`, `src()`,
+ *   `-webkit-image-set()`) and `expression()`;
+ * - any protocol-ish URL pattern (`http:`, `data:`, `blob:`, `file:`, `app:`,
+ *   `//`).
+ *
+ * Property-specific allowlists live in the callers; this function is the
+ * shared injection fence for every interpolated structured field.
+ */
 function safeValue(value: string, fallback: string): string {
-  if (!value.trim() || /[;{}<>]/.test(value) || /(?:url|expression)\s*\(/i.test(value)) {
+  if (!value.trim() || /[;{}<>]/.test(value)) {
+    return fallback;
+  }
+  const decoded = decodeCssEscapes(value);
+  if (
+    /(?:url|src|image|image-set|-webkit-image-set|expression)\s*\(/i.test(decoded) ||
+    /(?:https?:|data:|blob:|file:|app:)|(?:\/\/)/i.test(decoded)
+  ) {
     return fallback;
   }
   return value;

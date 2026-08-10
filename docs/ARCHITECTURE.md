@@ -53,15 +53,40 @@ Renderer settled state ── PrintService ── temporary print scope → host
 
 ## Entry point
 
-`src/main.ts` owns plugin lifecycle and registration. It:
+`src/main.ts` owns plugin lifecycle and facade orchestration. It:
 
 - loads normalized settings;
 - constructs services;
-- registers the sidebar view, CodeMirror extension, settings tab, commands, ribbon, menus, post-processor, and lifecycle-safe events;
-- defers initial rendering until `workspace.onLayoutReady()`;
+- delegates command registration to `src/registration/commands.ts`
+  (`CommandRegistrar`) and event registration to
+  `src/registration/events.ts` (`WorkspaceEventController`);
+- delegates note style workflows (apply/remove/write/style rules) to
+  `src/services/note-style-controller.ts` (`NoteStyleController`);
+- registers the sidebar view, CodeMirror extension, settings tab, ribbon,
+  and defers initial rendering until `workspace.onLayoutReady()`;
 - coordinates user notices and view refreshes.
 
-It must remain orchestration code. Parsing, compilation, persistence, and complex UI belong elsewhere.
+It must remain orchestration code. Parsing, compilation, persistence, and
+complex UI belong elsewhere. Every long-lived listener, observer, and frame
+has an owning controller with an explicit cleanup path.
+
+## Rendering controllers
+
+`PageRenderer` is an orchestration facade over four dedicated controllers:
+
+- `src/services/view-style-host.ts` (`ViewStyleHost`) owns the scoped
+  `<style>` element, the templar class markers, and reading/source page
+  class application.
+- `src/services/image-snap-controller.ts` (`ImageSnapController`) owns image
+  baseline compensation and its resize/mutation observers.
+- `src/services/reading-whitespace-controller.ts`
+  (`ReadingViewWhitespaceController`) owns blank-line spacer reconciliation,
+  the reading-root registry, and scheduled animation frames.
+- `src/services/preview-style-store.ts` (`PreviewStyleStore`) owns
+  leaf-local try-on preview state (always cloned, never leaked to disk).
+
+`PageRenderer` decides *when* work happens (refresh scheduling, generation
+guards); the controllers decide *how*.
 
 ## Data model
 
@@ -152,12 +177,14 @@ Two residual behaviors follow from Obsidian's measurement model (heights are re-
 
 - Enumerates current Markdown leaves rather than holding view instances.
 - Uses a per-leaf generation number to prevent an old async font measurement from overwriting a newer render.
-- Adds/removes classes and the owned style element.
-- Configures image and page-layout observers.
+- Delegates DOM artifact ownership to `ViewStyleHost`, image baseline
+  compensation to `ImageSnapController`, blank-line reconciliation to
+  `ReadingViewWhitespaceController`, and preview state to
+  `PreviewStyleStore`.
+- Configures the `PageLayoutService` for paged geometry.
 - Records validation issues per file for settings diagnostics.
-- Owns leaf-scoped temporary style overrides and generation checks, so a stale async measurement from preview A cannot overwrite preview B.
 - Exposes an explicit print-preparation refresh that waits for the current compiler/layout state.
-- Per Reading root, tracks the post-processor context and a source-ordered section list (including temporarily detached virtual-scroller elements) that feeds blank-line reconciliation; discarded sections are compacted after `getSectionInfo` marks them stale, and replaced roots are pruned with their scheduled frames.
+- Per Reading root, the whitespace controller tracks the post-processor context and a source-ordered section list (including temporarily detached virtual-scroller elements) that feeds blank-line reconciliation; discarded sections are compacted after `getSectionInfo` marks them stale, and replaced roots are pruned with their scheduled frames.
 
 ### Image compensation
 

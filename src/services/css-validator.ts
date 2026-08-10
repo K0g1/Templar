@@ -92,6 +92,13 @@ const reservedRootGeometryProperties = new Set([
 const unstableLengthUnit =
   /[-+]?(?:\d+|\d*\.\d+)\s*(?:cqb|cqh|cqi|cqmax|cqmin|cqw|dvh|dvw|lvh|lvw|svh|svw|vb|vh|vi|vmax|vmin|vw)\b/i;
 
+/** Hard ceilings for a portable, performance-safe template. */
+const MAX_RULES = 250;
+const MAX_DECLARATIONS_PER_RULE = 40;
+const MAX_KEYFRAME_BLOCKS = 16;
+const MAX_SELECTOR_DEPTH = 6;
+const MAX_ANIMATION_DURATION_SECONDS = 30;
+
 function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as AtRule).name);
 }
@@ -158,10 +165,37 @@ function isSafePreferenceMediaQuery(params: string): boolean {
   return remainder.length === 0;
 }
 
+/**
+ * Detects selectors that would hide or disable the entire note, including
+ * universal selectors wrapped in :is()/:where()/:not() and combinator
+ * variants (`.page *`, `.page > *`, `.page-content :is(*)`).
+ *
+ * The check operates on the decoded selector string (escapes resolved) and
+ * treats any selector that can match every element inside the page root as
+ * whole-page capable. It is intentionally conservative: a false positive
+ * rejects a template; a false negative would let a malicious template blank
+ * the user's note or overlay fake UI.
+ */
 function selectorCanHideWholePage(rule: Rule): boolean {
-  return rule.selectors.some((selector) =>
-    /^\.page(?:-content)?(?:\s*[>+~]?\s*\*)?\s*$/.test(selector.trim()),
-  );
+  return rule.selectors.some((selector) => {
+    const decoded = decodeCssEscapes(selector).toLowerCase();
+    const trimmed = decoded.trim();
+    // Direct root or root + universal child with any combinator.
+    if (/^\.page(?:-content)?(?:\s*[>+~]?\s*\*)?$/.test(trimmed)) {
+      return true;
+    }
+    // Universal wrapped in a forgiving selector list: :is(*), :where(*),
+    // :not(*) — including nested and spaced forms.
+    const universalWrapped = /:\s*(?:is|where|not)\s*\(\s*(?:\*|\*\s*\)|.*\*)/.test(trimmed);
+    if (universalWrapped && /^\.page(?:-content)?(?:\s|[:.#[>+~])/.test(trimmed)) {
+      return true;
+    }
+    // A bare :is(:where(*)) or :not(*) that can degrade to universal.
+    if (/^\.page(?:-content)?\s*:\s*(?:is|where|not)\s*\(\s*:?\s*(?:is|where|not)?\s*\(\s*\*/.test(trimmed)) {
+      return true;
+    }
+    return false;
+  });
 }
 
 function validateSelector(selector: string, issues: ValidationIssue[]): void {
@@ -192,6 +226,14 @@ function validateSelector(selector: string, issues: ValidationIssue[]): void {
           severity: 'error',
           path: 'css.selector',
           message: 'The :global() escape is not supported because it can leak outside the note.',
+        });
+      }
+      if (lower.includes(':has(')) {
+        issues.push({
+          severity: 'error',
+          path: 'css.selector',
+          message: 'The :has() selector is not allowed because it is expensive and can escape the page.',
+          fix: 'Use class or descendant selectors instead.',
         });
       }
       if (lower.includes('.templar-')) {
@@ -359,13 +401,30 @@ export function validateCustomCss(css: string): ValidationResult {
         fix: 'Target a specific Markdown element without making the page inaccessible.',
       });
     }
-    if (property.includes('animation') && /\binfinite\b/.test(value)) {
-      issues.push({
-        severity: 'warning',
-        path: `css.${property}`,
-        message: 'Infinite animation can consume battery while the note is open.',
-        fix: 'Use a finite animation count or remove the animation.',
-      });
+    if (property.includes('animation')) {
+      if (/\binfinite\b/.test(value)) {
+        issues.push({
+          severity: 'error',
+          path: `css.${property}`,
+          message: 'Infinite animation is not allowed because it consumes battery and CPU while the note is open.',
+          fix: 'Use a finite animation count or remove the animation.',
+        });
+      }
+      const durationMatch = value.match(/(\d+(?:\.\d+)?)(ms|s)\b/);
+      if (durationMatch) {
+        const duration = durationMatch[1] === undefined
+          ? 0
+          : Number.parseFloat(durationMatch[1]);
+        const seconds = durationMatch[2] === 'ms' ? duration / 1000 : duration;
+        if (seconds > MAX_ANIMATION_DURATION_SECONDS) {
+          issues.push({
+            severity: 'error',
+            path: `css.${property}`,
+            message: `Animation longer than ${String(MAX_ANIMATION_DURATION_SECONDS)} seconds is not allowed.`,
+            fix: 'Shorten the animation duration.',
+          });
+        }
+      }
     }
     if (property === 'backdrop-filter') {
       issues.push({
@@ -384,20 +443,88 @@ export function validateCustomCss(css: string): ValidationResult {
   });
 
   let ruleCount = 0;
-  root.walkRules(() => {
+  root.walkRules((rule) => {
     ruleCount += 1;
+    if (!isInsideKeyframes(rule)) {
+      const depth = selectorDepth(rule.selectors);
+      if (depth > MAX_SELECTOR_DEPTH) {
+        issues.push({
+          severity: 'error',
+          path: 'css.selector',
+          message: `Selector nesting depth ${String(depth)} exceeds the limit of ${String(MAX_SELECTOR_DEPTH)}.`,
+          fix: 'Flatten descendant selectors to reduce matching cost.',
+        });
+      }
+    }
   });
-  if (ruleCount > 250) {
+  if (ruleCount > MAX_RULES) {
+    issues.push({
+      severity: 'error',
+      path: 'css',
+      message: `This template has ${String(ruleCount)} CSS rules, exceeding the limit of ${String(MAX_RULES)}.`,
+      fix: 'Combine repeated selectors and declarations.',
+    });
+  } else if (ruleCount > MAX_RULES * 0.8) {
     issues.push({
       severity: 'warning',
       path: 'css',
-      message: `This template has ${String(ruleCount)} top-level CSS rules and may be slow to edit.`,
+      message: `This template has ${String(ruleCount)} CSS rules and is approaching the ${String(MAX_RULES)} rule limit.`,
       fix: 'Combine repeated selectors and declarations.',
     });
   }
+
+  let keyframeBlockCount = 0;
+  root.walkAtRules((atRule) => {
+    if (/keyframes$/i.test(atRule.name)) {
+      keyframeBlockCount += 1;
+    }
+  });
+  if (keyframeBlockCount > MAX_KEYFRAME_BLOCKS) {
+    issues.push({
+      severity: 'error',
+      path: 'css',
+      message: `This template defines ${String(keyframeBlockCount)} keyframe blocks, exceeding the limit of ${String(MAX_KEYFRAME_BLOCKS)}.`,
+      fix: 'Reuse one keyframe block instead of many near-identical ones.',
+    });
+  }
+
+  root.walkRules((rule) => {
+    let declarations = 0;
+    rule.walkDecls(() => {
+      declarations += 1;
+    });
+    if (declarations > MAX_DECLARATIONS_PER_RULE) {
+      issues.push({
+        severity: 'error',
+        path: 'css',
+        message: `A rule with ${String(declarations)} declarations exceeds the limit of ${String(MAX_DECLARATIONS_PER_RULE)}.`,
+        fix: 'Split or simplify the rule.',
+      });
+    }
+  });
 
   return {
     valid: !issues.some((issue) => issue.severity === 'error'),
     issues,
   };
+}
+
+/** Computes the maximum compound selector depth across a rule's selectors. */
+function selectorDepth(selectors: string[]): number {
+  let maxDepth = 0;
+  for (const selector of selectors) {
+    let depth = 0;
+    let inParens = 0;
+    for (const char of selector) {
+      if (char === '(') {
+        inParens += 1;
+      } else if (char === ')') {
+        inParens = Math.max(0, inParens - 1);
+      } else if (inParens === 0 && /\s/.test(char)) {
+        depth += 1;
+      }
+    }
+    maxDepth = Math.max(maxDepth, depth + 1);
+  }
+  return maxDepth;
 }

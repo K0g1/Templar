@@ -20,6 +20,7 @@ export default defineConfig(
           allowDefaultProject: [
             'eslint.config.mts',
             'manifest.json',
+            'vitest.config.ts',
             'scripts/verify-mobile-bundle.mjs',
             'scripts/verify-release.mjs',
           ],
@@ -38,6 +39,22 @@ export default defineConfig(
     rules: {
       'obsidianmd/no-nodejs-modules': 'off',
       'obsidianmd/rule-custom-message': 'off',
+    },
+  },
+  {
+    // Tests run in a Node/jsdom harness: they must touch the global object to
+    // install Obsidian's classList helpers, and DOM creation via
+    // document.createElement is intentional. Obsidian-runtime lint rules do
+    // not apply to the test harness.
+    files: ['tests/**/*.ts', 'vitest.config.ts'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+    rules: {
+      'obsidianmd/no-global-this': 'off',
+      'obsidianmd/prefer-create-el': 'off',
+      'obsidianmd/no-nodejs-modules': 'off',
+      'obsidianmd/no-static-styles-assignment': 'off',
     },
   },
   {
