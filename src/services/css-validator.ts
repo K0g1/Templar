@@ -104,47 +104,6 @@ function isInsideKeyframes(rule: Rule): boolean {
 }
 
 /**
- * Maximum effective runtime under CSS list repetition semantics.
- *
- * Lists pair by index with cyclic wrapping, so the realized pairs are those
- * with indices congruent modulo g = gcd(dl, il). Computing the maximum
- * product per residue class is O(dl + il), avoiding the O(lcm(dl, il))
- * enumeration that an attacker could abuse with large lists.
- */
-function maxAnimationRuntime(durations: number[], iterations: number[]): number {
-  const dl = durations.length;
-  const il = iterations.length;
-  if (dl === 0 || il === 0) {
-    return 0;
-  }
-  const g = gcd(dl, il);
-  let maxProduct = 0;
-  for (let residue = 0; residue < g; residue += 1) {
-    let maxDuration = 0;
-    for (let index = residue; index < dl; index += g) {
-      maxDuration = Math.max(maxDuration, durations[index] ?? 0);
-    }
-    let maxIteration = 0;
-    for (let index = residue; index < il; index += g) {
-      maxIteration = Math.max(maxIteration, iterations[index] ?? 0);
-    }
-    maxProduct = Math.max(maxProduct, maxDuration * maxIteration);
-  }
-  return maxProduct;
-}
-
-function gcd(left: number, right: number): number {
-  let a = left;
-  let b = right;
-  while (b !== 0) {
-    const remainder = a % b;
-    a = b;
-    b = remainder;
-  }
-  return a;
-}
-
-/**
  * Splits a CSS value on commas at parenthesis depth 0, so commas inside
  * function arguments (cubic-bezier, rgba, var) never split animation parts.
  */
@@ -740,52 +699,42 @@ export function validateCustomCss(css: string): ValidationResult {
     }
   });
 
-  // Combined animation check: after shorthand/longhand cascade, effective
-  // duration x iteration per animation can exceed the runtime budget even
-  // when each declaration passes independently. Longhands override the
-  // shorthand's corresponding component; lists pair by CSS repetition
-  // semantics (shorter list repeats cyclically).
+  // Combined animation check: after shorthand/longhand cascade AND
+  // !important precedence, effective duration x iteration per animation can
+  // exceed the runtime budget even when each declaration passes
+  // independently. Rather than model the full cascade (source order,
+  // important vs normal, shorthand resets), collect every duration and
+  // iteration candidate and test every plausible pairing conservatively.
+  // The 250-rule / 40-declaration caps bound this candidate set.
   root.walkRules((rule) => {
-    let shorthandDurations: number[] = [];
-    let shorthandIterations: number[] = [];
-    let durationOverride: number[] | null = null;
-    let iterationOverride: number[] | null = null;
+    const durationCandidates: number[] = [];
+    const iterationCandidates: number[] = [];
     let unsafeVar = false;
     rule.walkDecls((declaration) => {
       const property = decodeCssEscapes(declaration.prop).toLowerCase();
       const value = decodeCssEscapes(declaration.value);
-      if (property === 'animation') {
+      if (property === 'animation' || property === 'animation-duration') {
         for (const part of splitTopLevel(value)) {
           let partSeconds = 0;
           for (const match of part.matchAll(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(ms|s)\b/gi)) {
             const amount = Number.parseFloat(match[1] ?? '0');
             partSeconds += Number.isNaN(amount) ? 0 : (match[2] === 'ms' ? Math.abs(amount) / 1000 : Math.abs(amount));
           }
-          shorthandDurations.push(partSeconds);
-          const bareNumbers = [...part.matchAll(/(^|[\s,])([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)]
-            .map((match) => Number.parseFloat(match[2] ?? '0'))
-            .filter((value) => !Number.isNaN(value))
-            .map((value) => Math.abs(value));
-          shorthandIterations.push(bareNumbers.length > 0 ? Math.max(...bareNumbers) : 1);
-        }
-      }
-      if (property === 'animation-duration') {
-        durationOverride = [];
-        for (const part of splitTopLevel(value)) {
-          let partSeconds = 0;
-          for (const match of part.matchAll(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(ms|s)\b/gi)) {
-            const amount = Number.parseFloat(match[1] ?? '0');
-            partSeconds += Number.isNaN(amount) ? 0 : (match[2] === 'ms' ? Math.abs(amount) / 1000 : Math.abs(amount));
+          durationCandidates.push(partSeconds);
+          if (property === 'animation') {
+            const bareNumbers = [...part.matchAll(/(^|[\s,])([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)]
+              .map((match) => Number.parseFloat(match[2] ?? '0'))
+              .filter((value) => !Number.isNaN(value))
+              .map((value) => Math.abs(value));
+            iterationCandidates.push(bareNumbers.length > 0 ? Math.max(...bareNumbers) : 1);
           }
-          durationOverride.push(partSeconds);
         }
       }
       if (property === 'animation-iteration-count') {
-        iterationOverride = [];
         for (const part of splitTopLevel(value)) {
           const match = part.match(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)\s*$/);
           const parsed = match ? Number.parseFloat(match[1] ?? '1') : NaN;
-          iterationOverride.push(Number.isNaN(parsed) ? 1 : Math.abs(parsed));
+          iterationCandidates.push(Number.isNaN(parsed) ? 1 : Math.abs(parsed));
         }
       }
       if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {
@@ -795,36 +744,23 @@ export function validateCustomCss(css: string): ValidationResult {
     if (unsafeVar) {
       return; // var()/math function case already reported at declaration level.
     }
-    // CSS cascade: the `animation` shorthand resets unspecified longhands to
-    // their initial values, and longhands declared after override the
-    // shorthand. Rather than model source order, check every plausible
-    // effective pairing conservatively: if any exceeds the budget, reject.
-    // O(n+m): instead of enumerating the LCM repetition cycle (which is an
-    // algorithmic DoS path for attacker-controlled list lengths), compute
-    // the maximum product over residue classes of gcd(dl, il).
-    const durationSets = [
-      durationOverride ?? shorthandDurations,
-      shorthandDurations,
-    ];
-    const iterationSets = [
-      iterationOverride ?? shorthandIterations,
-      shorthandIterations,
-    ];
-    for (const durations of durationSets) {
-      if (durations.length === 0) {
-        continue;
-      }
-      for (const iterations of iterationSets) {
-        if (iterations.length === 0) {
-          continue;
-        }
-        if (maxAnimationRuntime(durations, iterations) > MAX_ANIMATION_DURATION_SECONDS) {
+    if (durationCandidates.length === 0 || iterationCandidates.length === 0) {
+      return;
+    }
+    // Every plausible pairing: any duration candidate with any iteration
+    // candidate. A normal later declaration cannot rescue an earlier
+    // !important one, and vice versa, so testing all pairs is the safe
+    // conservative over-approximation.
+    for (const duration of durationCandidates) {
+      for (const iteration of iterationCandidates) {
+        if (duration * iteration > MAX_ANIMATION_DURATION_SECONDS) {
           issues.push({
             severity: 'error',
             path: 'css.animation',
             message: `Animation total runtime exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
             fix: 'Shorten the duration or reduce the iteration count.',
           });
+          return;
         }
       }
     }

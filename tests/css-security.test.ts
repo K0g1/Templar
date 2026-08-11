@@ -387,3 +387,38 @@ describe('CSS round 7 bypass regression suite', () => {
     expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
   });
 });
+
+describe('CSS round 8 bypass regression suite', () => {
+  it('rejects !important duration override of a safe later normal value', () => {
+    const result = errors([
+      '.page p {',
+      '  animation-duration: 30s !important;',
+      '  animation-duration: 0s;',
+      '  animation-iteration-count: 1000;',
+      '}',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects !important iteration count override of a safe later normal value', () => {
+    const result = errors([
+      '.page p {',
+      '  animation-iteration-count: 1000 !important;',
+      '  animation-iteration-count: 1;',
+      '  animation-duration: 30s;',
+      '}',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects !important shorthand duration with normal longhand', () => {
+    const result = errors([
+      '.page p {',
+      '  animation: spin 30s !important;',
+      '  animation-duration: 0s;',
+      '  animation-iteration-count: 1000;',
+      '}',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+});
