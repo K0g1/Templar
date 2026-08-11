@@ -648,31 +648,162 @@ function negatedSelectorList(
 
 /**
  * True when the `covered` branch matches everything the `target` branch
- * matches. For conjunctive compounds, `covered` is broader when it
- * REQUIRES a subset of the tokens `target` requires: `.x` covers every
- * `.x.y` (target needs {.x, .y}, covered only needs {.x}), while `.x.y`
- * does not cover every `.x`. Tokens are escape-decoded, tag names are
- * ASCII case-insensitive, and :is()/:where() wrappers are flattened.
+ * matches, using alternatives semantics: each branch is a union of
+ * conjunctive alternatives (a compound = AND of tokens; `:is()`/`:where()`
+ * = OR of branch alternatives). `covered` covers `target` when every
+ * alternative of `target` is covered by some alternative of `covered`
+ * whose required tokens are a subset (token-cover relation) of the
+ * target's required tokens: `.x` covers `.x.y`; `:is(.x, .z)` covers `.x`.
  */
 function branchCoversBranch(
   covered: import('postcss-selector-parser').Node,
   target: import('postcss-selector-parser').Node,
 ): boolean {
-  const targetTokens = new Set<string>();
-  collectSelectorTokens(target, targetTokens);
-  if (targetTokens.size === 0) {
+  const targetAlternatives = branchAlternatives(target);
+  if (targetAlternatives.length === 0) {
     return false;
   }
-  const coveredTokens = new Set<string>();
-  collectSelectorTokens(covered, coveredTokens);
-  // Every token `covered` requires must also be required by `target`;
-  // otherwise `covered` is narrower than `target` (or incomparable).
-  for (const token of coveredTokens) {
-    if (token !== '*' && !targetTokens.has(token)) {
+  const coveredAlternatives = branchAlternatives(covered);
+  return targetAlternatives.every((targetAlt) =>
+    coveredAlternatives.some((coveredAlt) =>
+      alternativeCovers(coveredAlt, targetAlt),
+    ),
+  );
+}
+
+/**
+ * Builds the alternatives of a branch: an array of token-sets, where the
+ * branch matches the union over alternatives of (elements matching every
+ * token in the alternative). `:is()`/`:where()` expand to their branch
+ * alternatives; `:not()` contributes no positive coverage.
+ */
+function branchAlternatives(
+  branch: import('postcss-selector-parser').Node,
+): Array<Set<string>> {
+  // AND across the branch's compound children: cross-product of each
+  // child's alternatives.
+  let alternatives: Array<Set<string>> = [new Set()];
+  for (const child of branchChildren(branch)) {
+    const childAlternatives = childAlternativesForToken(child);
+    const next: Array<Set<string>> = [];
+    for (const left of alternatives) {
+      for (const right of childAlternatives) {
+        const merged = new Set(left);
+        for (const token of right) {
+          merged.add(token);
+        }
+        next.push(merged);
+      }
+    }
+    alternatives = next;
+  }
+  return alternatives;
+}
+
+/** Alternatives contributed by one simple-selector child of a compound. */
+function childAlternativesForToken(
+  child: import('postcss-selector-parser').Node,
+): Array<Set<string>> {
+  if (child.type === 'universal') {
+    return [new Set(['*'])];
+  }
+  if (child.type === 'class' || child.type === 'id' || child.type === 'tag') {
+    return [new Set([selectorTokenFor(child)])];
+  }
+  if (child.type === 'attribute') {
+    return [new Set(attributeTokensFor(child))];
+  }
+  if (child.type === 'pseudo') {
+    const pseudoName = child.value.replace(/^:/, '').toLowerCase();
+    if ((pseudoName === 'is' || pseudoName === 'where') && 'nodes' in child && Array.isArray(child.nodes)) {
+      // OR of the branch alternatives.
+      const merged: Array<Set<string>> = [];
+      for (const inner of child.nodes) {
+        merged.push(...branchAlternatives(inner));
+      }
+      return merged;
+    }
+    if (pseudoName === 'not') {
+      // Double negation is semantically transparent.
+      const inner = singlePseudoArgument(child);
+      if (inner && inner.type === 'pseudo' && inner.value.replace(/^:/, '').toLowerCase() === 'not') {
+        const innermost = singlePseudoArgument(inner);
+        if (innermost) {
+          return branchAlternatives(innermost);
+        }
+      }
+    }
+    // Other pseudos (structural, state, single :not) add no constraint.
+    return [new Set()];
+  }
+  return [new Set()];
+}
+
+/**
+ * True when one conjunctive alternative covers another: every token of
+ * `coveredAlt` is covered by a token of `targetAlt` (or the covered side
+ * is universal).
+ */
+function alternativeCovers(
+  coveredAlt: Set<string>,
+  targetAlt: Set<string>,
+): boolean {
+  if (coveredAlt.has('*')) {
+    return true;
+  }
+  for (const coveredToken of coveredAlt) {
+    let covered = false;
+    for (const targetToken of targetAlt) {
+      if (tokenCovers(coveredToken, targetToken)) {
+        covered = true;
+        break;
+      }
+    }
+    if (!covered) {
       return false;
     }
   }
   return true;
+}
+
+/**
+ * True when `coveredToken` is at least as broad as `targetToken`:
+ * identical, or an attribute existence token covering a value-constrained
+ * token on the same attribute name (`[x]` covers `[x="a"]`).
+ */
+function tokenCovers(coveredToken: string, targetToken: string): boolean {
+  if (coveredToken === targetToken) {
+    return true;
+  }
+  if (coveredToken.startsWith('attr-name:') && targetToken.startsWith('attr-name:')) {
+    const name = coveredToken.slice('attr-name:'.length);
+    return targetToken === `attr-name:${name}` || targetToken.startsWith(`attr-name:${name}=`) || targetToken.startsWith(`attr-full:${name}=`) || targetToken.startsWith(`attr-full:${name} `);
+  }
+  return false;
+}
+
+/** Token for class/id/tag simple selectors (escape-decoded). */
+function selectorTokenFor(node: import('postcss-selector-parser').Node): string {
+  if (node.type === 'tag') {
+    return `tag:${decodeCssEscapes(node.toString()).toLowerCase()}`;
+  }
+  return `${node.type}:${decodeCssEscapes(node.toString())}`;
+}
+
+/**
+ * Tokens for an attribute selector: an existence token (attribute name,
+ * escape-decoded, case-sensitive) and, when the selector constrains the
+ * value, a full token so `[x]` can cover `[x="a"]` but not vice versa.
+ */
+function attributeTokensFor(node: import('postcss-selector-parser').Node): string[] {
+  const raw = decodeCssEscapes(node.toString());
+  const nameMatch = raw.match(/^\[([^\]=~^$*|]+)/);
+  const name = nameMatch?.[1] ?? raw;
+  const tokens = [`attr-name:${name}`];
+  if (/[=~^$*|]/.test(raw)) {
+    tokens.push(`attr-full:${raw}`);
+  }
+  return tokens;
 }
 
 /**
