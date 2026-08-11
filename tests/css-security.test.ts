@@ -626,3 +626,25 @@ describe('CSS round 16 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 17 bypass regression suite', () => {
+  it('rejects font shorthand with style prefix before zero size', () => {
+    const result = errors('.page * { font: italic 0 serif; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects named dashed-ident animation timeline', () => {
+    const result = errors('.page { animation-timeline: --t; }');
+    expect(result.some((m) => m.toLowerCase().includes('timeline'))).toBe(true);
+  });
+
+  it('rejects contradiction through :is() wrapper', () => {
+    const result = errors('.page :not(.x:not(:is(.x))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('detects escaped-equivalent complementary branches', () => {
+    const result = errors('.page :is(.x, :not(.\\78)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});

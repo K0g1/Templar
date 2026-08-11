@@ -505,7 +505,7 @@ function pseudoIsExactNegationOf(
   if (branches.length !== 1) {
     return false;
   }
-  return branches[0]!.toString().trim() === b.toString().trim();
+  return normalizeBranchText(branches[0]!) === normalizeBranchText(b);
 }
 
 /**
@@ -565,9 +565,9 @@ function negatedSelectorList(
   return pseudoArgumentBranches(pseudo).map(normalizeBranchText);
 }
 
-/** Normalizes a selector branch to comparable text. */
+/** Normalizes a selector branch to comparable text (escapes decoded). */
 function normalizeBranchText(branch: import('postcss-selector-parser').Node): string {
-  return branch.toString().replace(/\s+/g, '').toLowerCase();
+  return decodeCssEscapes(branch.toString()).replace(/\s+/g, '');
 }
 
 /** True when selector branch `a` is exactly `:not(b)` (single argument). */
@@ -648,6 +648,27 @@ function branchCoversSelector(
     }
     if (node.type === 'attribute') {
       return node.toString().toLowerCase() === selector;
+    }
+    // Recurse through forgiving pseudos: `:is(.x)` covers `.x`.
+    if (node.type === 'pseudo' && 'nodes' in node && Array.isArray(node.nodes)) {
+      const pseudoName = node.value.replace(/^:/, '').toLowerCase();
+      if (pseudoName === 'is' || pseudoName === 'where') {
+        return node.nodes.some((inner) => {
+          if (inner.type === 'selector') {
+            if (!('nodes' in inner) || !Array.isArray(inner.nodes)) {
+              return false;
+            }
+            return inner.nodes.some((leaf) =>
+              leaf.type === 'class' || leaf.type === 'id' || leaf.type === 'tag'
+                ? leaf.toString().toLowerCase() === selector
+                : leaf.type === 'universal'
+                  ? true
+                  : false,
+            );
+          }
+          return false;
+        });
+      }
     }
     return false;
   });
@@ -944,10 +965,11 @@ export function validateCustomCss(css: string): ValidationResult {
           (Number.parseFloat(value) <= 0 || /var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value))) ||
         (property === 'pointer-events' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
         (property === 'font-size' && isZeroCssValue(value)) ||
-        // The `font` shorthand sets font-size (and line-height) directly;
-        // a zero or unbounded value can blank text. Reject outright on
-        // whole-page-capable selectors rather than parsing the shorthand.
-        (property === 'font' && (isZeroCssValue(value.split('/')[0]!.trim().split(/\s+/)[0] ?? '') || /var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value))) ||
+        // The `font` shorthand sets font-size (and line-height) directly,
+        // and style/variant/weight/width prefixes can precede the size
+        // (`font: italic 0 serif`). Rather than parse the shorthand
+        // grammar, reject it outright on whole-page-capable selectors.
+        (property === 'font') ||
         // Transform/filter/clip/mask can visually erase the note through
         // many spellings (scale(0), scaleX(0), opacity(0%), circle(0),
         // inset(50%), translate offscreen...). On a whole-page-capable
@@ -1022,11 +1044,14 @@ export function validateCustomCss(css: string): ValidationResult {
       }
       // Scroll/view timelines do not obey the wall-clock duration model and
       // can run indefinitely; reject them entirely on whole-page selectors.
+      // This includes named dashed-ident timelines (--t) which can reference
+      // scroll-timeline-name/view-timeline-name declarations; only auto and
+      // none are safe non-scroll-driven values.
       if (
         declaration.parent?.type === 'rule' &&
         selectorCanHideWholePage(declaration.parent) &&
-        (property === 'animation-timeline' || property === 'animation') &&
-        /\b(?:scroll|view)\s*\(/.test(value)
+        property === 'animation-timeline' &&
+        !/^\s*(?:auto|none)\s*$/.test(value)
       ) {
         issues.push({
           severity: 'error',
