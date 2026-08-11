@@ -530,14 +530,16 @@ function forgivingListCoversEverything(
     }
   }
   // Multi-branch tautology: `:is(.x, .y, :not(.x, .y))`. Find a :not(...)
-  // branch whose negated simple selectors all exist as sibling branches.
+  // branch whose negated argument branches all exist as sibling branches
+  // (compared by normalized selector text, so attributes, pseudos, and any
+  // other argument types work).
   for (const branch of branches) {
     const negated = negatedSelectorList(branch);
     if (negated.length === 0) {
       continue;
     }
     if (negated.every((selector) =>
-      branches.some((other) => other !== branch && branchCoversSelector(other, selector)),
+      branches.some((other) => other !== branch && normalizeBranchText(other) === selector),
     )) {
       return true;
     }
@@ -546,8 +548,8 @@ function forgivingListCoversEverything(
 }
 
 /**
- * Returns the simple-selector tokens a `:not(...)` branch negates, or an
- * empty array when the branch is not a plain `:not(list)`.
+ * Returns the normalized text of each argument branch a `:not(...)` branch
+ * negates, or an empty array when the branch is not a plain `:not(list)`.
  */
 function negatedSelectorList(
   branch: import('postcss-selector-parser').Node,
@@ -560,17 +562,12 @@ function negatedSelectorList(
   if (pseudo.value.replace(/^:/, '').toLowerCase() !== 'not') {
     return [];
   }
-  const selectors: string[] = [];
-  for (const arg of pseudoArgumentBranches(pseudo)) {
-    for (const node of branchChildren(arg)) {
-      if (node.type === 'class' || node.type === 'id' || node.type === 'tag') {
-        selectors.push(node.toString().toLowerCase());
-      } else if (node.type === 'universal') {
-        selectors.push('*');
-      }
-    }
-  }
-  return selectors;
+  return pseudoArgumentBranches(pseudo).map(normalizeBranchText);
+}
+
+/** Normalizes a selector branch to comparable text. */
+function normalizeBranchText(branch: import('postcss-selector-parser').Node): string {
+  return branch.toString().replace(/\s+/g, '').toLowerCase();
 }
 
 /** True when selector branch `a` is exactly `:not(b)` (single argument). */
@@ -630,14 +627,16 @@ function compoundIsContradiction(
 
 /**
  * True when a :not() branch matches every element carrying `selector`
- * (a `.class`, `#id`, tag, universal, or attribute token).
+ * (a `.class`, `#id`, tag, universal, or attribute token). The universal
+ * selector is covered only when the branch itself is universal-capable;
+ * `:not(*)` matches nothing and must not count as covering `*`.
  */
 function branchCoversSelector(
   branch: import('postcss-selector-parser').Node,
   selector: string,
 ): boolean {
   if (selector === '*') {
-    return true;
+    return branchContainsUniversal(branch);
   }
   const nodes = branchChildren(branch);
   return nodes.some((node) => {
@@ -649,6 +648,26 @@ function branchCoversSelector(
     }
     if (node.type === 'attribute') {
       return node.toString().toLowerCase() === selector;
+    }
+    return false;
+  });
+}
+
+/** True when a branch contains a universal selector token (or nested one). */
+function branchContainsUniversal(
+  branch: import('postcss-selector-parser').Node,
+): boolean {
+  const nodes = branchChildren(branch);
+  return nodes.some((node) => {
+    if (node.type === 'universal') {
+      return true;
+    }
+    if (node.type === 'pseudo' && 'nodes' in node && Array.isArray(node.nodes)) {
+      return node.nodes.some((inner) =>
+        inner.type === 'selector'
+          ? 'nodes' in inner && Array.isArray(inner.nodes) && inner.nodes.some((leaf) => leaf.type === 'universal')
+          : inner.type === 'universal',
+      );
     }
     return false;
   });
@@ -925,6 +944,10 @@ export function validateCustomCss(css: string): ValidationResult {
           (Number.parseFloat(value) <= 0 || /var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value))) ||
         (property === 'pointer-events' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
         (property === 'font-size' && isZeroCssValue(value)) ||
+        // The `font` shorthand sets font-size (and line-height) directly;
+        // a zero or unbounded value can blank text. Reject outright on
+        // whole-page-capable selectors rather than parsing the shorthand.
+        (property === 'font' && (isZeroCssValue(value.split('/')[0]!.trim().split(/\s+/)[0] ?? '') || /var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value))) ||
         // Transform/filter/clip/mask can visually erase the note through
         // many spellings (scale(0), scaleX(0), opacity(0%), circle(0),
         // inset(50%), translate offscreen...). On a whole-page-capable
@@ -965,6 +988,8 @@ export function validateCustomCss(css: string): ValidationResult {
       'position',
       'z-index',
       'font-size',
+      'font',
+      'animation-timeline',
     ]);
     if (hidingSensitive.has(property) && (/var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value))) {
       issues.push({
@@ -976,20 +1001,38 @@ export function validateCustomCss(css: string): ValidationResult {
     }
     if (property.includes('animation')) {
       // Whole-page selectors with forwards/both fill mode can freeze the
-      // page in a hidden keyframe end-state. Keyframe bodies are exempt
+      // page in a hidden keyframe end-state, and paused animations can sit
+      // indefinitely inside a hiding keyframe. Keyframe bodies are exempt
       // from selector validation, so the animation declaration is the only
       // gate.
       if (
         declaration.parent?.type === 'rule' &&
         selectorCanHideWholePage(declaration.parent) &&
-        (property === 'animation-fill-mode' || property === 'animation') &&
-        /\b(forwards|both)\b/.test(value)
+        ((property === 'animation-fill-mode' || property === 'animation') &&
+          /\b(forwards|both)\b/.test(value) ||
+          (property === 'animation-play-state' || property === 'animation') &&
+            /\bpaused\b/.test(value))
       ) {
         issues.push({
           severity: 'error',
           path: `css.${property}`,
-          message: 'Animations with forwards/both fill mode can freeze the whole note in a hidden keyframe state.',
-          fix: 'Remove the forwards/both fill mode or target a specific element.',
+          message: 'Animations with forwards/both fill mode or paused state can freeze the whole note in a hidden keyframe state.',
+          fix: 'Remove the forwards/both fill mode and paused state, or target a specific element.',
+        });
+      }
+      // Scroll/view timelines do not obey the wall-clock duration model and
+      // can run indefinitely; reject them entirely on whole-page selectors.
+      if (
+        declaration.parent?.type === 'rule' &&
+        selectorCanHideWholePage(declaration.parent) &&
+        (property === 'animation-timeline' || property === 'animation') &&
+        /\b(?:scroll|view)\s*\(/.test(value)
+      ) {
+        issues.push({
+          severity: 'error',
+          path: `css.${property}`,
+          message: 'Scroll-driven animation timelines are not allowed on whole-note selectors.',
+          fix: 'Use a fixed-duration animation or target a specific element.',
         });
       }
       if (/\binfinite\b/.test(value)) {

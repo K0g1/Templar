@@ -596,3 +596,33 @@ describe('CSS round 15 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
   });
 });
+
+describe('CSS round 16 bypass regression suite', () => {
+  it('rejects paused animation on whole-note selector', () => {
+    const result = errors([
+      '@keyframes hide { from { opacity: 1; } to { opacity: 0; } }',
+      '.page { animation: hide 1s -0.5s paused; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('paused'))).toBe(true);
+  });
+
+  it('rejects attribute-based multi-branch tautology', () => {
+    const result = errors('.page :is([x], [y], :not([x], [y])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects scroll-driven animation timeline on whole-note selector', () => {
+    const result = errors('.page { animation-timeline: scroll(); }');
+    expect(result.some((m) => m.toLowerCase().includes('scroll-driven'))).toBe(true);
+  });
+
+  it('does not flag :is(.x, :not(*)) as universal', () => {
+    const result = errors('.page :is(.x, :not(*)) { color: red; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
+  });
+
+  it('rejects font shorthand with zero font-size', () => {
+    const result = errors('.page * { font: 0 serif; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
