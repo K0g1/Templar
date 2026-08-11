@@ -218,46 +218,109 @@ function isSafePreferenceMediaQuery(params: string): boolean {
  * note or overlay fake UI.
  */
 function selectorCanHideWholePage(rule: Rule): boolean {
-  return rule.selectors.some((selector) => {
-    let ast;
-    try {
-      ast = selectorParser().astSync(selector);
-    } catch {
-      return false;
+  const structuralPseudos = new Set([
+    'nth-child',
+    'nth-of-type',
+    'first-child',
+    'last-child',
+    'only-child',
+    'nth-last-child',
+    'nth-last-of-type',
+  ]);
+  const forgivingPseudos = new Set(['is', 'where']);
+  // First check each top-level selector independently.
+  for (const selector of rule.selectors) {
+    if (selectorHidesWholePage(selector, structuralPseudos, forgivingPseudos)) {
+      return true;
     }
-    const structuralPseudos = new Set([
-      'nth-child',
-      'nth-of-type',
-      'first-child',
-      'last-child',
-      'only-child',
-      'nth-last-child',
-      'nth-last-of-type',
-    ]);
-    const forgivingPseudos = new Set(['is', 'where']);
-    for (const node of ast.nodes) {
-      if (!isPageRooted(node)) {
-        continue;
-      }
-      const compounds = compoundSequence(node);
-      // A single-compound selector directly targets the page root itself:
-      // `.page`, `.page:is(*)`, `.page:nth-child(n)`,
-      // `.page-content:where(*)`. Hiding declarations on the root hide the
-      // whole note, so classify these as root-capable regardless of pseudo
-      // suffixes. Multi-compound selectors (.page p) apply to descendants,
-      // not the root, and are handled by the universal-compound loop below.
-      if (compounds.length === 1) {
-        return true;
-      }
-      for (let index = 1; index < compounds.length; index += 1) {
-        const compound = compounds[index]!;
-        if (compoundMatchesEverything(compound, structuralPseudos, forgivingPseudos)) {
+  }
+  // Then check the UNION of the top-level selector list: comma-separated
+  // selectors like `.page .x, .page :not(.x)` jointly cover every
+  // descendant even though neither does alone. The union semantics match
+  // a forgiving :is() list of the selectors' descendant tails.
+  if (rule.selectors.length >= 2) {
+    const tails = rule.selectors
+      .map((selector) => selectorDescendantTailText(selector))
+      .filter((tail): tail is string => tail !== null);
+    if (tails.length >= 2) {
+      try {
+        const unionAst = selectorParser().astSync(`:is(${tails.join(',')})`);
+        const pseudoNode = unionAst.first?.first;
+        if (pseudoNode && pseudoNode.type === 'pseudo' && forgivingListCoversEverything(pseudoNode)) {
           return true;
         }
+      } catch {
+        // Unparseable union: fall through to per-selector result.
       }
     }
+  }
+  return false;
+}
+
+/** True when one top-level selector alone hides the whole page. */
+function selectorHidesWholePage(
+  selector: string,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  let ast;
+  try {
+    ast = selectorParser().astSync(selector);
+  } catch {
     return false;
-  });
+  }
+  for (const node of ast.nodes) {
+    if (!isPageRooted(node)) {
+      continue;
+    }
+    const compounds = compoundSequence(node);
+    // A single-compound selector directly targets the page root itself:
+    // `.page`, `.page:is(*)`, `.page:nth-child(n)`,
+    // `.page-content:where(*)`. Hiding declarations on the root hide the
+    // whole note, so classify these as root-capable regardless of pseudo
+    // suffixes. Multi-compound selectors (.page p) apply to descendants,
+    // not the root, and are handled by the universal-compound loop below.
+    if (compounds.length === 1) {
+      return true;
+    }
+    for (let index = 1; index < compounds.length; index += 1) {
+      const compound = compounds[index]!;
+      if (compoundMatchesEverything(compound, structuralPseudos, forgivingPseudos)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Extracts the descendant-tail text of a page-rooted selector (everything
+ * after the first combinator), or null when the selector is not page-rooted
+ * or has no tail. Used for union coverage analysis.
+ */
+function selectorDescendantTailText(selector: string): string | null {
+  let ast;
+  try {
+    ast = selectorParser().astSync(selector);
+  } catch {
+    return null;
+  }
+  for (const node of ast.nodes) {
+    if (!isPageRooted(node) || !('nodes' in node) || !Array.isArray(node.nodes)) {
+      continue;
+    }
+    const children = node.nodes;
+    for (let index = 0; index < children.length; index += 1) {
+      if (children[index]?.type === 'combinator') {
+        return children
+          .slice(index)
+          .map((child) => child.toString())
+          .join('')
+          .trim();
+      }
+    }
+  }
+  return null;
 }
 
 /**
@@ -585,9 +648,11 @@ function negatedSelectorList(
 
 /**
  * True when the `covered` branch matches everything the `target` branch
- * matches: every selector token of `target` appears in `covered`'s token
- * set (escape-decoded; tag names ASCII case-insensitive; :is()/:where()
- * wrappers flattened recursively).
+ * matches. For conjunctive compounds, `covered` is broader when it
+ * REQUIRES a subset of the tokens `target` requires: `.x` covers every
+ * `.x.y` (target needs {.x, .y}, covered only needs {.x}), while `.x.y`
+ * does not cover every `.x`. Tokens are escape-decoded, tag names are
+ * ASCII case-insensitive, and :is()/:where() wrappers are flattened.
  */
 function branchCoversBranch(
   covered: import('postcss-selector-parser').Node,
@@ -600,8 +665,10 @@ function branchCoversBranch(
   }
   const coveredTokens = new Set<string>();
   collectSelectorTokens(covered, coveredTokens);
-  for (const token of targetTokens) {
-    if (!coveredTokens.has(token) && !coveredTokens.has('*')) {
+  // Every token `covered` requires must also be required by `target`;
+  // otherwise `covered` is narrower than `target` (or incomparable).
+  for (const token of coveredTokens) {
+    if (token !== '*' && !targetTokens.has(token)) {
       return false;
     }
   }

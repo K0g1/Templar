@@ -675,3 +675,15 @@ describe('CSS round 18 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 19 bypass regression suite', () => {
+  it('rejects top-level selector list union hiding', () => {
+    const result = errors('.page .x, .page :not(.x) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects conjunctive coverage tautology :is(.x, :not(.x.y))', () => {
+    const result = errors('.page :is(.x, :not(.x.y)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
