@@ -94,6 +94,13 @@ const unstableLengthUnit =
 
 /** Hard ceilings for a portable, performance-safe template. */
 const MAX_RULES = 250;
+
+/**
+ * CSS math and unbounded-value functions. Any of these in a safety-
+ * sensitive position defeats literal-value bounds.
+ */
+const MATH_FUNCTIONS_RE =
+  /(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i;
 const MAX_DECLARATIONS_PER_RULE = 40;
 const MAX_KEYFRAME_BLOCKS = 16;
 const MAX_SELECTOR_DEPTH = 6;
@@ -138,6 +145,20 @@ function stripCssComments(value: string): string {
 }
 
 
+
+/**
+ * True when a CSS value is numerically zero with any unit, using the full
+ * CSS number grammar: 0, 0.0, +0, 0e0, 0px, 0.0px, 0e0px.
+ */
+function isZeroCssValue(value: string): boolean {
+  const match = value.trim().match(
+    /^[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:[a-z%]+)?$/i,
+  );
+  if (!match) {
+    return false;
+  }
+  return Number.parseFloat(value) === 0;
+}
 
 function selectorStartsWithVirtualRoot(selector: string): boolean {
   return /^\.page(?:-content)?(?=$|[\s.:#[])/.test(selector.trim());
@@ -488,10 +509,12 @@ function pseudoIsExactNegationOf(
 }
 
 /**
- * True when a `:is(...)`/`:where(...)` list covers every element through
- * complementary branches: one branch is the exact negation of another
- * (`:is(.x, :not(.x))` matches everything because every element either
- * has `.x` or does not).
+ * True when a `:is(...)`/`:where(...)` list covers every element:
+ * - one branch is the exact negation of another (`:is(.x, :not(.x))`);
+ * - or a `:not(a, b, ...)` branch exists whose negated selectors are all
+ *   present as sibling branches (`:is(.x, .y, :not(.x, .y))` - the union
+ *   of the positive branches and the complement of their union is
+ *   everything).
  */
 function forgivingListCoversEverything(
   part: import('postcss-selector-parser').Node,
@@ -506,7 +529,48 @@ function forgivingListCoversEverything(
       }
     }
   }
+  // Multi-branch tautology: `:is(.x, .y, :not(.x, .y))`. Find a :not(...)
+  // branch whose negated simple selectors all exist as sibling branches.
+  for (const branch of branches) {
+    const negated = negatedSelectorList(branch);
+    if (negated.length === 0) {
+      continue;
+    }
+    if (negated.every((selector) =>
+      branches.some((other) => other !== branch && branchCoversSelector(other, selector)),
+    )) {
+      return true;
+    }
+  }
   return false;
+}
+
+/**
+ * Returns the simple-selector tokens a `:not(...)` branch negates, or an
+ * empty array when the branch is not a plain `:not(list)`.
+ */
+function negatedSelectorList(
+  branch: import('postcss-selector-parser').Node,
+): string[] {
+  const children = branchChildren(branch);
+  if (children.length !== 1 || children[0]?.type !== 'pseudo') {
+    return [];
+  }
+  const pseudo = children[0];
+  if (pseudo.value.replace(/^:/, '').toLowerCase() !== 'not') {
+    return [];
+  }
+  const selectors: string[] = [];
+  for (const arg of pseudoArgumentBranches(pseudo)) {
+    for (const node of branchChildren(arg)) {
+      if (node.type === 'class' || node.type === 'id' || node.type === 'tag') {
+        selectors.push(node.toString().toLowerCase());
+      } else if (node.type === 'universal') {
+        selectors.push('*');
+      }
+    }
+  }
+  return selectors;
 }
 
 /** True when selector branch `a` is exactly `:not(b)` (single argument). */
@@ -552,16 +616,42 @@ function compoundIsContradiction(
     }
     const branches = pseudoArgumentBranches(part);
     for (const branch of branches) {
-      const branchText = branch.toString().toLowerCase();
-      // The :not branch excludes everything matching `branchText`. If any
-      // simple selector in this compound is covered by the branch, the
-      // compound selects nothing.
-      if (selectors.some((selector) => branchText === selector || branchText.includes(selector))) {
+      // The :not branch excludes everything matching `branch`. If any
+      // simple selector in this compound is exactly covered by the branch,
+      // the compound selects nothing. Compare tokens, not substrings, so
+      // `.foo:not(.foobar)` is not a false positive.
+      if (selectors.some((selector) => branchCoversSelector(branch, selector))) {
         return true;
       }
     }
   }
   return false;
+}
+
+/**
+ * True when a :not() branch matches every element carrying `selector`
+ * (a `.class`, `#id`, tag, universal, or attribute token).
+ */
+function branchCoversSelector(
+  branch: import('postcss-selector-parser').Node,
+  selector: string,
+): boolean {
+  if (selector === '*') {
+    return true;
+  }
+  const nodes = branchChildren(branch);
+  return nodes.some((node) => {
+    if (node.type === 'universal') {
+      return true;
+    }
+    if (node.type === 'class' || node.type === 'id' || node.type === 'tag') {
+      return node.toString().toLowerCase() === selector;
+    }
+    if (node.type === 'attribute') {
+      return node.toString().toLowerCase() === selector;
+    }
+    return false;
+  });
 }
 
 /**
@@ -832,9 +922,9 @@ export function validateCustomCss(css: string): ValidationResult {
         (property === 'visibility' && (value.trim() === 'hidden' || value.trim() === 'collapse' || /var\s*\(/.test(value))) ||
         (property === 'content-visibility' && (value.trim() === 'hidden' || /var\s*\(/.test(value))) ||
         (property === 'opacity' &&
-          (Number.parseFloat(value) <= 0 || /var\s*\(|calc\s*\(/.test(value))) ||
+          (Number.parseFloat(value) <= 0 || /var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value))) ||
         (property === 'pointer-events' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
-        (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())) ||
+        (property === 'font-size' && isZeroCssValue(value)) ||
         // Transform/filter/clip/mask can visually erase the note through
         // many spellings (scale(0), scaleX(0), opacity(0%), circle(0),
         // inset(50%), translate offscreen...). On a whole-page-capable
@@ -859,8 +949,9 @@ export function validateCustomCss(css: string): ValidationResult {
         fix: 'Target a specific Markdown element without making the page inaccessible.',
       });
     }
-    // Reject unresolved var()/attr()/calc() for hiding-sensitive properties
-    // anywhere: a custom property could resolve to a hiding value at runtime.
+    // Reject unresolved var()/attr()/math functions for hiding-sensitive
+    // properties anywhere: a custom property or math function could resolve
+    // to a hiding value at runtime.
     const hidingSensitive = new Set([
       'display',
       'visibility',
@@ -873,16 +964,34 @@ export function validateCustomCss(css: string): ValidationResult {
       'mask',
       'position',
       'z-index',
+      'font-size',
     ]);
-    if (hidingSensitive.has(property) && /var\s*\(|attr\s*\(/.test(value)) {
+    if (hidingSensitive.has(property) && (/var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value))) {
       issues.push({
         severity: 'error',
         path: `css.${property}`,
-        message: `“${property}” uses a variable or attribute value that cannot be safety-bounded.`,
+        message: `“${property}” uses a variable, attribute, or math value that cannot be safety-bounded.`,
         fix: 'Use a literal value for this property.',
       });
     }
     if (property.includes('animation')) {
+      // Whole-page selectors with forwards/both fill mode can freeze the
+      // page in a hidden keyframe end-state. Keyframe bodies are exempt
+      // from selector validation, so the animation declaration is the only
+      // gate.
+      if (
+        declaration.parent?.type === 'rule' &&
+        selectorCanHideWholePage(declaration.parent) &&
+        (property === 'animation-fill-mode' || property === 'animation') &&
+        /\b(forwards|both)\b/.test(value)
+      ) {
+        issues.push({
+          severity: 'error',
+          path: `css.${property}`,
+          message: 'Animations with forwards/both fill mode can freeze the whole note in a hidden keyframe state.',
+          fix: 'Remove the forwards/both fill mode or target a specific element.',
+        });
+      }
       if (/\binfinite\b/.test(value)) {
         issues.push({
           severity: 'error',
@@ -896,7 +1005,7 @@ export function validateCustomCss(css: string): ValidationResult {
       // math functions (calc, min, max, clamp, round, mod, rem, abs, sign,
       // pow, sqrt, hypot, log, exp, trig) and var()/attr() because they can
       // represent unbounded values that regex extraction cannot bound.
-      if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {
+      if (/var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value)) {
         issues.push({
           severity: 'error',
           path: `css.${property}`,
@@ -984,7 +1093,7 @@ export function validateCustomCss(css: string): ValidationResult {
     if (!isDuration && !isIteration) {
       return;
     }
-    if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {
+    if (/var\s*\(|attr\s*\(/.test(value) || MATH_FUNCTIONS_RE.test(value)) {
       return; // var()/math function case already reported at declaration level.
     }
     for (const part of splitTopLevel(value)) {

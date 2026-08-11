@@ -562,3 +562,37 @@ describe('CSS round 14 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 15 bypass regression suite', () => {
+  it('rejects forwards fill-mode animation on whole-note selector', () => {
+    const result = errors([
+      '@keyframes fade { from { opacity: 1; } to { opacity: 0; } }',
+      '.page { animation: fade .1s forwards; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('forwards/both'))).toBe(true);
+  });
+
+  it('rejects multi-branch tautology :is(.x, .y, :not(.x, .y))', () => {
+    const result = errors('.page :is(.x, .y, :not(.x, .y)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects opacity via math function on whole-note selector', () => {
+    const result = errors('.page * { opacity: min(-1, 0); }');
+    expect(result.some((m) => m.includes('hide or disable') || m.includes('math'))).toBe(true);
+  });
+
+  it('rejects font-size zero variants', () => {
+    const a = errors('.page * { font-size: 0.0px; }');
+    expect(a.some((m) => m.includes('hide or disable'))).toBe(true);
+    const b = errors('.page * { font-size: +0px; }');
+    expect(b.some((m) => m.includes('hide or disable'))).toBe(true);
+    const c = errors('.page * { font-size: 0e0px; }');
+    expect(c.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('does not flag .foo:not(.foobar) as contradictory', () => {
+    const result = errors('.page :not(.foo:not(.foobar)) { color: red; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
+  });
+});
