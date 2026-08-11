@@ -755,3 +755,35 @@ describe('CSS round 22 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 23 bypass regression suite', () => {
+  it('rejects attribute complement with case-insensitive names', () => {
+    const result = errors('.page :is([CLASS="x"], :not([class="x"])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects attribute contradiction via [CLASS]:not([class])', () => {
+    const result = errors('.page :not([CLASS]:not([class])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects value-implies-existence contradiction', () => {
+    const result = errors('.page :not([x="a"]:not([x])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects class-implies-attribute contradiction', () => {
+    const result = errors('.page :not(.x:not([class])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects contradiction inside :is() wrapper', () => {
+    const result = errors('.page :not(.x:is(:not(.x))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('allows nested negation with sibling constraints (no false positive)', () => {
+    const result = errors('.page :is(.x, .y:is(:not(.x))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
+  });
+});
