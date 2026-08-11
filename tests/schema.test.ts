@@ -292,4 +292,46 @@ describe('Templar v1 schema', () => {
     });
     expect(template.blocks.calloutVariants).toEqual({ info: { accent: '#123456' } });
   });
+
+  it('enforces the hard collection and structured-value limits', () => {
+    const template = normalizeTemplate(BUILT_IN_TEMPLATES[0]!);
+    template.blocks.calloutVariants = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`type-${String(index)}`, { accent: '#123456' }]),
+    );
+    expect(validateTemplate(template).valid).toBe(false);
+
+    template.blocks.calloutVariants = Object.fromEntries(
+      Array.from({ length: 64 }, (_, index) => [`type-${String(index)}`, { accent: '#123456' }]),
+    );
+    expect(validateTemplate(template).valid).toBe(true);
+
+    template.paper.color = 'var(--background-primary)';
+    expect(validateTemplate(template).valid).toBe(false);
+    template.paper.color = '#fff';
+    template.layout.pageShadow = 'env(safe-area-inset-top)';
+    expect(validateTemplate(template).valid).toBe(false);
+  });
+
+  it('fails closed for oversized attachment collections and filenames', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.attachments = Object.fromEntries(
+      Array.from({ length: 512 }, (_, index) => [`image-${String(index)}.png`, { width: 100 }]),
+    );
+    expect(frontmatterToNoteStyle(noteStyleToFrontmatter(style))).not.toBeNull();
+
+    style.attachments = Object.fromEntries(
+      Array.from({ length: 513 }, (_, index) => [`image-${String(index)}.png`, { width: 100 }]),
+    );
+    expect(frontmatterToNoteStyle(noteStyleToFrontmatter(style))).toBeNull();
+
+    style.attachments = { ['a'.repeat(513) + '.png']: { width: 100 } };
+    expect(frontmatterToNoteStyle(noteStyleToFrontmatter(style))).toBeNull();
+
+    style.attachments = Object.fromEntries(
+      Array.from({ length: 512 }, (_, index) => [`noop-${String(index)}.png`, {}]),
+    );
+    const noOp = frontmatterToNoteStyle(noteStyleToFrontmatter(style));
+    expect(noOp).not.toBeNull();
+    expect(noOp?.attachments).toBeUndefined();
+  });
 });

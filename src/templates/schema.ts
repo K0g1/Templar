@@ -1,4 +1,12 @@
-import { TEMPLAR_FORMAT_VERSION } from '../constants';
+import {
+  MAX_ATTACHMENT_FILENAME_BYTES,
+  MAX_ATTACHMENT_OVERRIDES,
+  MAX_CALLOUT_VARIANTS,
+  MAX_NORMALIZED_NOTE_STYLE_BYTES,
+  MAX_TAG_LENGTH,
+  MAX_TEMPLATE_TAGS,
+  TEMPLAR_FORMAT_VERSION,
+} from '../constants';
 import type {
   BaselineMode,
   CalloutVariant,
@@ -265,6 +273,17 @@ export function validateTemplateSource(
     }
   }
 
+  const sourceBlocks = record(source.blocks);
+  const rawCalloutVariants = pick(sourceBlocks, 'calloutVariants', 'callout-variants');
+  if (isRecord(rawCalloutVariants) && Object.keys(rawCalloutVariants).length > MAX_CALLOUT_VARIANTS) {
+    issues.push({
+      severity: 'error',
+      path: 'blocks.calloutVariants',
+      message: `A template may define at most ${String(MAX_CALLOUT_VARIANTS)} callout variants.`,
+      fix: 'Remove unused callout variants before saving the template.',
+    });
+  }
+
   if (options.requirePage) {
     if (!isRecord(source.page)) {
       issues.push({
@@ -296,7 +315,14 @@ function normalizeCalloutVariants(raw: unknown): Record<string, CalloutVariant> 
   const source = record(raw);
   const variants: Record<string, CalloutVariant> = {};
   for (const [type, variantValue] of Object.entries(source)) {
+    if (Object.keys(variants).length >= MAX_CALLOUT_VARIANTS) {
+      break;
+    }
     if (!/^[a-z0-9-]+$/i.test(type)) {
+      continue;
+    }
+    const normalizedType = type.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(variants, normalizedType)) {
       continue;
     }
     const variant = record(variantValue);
@@ -316,7 +342,7 @@ function normalizeCalloutVariants(raw: unknown): Record<string, CalloutVariant> 
     if (typeof variant.iconColor === 'string') {
       normalized.iconColor = variant.iconColor;
     }
-    variants[type.toLocaleLowerCase()] = normalized;
+    variants[normalizedType] = normalized;
   }
   return variants;
 }
@@ -345,7 +371,14 @@ export function normalizeTemplateFolder(raw: unknown): string {
 }
 
 export function templateFolderKey(raw: unknown): string {
-  return normalizeTemplateFolder(raw).toLocaleLowerCase();
+  return normalizeTemplateFolder(raw).toLowerCase();
+}
+
+function normalizeTemplateTags(raw: unknown): string[] {
+  const tags = stringArray(raw, [])
+    .map((tag) => tag.trim().slice(0, MAX_TAG_LENGTH))
+    .filter(Boolean);
+  return [...new Set(tags)].slice(0, MAX_TEMPLATE_TAGS);
 }
 
 export function normalizeTemplate(raw: unknown): TemplarTemplate {
@@ -382,7 +415,7 @@ export function normalizeTemplate(raw: unknown): TemplarTemplate {
       author: stringValue(metadata.author, DEFAULT_TEMPLATE.metadata.author),
       description: stringValue(metadata.description, DEFAULT_TEMPLATE.metadata.description),
       folder: normalizeTemplateFolder(metadata.folder),
-      tags: stringArray(metadata.tags, DEFAULT_TEMPLATE.metadata.tags),
+      tags: normalizeTemplateTags(metadata.tags ?? DEFAULT_TEMPLATE.metadata.tags),
     },
     paper: {
       color: stringValue(paper.color, DEFAULT_TEMPLATE.paper.color),
@@ -817,11 +850,21 @@ export function normalizeNoteStyle(raw: unknown): TemplarNoteStyle | null {
     };
   }
 
+  if (source.attachments !== undefined && !isRecord(source.attachments)) {
+    return null;
+  }
   const rawAttachments = record(source.attachments);
+  const attachmentEntries = Object.entries(rawAttachments);
+  if (attachmentEntries.length > MAX_ATTACHMENT_OVERRIDES) {
+    return null;
+  }
   const attachments: TemplarNoteStyle['attachments'] = {};
-  for (const [fileName, overrideValue] of Object.entries(rawAttachments)) {
+  for (const [fileName, overrideValue] of attachmentEntries) {
+    if (new TextEncoder().encode(fileName).length > MAX_ATTACHMENT_FILENAME_BYTES) {
+      return null;
+    }
     const override = record(overrideValue);
-    attachments[fileName] = {
+    const normalizedOverride = {
       frame: override.frame
         ? enumValue(override.frame, imageFrames, DEFAULT_TEMPLATE.images.frame)
         : undefined,
@@ -834,9 +877,19 @@ export function normalizeNoteStyle(raw: unknown): TemplarNoteStyle | null {
           ? undefined
           : numberValue(override.width, 100, 10, 2400),
     };
+    if (
+      normalizedOverride.frame !== undefined ||
+      normalizedOverride.rotation !== undefined ||
+      normalizedOverride.width !== undefined
+    ) {
+      attachments[fileName] = normalizedOverride;
+    }
   }
   if (Object.keys(attachments).length > 0) {
     normalized.attachments = attachments;
+  }
+  if (new TextEncoder().encode(JSON.stringify(normalized)).length > MAX_NORMALIZED_NOTE_STYLE_BYTES) {
+    return null;
   }
   return validateTemplate(normalized).valid ? normalized : null;
 }
@@ -871,7 +924,7 @@ function validateColor(value: string, path: string, issues: ValidationIssue[]): 
   if (!value.trim()) {
     issues.push({ severity: 'error', path, message: 'Choose a non-empty CSS color.' });
   }
-  if (/url\s*\(|[;{}<>]/i.test(value)) {
+  if (/(?:url|var|env|attr)\s*\(|[;{}<>]/i.test(value)) {
     issues.push({
       severity: 'error',
       path,
@@ -882,7 +935,11 @@ function validateColor(value: string, path: string, issues: ValidationIssue[]): 
 }
 
 function validateCssValue(value: string, path: string, issues: ValidationIssue[]): void {
-  if (!value.trim() || /[;{}<>]/.test(value) || /(?:url|expression)\s*\(/i.test(value)) {
+  if (
+    !value.trim() ||
+    /[;{}<>]/.test(value) ||
+    /(?:url|expression|var|env|attr)\s*\(/i.test(value)
+  ) {
     issues.push({
       severity: 'error',
       path,
@@ -903,6 +960,14 @@ export function validateTemplate(template: TemplarTemplate): ValidationResult {
   }
   if (!template.name.trim()) {
     issues.push({ severity: 'error', path: 'name', message: 'Give the style a name.' });
+  }
+  if (Object.keys(template.blocks.calloutVariants).length > MAX_CALLOUT_VARIANTS) {
+    issues.push({
+      severity: 'error',
+      path: 'blocks.calloutVariants',
+      message: `A template may define at most ${String(MAX_CALLOUT_VARIANTS)} callout variants.`,
+      fix: 'Remove unused callout variants before saving the template.',
+    });
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(template.id)) {
     issues.push({

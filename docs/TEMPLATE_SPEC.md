@@ -260,11 +260,11 @@ templar-template:
 | table padding | 0–40px |
 | callout border width | 0–12px |
 | callout/embed radius | 0–60px |
-| callout variant key | letters, digits, and hyphens; each variant may override accent, background, text, title, and icon colors |
+| callout variant key | letters, digits, and hyphens; at most 64 variants; each may override accent, background, text, title, and icon colors |
 | watermark size | 24–240px |
 | watermark rotation | -45–45 degrees |
 | watermark opacity | 0.05–1 |
-| custom CSS | maximum 50 KB and safe virtual selectors only |
+| custom CSS | maximum 50 KB and safe virtual selectors only; generated CSS is capped at 1 MB before installation |
 
 ## Template pack format
 
@@ -284,7 +284,7 @@ templar-pack:
       # ...complete normalized template...
 ```
 
-Folder values inside templates remain display metadata and never create vault folders. The raw YAML import is capped at 8 MB and a pack at 256 template members before detailed validation. Every member is normalized and validated independently through the standalone import path. Duplicate IDs inside one pack are explicit member errors. An invalid member is blocked without invalidating otherwise valid members. Built-in IDs cannot be replaced by imported content; conflicts must be kept or imported as a custom copy.
+Folder values inside templates remain display metadata and never create vault folders. The raw YAML import is capped at 8 MB and a pack at 256 template members before detailed validation. Every member is normalized and validated independently through the standalone import path. Duplicate IDs inside one pack are explicit member errors. An invalid member is blocked without invalidating otherwise valid members. Built-in IDs cannot be replaced by imported content; conflicts must be kept or imported as a custom copy. Normalized note styles cap callout variants at 64, attachment overrides at 512 (UTF-8 filenames at 512 bytes), tags at 64 entries with 80-byte values, style rules at 128 with 32 conditions each, and the serialized note at 512 KB.
 
 ## Baseline behavior
 
@@ -372,7 +372,7 @@ h1 { ... }
 
 Viewport media queries are prohibited because paged notes must not reflow when the window changes. Preference media queries for reduced motion, color scheme, and contrast are allowed.
 
-Viewport/container units, `env()` lengths, `@container` queries, `!important`, and private `.templar-*` runtime classes are also prohibited. Physical newlines/controls inside CSS strings, unterminated strings/comments, and malformed constructs that PostCSS would recover differently from a browser are rejected before compilation. Templar reserves geometry and root typography declarations on `.page` and `.page-content` (width, height, padding, margin, overflow, positioning, transforms, zoom, font, and line height), because those declarations define the fixed canvas and measured baseline. When baseline alignment is active, descendants that participate in document rhythm also cannot override vertical box/font geometry; use structured fields for those dimensions and keep custom CSS decorative.
+Viewport/container units, `env()` lengths, `@container` queries, `!important`, and private `.templar-*` runtime classes are also prohibited. Structured CSS values are self-contained: `var()`, `env()`, and `attr()` are rejected in colors and interpolated scalar fields so a pasted template cannot depend on a host stylesheet or element attribute. Physical newlines/controls inside CSS strings, unterminated strings/comments, and malformed constructs that PostCSS would recover differently from a browser are rejected before compilation. Templar reserves geometry and root typography declarations on `.page` and `.page-content` (width, height, padding, margin, overflow, positioning, transforms, zoom, font, and line height), because those declarations define the fixed canvas and measured baseline. When baseline alignment is active, descendants that participate in document rhythm also cannot override vertical box/font geometry; use structured fields for those dimensions and keep custom CSS decorative.
 
 ## Attachment overrides
 

@@ -5,44 +5,129 @@ on:
     tags:
       - "*"
 
-permissions:
-  contents: write
-
 jobs:
-  build:
+  build-and-verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 20
           cache: npm
 
-      - name: Verify release metadata
-        run: npm run verify:release -- "${{ github.ref_name }}"
-
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: Verify and build release
+        run: npm run verify:ship -- "${GITHUB_REF_NAME}"
 
-      - name: Test
-        run: npm test
+      - name: Stage exact release assets
+        run: |
+          rm -rf .release
+          mkdir .release
+          cp main.js manifest.json styles.css SHA256SUMS.txt .release/
+          node scripts/verify-brat-release.mjs "${GITHUB_REF_NAME}" .release
 
-      - name: Build and verify mobile bundle
-        run: npm run build
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Templar ${{ github.ref_name }}
-          body_path: docs/releases/${{ github.ref_name }}.md
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            main.js
-            manifest.json
-            styles.css
+          name: templar-release-${{ github.ref_name }}
+          path: .release/
+          if-no-files-found: error
+
+  publish:
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release notes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js for artifact verification
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install verifier dependencies
+        run: npm ci
+
+      - name: Download verified release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: templar-release-${{ github.ref_name }}
+          path: .release
+
+      - name: Re-verify downloaded artifacts
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node - <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { readFileSync } = require('node:fs');
+          const expected = readFileSync('.release/SHA256SUMS.txt', 'utf8').trim().split('\n');
+          for (const line of expected) {
+            const [hash, name] = line.split(/\s{2,}/);
+            const actual = createHash('sha256').update(readFileSync(`.release/${name}`)).digest('hex');
+            if (actual !== hash) throw new Error(`Checksum mismatch for ${name}`);
+          }
+          NODE
+          node scripts/verify-brat-release.mjs "${RELEASE_TAG}" .release
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          if [[ "${RELEASE_TAG}" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "${RELEASE_TAG}" \
+            .release/main.js .release/manifest.json .release/styles.css .release/SHA256SUMS.txt \
+            --draft --title "Templar ${RELEASE_TAG}" \
+            --notes-file "docs/releases/${RELEASE_TAG}.md" \
+            "${flags[@]}"
+
+      - name: Publish verified draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release edit "${RELEASE_TAG}" --draft=false
+
+      - name: Verify published release metadata and asset hashes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          rm -rf .release-remote
+          mkdir .release-remote
+          gh release download "${RELEASE_TAG}" \
+            --dir .release-remote \
+            --pattern main.js \
+            --pattern manifest.json \
+            --pattern styles.css \
+            --pattern SHA256SUMS.txt
+          (cd .release-remote && sha256sum -c ../.release/SHA256SUMS.txt)
+          gh release view "${RELEASE_TAG}" --json tagName,isDraft,isPrerelease,assets > .release/release.json
+          RELEASE_TAG="${RELEASE_TAG}" node --input-type=module - <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const expectedTag = process.env.RELEASE_TAG;
+          const release = JSON.parse(readFileSync('.release/release.json', 'utf8'));
+          if (release.tagName !== expectedTag) throw new Error(`Unexpected release tag: ${release.tagName}`);
+          if (release.isDraft) throw new Error('The published release is still a draft.');
+          if (release.isPrerelease !== expectedTag.includes('-')) throw new Error('The prerelease flag does not match the tag policy.');
+          const names = new Set(release.assets.map((asset) => asset.name));
+          for (const name of ['main.js', 'manifest.json', 'styles.css', 'SHA256SUMS.txt']) {
+            if (!names.has(name)) throw new Error(`Published release is missing ${name}.`);
+          }
+          NODE

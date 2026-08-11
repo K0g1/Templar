@@ -104,6 +104,13 @@ export class PreviewSessionService {
     return owner ? this.current(owner) : null;
   }
 
+  public currentForDocument(document: Document): PreviewSession | null {
+    const owner = [...this.sessions.values()]
+      .find((session) => session.leaf.view.containerEl.ownerDocument === document)
+      ?.owner;
+    return owner ? this.current(owner) : null;
+  }
+
   public async cancel(owner: string): Promise<void> {
     this.cancelFrame(owner);
     const session = this.sessions.get(owner);

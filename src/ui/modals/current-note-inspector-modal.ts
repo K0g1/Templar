@@ -1,0 +1,1 @@
+export { CurrentNoteInspectorModal } from './legacy';

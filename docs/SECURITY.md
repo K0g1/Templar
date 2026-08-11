@@ -24,13 +24,14 @@ All four can be synced or received from someone else and are treated as untruste
 - No imported text is passed to `innerHTML` or executed.
 - Import preview is isolated and saving requires an explicit user action.
 - Raw imports are capped at 8 MB before YAML parsing; packs are capped at 256 members and 8 MB of aggregate custom CSS.
+- Normalized settings and note styles have bounded collections: 64 callout variants, 512 attachment overrides with 512-byte UTF-8 filenames, 64 tags with 80-byte values, 128 style rules with 32 conditions each, and a 512 KB serialized note-style budget.
 - Every pack member traverses the standalone normalizer, source validator, structured validator, and CSS validator independently. Duplicate member IDs are errors, invalid members are blocked, built-in IDs cannot be overwritten, and folder labels never become filesystem paths.
 
 ## CSS controls
 
-Custom CSS has a 50 KB limit and is parsed by patched PostCSS plus `postcss-selector-parser`.
+Custom CSS has a 50 KB limit and is parsed by patched PostCSS plus `postcss-selector-parser`; generated structured/custom output is capped at 1 MB before it is installed.
 
-Before PostCSS recovery, a small tokenizer rejects physical control characters inside strings and unterminated strings/comments. This closes browser/parser differentials where a malformed quoted value could terminate a scoped declaration and create a global rule. Structured frontmatter strings are independently escaped/guarded before interpolation, so note metadata cannot escape a generated CSS string.
+Before PostCSS recovery, a small tokenizer rejects physical control characters inside strings and unterminated strings/comments. This closes browser/parser differentials where a malformed quoted value could terminate a scoped declaration and create a global rule. Structured frontmatter strings are independently escaped/guarded before interpolation; `var()`, `env()`, and `attr()` are rejected in structured values so note metadata cannot escape or inherit an unexpected host CSS value.
 
 Every non-keyframe selector must start with `.page` or `.page-content`. The validator rejects:
 
@@ -64,8 +65,10 @@ Runtime code uses Obsidian Vault/FileManager APIs only. It does not import Node.
 Runtime dependencies are limited to the CodeMirror view type package supplied externally by Obsidian plus bundled PostCSS selector tooling. The lockfile is committed. Release verification runs:
 
 ```bash
-npm audit
+npm audit --audit-level=moderate
+npm audit --omit=dev --audit-level=moderate
 npm run check
+npm run verify:ship -- <exact-version>
 npm run verify:mobile
 ```
 

@@ -29,8 +29,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setDesc('Render styled notes in reading view.')
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.enableReadingView).onChange(async (value) => {
-          this.plugin.settings.enableReadingView = value;
-          await this.plugin.saveSettings();
+          await this.plugin.updateSettings((draft) => { draft.enableReadingView = value; });
           this.plugin.refreshEverything();
         }),
       );
@@ -39,8 +38,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setDesc('Render the same page style while editing Markdown.')
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.enableLivePreview).onChange(async (value) => {
-          this.plugin.settings.enableLivePreview = value;
-          await this.plugin.saveSettings();
+          await this.plugin.updateSettings((draft) => { draft.enableLivePreview = value; });
           this.plugin.refreshEverything();
         }),
       );
@@ -49,8 +47,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setDesc('Collapse the templar YAML block during ordinary editing. Use “edit raw style” to inspect it.')
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.hideStyleMetadata).onChange(async (value) => {
-          this.plugin.settings.hideStyleMetadata = value;
-          await this.plugin.saveSettings();
+          await this.plugin.updateSettings((draft) => { draft.hideStyleMetadata = value; });
           this.plugin.refreshEverything();
         }),
       );
@@ -68,8 +65,7 @@ export class TemplarSettingTab extends PluginSettingTab {
           .addOptions(options)
           .setValue(this.plugin.settings.defaultTemplateId)
           .onChange(async (value) => {
-            this.plugin.settings.defaultTemplateId = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings((draft) => { draft.defaultTemplateId = value; });
           }),
       );
     new Setting(containerEl)
@@ -78,7 +74,11 @@ export class TemplarSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => dropdown
         .addOptions({ pageless: 'Pageless', 'paged-a4': 'Paged A4', 'paged-letter': 'Paged Letter' })
         .setValue(this.plugin.settings.defaultNewPageFlow)
-        .onChange(async (value) => { this.plugin.settings.defaultNewPageFlow = value as typeof this.plugin.settings.defaultNewPageFlow; await this.plugin.saveSettings(); }));
+        .onChange(async (value) => {
+          await this.plugin.updateSettings((draft) => {
+            draft.defaultNewPageFlow = value as typeof draft.defaultNewPageFlow;
+          });
+        }));
 
     new Setting(containerEl).setName('Template library').setHeading();
     containerEl.createEl('p', {
@@ -121,8 +121,7 @@ export class TemplarSettingTab extends PluginSettingTab {
           .setLimits(16, 60, 1)
           .setValue(this.plugin.settings.defaultGridUnit)
           .onChange(async (value) => {
-            this.plugin.settings.defaultGridUnit = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings((draft) => { draft.defaultGridUnit = value; });
           }),
       );
     new Setting(containerEl)
@@ -133,8 +132,7 @@ export class TemplarSettingTab extends PluginSettingTab {
           .setLimits(16, 256, 8)
           .setValue(this.plugin.settings.fontCacheSize)
           .onChange(async (value) => {
-            this.plugin.settings.fontCacheSize = value;
-            await this.plugin.saveSettings();
+            await this.plugin.updateSettings((draft) => { draft.fontCacheSize = value; });
           }),
       )
       .addButton((button) =>
@@ -217,9 +215,10 @@ export class TemplarSettingTab extends PluginSettingTab {
       'Every option returns to its default value. Custom page styles are kept; favorites, recents, and style rules are cleared.',
       async () => {
         const defaults = clone(DEFAULT_SETTINGS);
-        defaults.userTemplates = this.plugin.settings.userTemplates;
-        Object.assign(this.plugin.settings, defaults);
-        await this.plugin.saveSettings();
+        await this.plugin.updateSettings((draft) => {
+          defaults.userTemplates = clone(draft.userTemplates);
+          Object.assign(draft, defaults);
+        });
         this.plugin.refreshEverything();
         this.render();
         new Notice('Templar settings restored to defaults.');

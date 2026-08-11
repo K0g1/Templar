@@ -1,7 +1,11 @@
 import postcss, { type AtRule, type Rule } from 'postcss';
-import selectorParser, { type Selector } from 'postcss-selector-parser';
 import { MAX_CUSTOM_CSS_BYTES } from '../constants';
 import type { ValidationIssue, ValidationResult } from '../types';
+import {
+  analyzeSelector,
+  decodeCssEscapes,
+  type SelectorAnalysis,
+} from './css/selector-policy';
 
 const allowedAtRules = new Set([
   'keyframes',
@@ -11,18 +15,6 @@ const allowedAtRules = new Set([
   'supports',
 ]);
 
-const globalTags = new Set(['html', 'body']);
-const globalClasses = new Set([
-  'app-container',
-  'horizontal-main-container',
-  'mod-root',
-  'workspace',
-  'workspace-leaf',
-  'workspace-tabs',
-  'nav-files-container',
-  'modal-container',
-  'setting-item',
-]);
 const allowedPreferenceFeatures = new Set([
   'prefers-reduced-motion',
   'prefers-color-scheme',
@@ -116,6 +108,19 @@ const reservedRhythmProperties = new Set([
   'padding-bottom',
   'padding-top',
 ]);
+const reservedRootAvailabilityProperties = new Set([
+  'visibility',
+  'opacity',
+  'pointer-events',
+  'filter',
+  'backdrop-filter',
+  'clip',
+  'clip-path',
+  'mask',
+  'mask-image',
+  '-webkit-mask',
+  '-webkit-mask-image',
+]);
 const unstableLengthUnit =
   /[-+]?(?:\d+|\d*\.\d+)\s*(?:cqb|cqh|cqi|cqmax|cqmin|cqw|dvh|dvw|lvh|lvw|svh|svw|vb|vh|vi|vmax|vmin|vw)\b/i;
 
@@ -167,55 +172,6 @@ function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as AtRule).name);
 }
 
-function selectorStartsWithVirtualRoot(selector: string): boolean {
-  return /^\.page(?:-content)?(?=$|[\s.:#[])/.test(selector.trim());
-}
-
-function selectorTargetsVirtualRoot(selector: string): boolean {
-  return /^\.page(?:-content)?(?=$|[.:#[])/.test(selector.trim());
-}
-
-function selectorTargetsRhythmElement(selector: string): boolean {
-  return /(?:^|[\s>+~(,])(?:h[1-6]|p|ul|ol|li|blockquote|pre|hr)(?=$|[\s>+~,.#:)\]])/.test(
-    selector,
-  );
-}
-
-function decodeCssEscapes(value: string): string {
-  return value.replace(
-    /\\(?:([0-9a-f]{1,6})\s?|([^\r\n0-9a-f]))/gi,
-    (_match, hex: string | undefined, character: string | undefined) => {
-      if (hex) {
-        const codePoint = Number.parseInt(hex, 16);
-        return codePoint === 0 || codePoint > 0x10ffff
-          ? '\uFFFD'
-          : String.fromCodePoint(codePoint);
-      }
-      return character ?? '';
-    },
-  );
-}
-
-function globalSelectorToken(selector: Selector): string | null {
-  let token: string | null = null;
-  selector.walkTags((tag) => {
-    if (!token && globalTags.has(tag.value.toLowerCase())) {
-      token = tag.value.toLowerCase();
-    }
-  });
-  selector.walkClasses((className) => {
-    if (!token && globalClasses.has(className.value.toLowerCase())) {
-      token = `.${className.value.toLowerCase()}`;
-    }
-  });
-  selector.walkPseudos((pseudo) => {
-    if (!token && decodeCssEscapes(pseudo.value).toLowerCase() === ':root') {
-      token = ':root';
-    }
-  });
-  return token;
-}
-
 function isSafePreferenceMediaQuery(params: string): boolean {
   const decoded = decodeCssEscapes(params).toLowerCase().trim();
   if (!decoded || decoded.includes(',')) {
@@ -235,43 +191,34 @@ function isSafePreferenceMediaQuery(params: string): boolean {
   return remainder.length === 0;
 }
 
-function selectorCanHideWholePage(rule: Rule): boolean {
-  return rule.selectors.some((selector) =>
-    /^\.page(?:-content)?(?:\s*[>+~]?\s*\*)?\s*$/.test(selector.trim()),
-  );
-}
-
-function validateSelector(selector: string, issues: ValidationIssue[]): void {
+function validateSelector(selector: string, issues: ValidationIssue[]): SelectorAnalysis[] {
   try {
-    const ast = selectorParser().astSync(selector);
-    for (const node of ast.nodes) {
-      const text = node.toString().trim();
-      if (!selectorStartsWithVirtualRoot(text)) {
+    const analyses = analyzeSelector(selector);
+    for (const analysis of analyses) {
+      if (!analysis.startsWithVirtualRoot) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
-          message: `“${text}” is not scoped to .page or .page-content.`,
+          message: `“${analysis.text}” is not scoped to .page or .page-content.`,
           fix: `Start the selector with “.page ” so it affects only this note.`,
         });
       }
-      const lower = decodeCssEscapes(text).toLowerCase();
-      const token = globalSelectorToken(node);
-      if (token) {
+      if (analysis.globalToken) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
-          message: `“${text}” references the global Obsidian selector “${token}”.`,
+          message: `“${analysis.text}” references the global Obsidian selector “${analysis.globalToken}”.`,
           fix: 'Use the documented Templar selector vocabulary.',
         });
       }
-      if (lower.includes(':global(')) {
+      if (analysis.usesGlobalEscape) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
           message: 'The :global() escape is not supported because it can leak outside the note.',
         });
       }
-      if (lower.includes('.templar-')) {
+      if (analysis.usesPrivateRuntimeClass) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
@@ -280,12 +227,14 @@ function validateSelector(selector: string, issues: ValidationIssue[]): void {
         });
       }
     }
+    return analyses;
   } catch (error) {
     issues.push({
       severity: 'error',
       path: 'css.selector',
       message: `Templar could not parse selector “${selector}”: ${errorMessage(error)}`,
     });
+    return [];
   }
 }
 
@@ -351,11 +300,14 @@ export function validateCustomCss(
     }
   });
 
+  const ruleAnalyses = new WeakMap<Rule, SelectorAnalysis[]>();
   root.walkRules((rule) => {
     if (!isInsideKeyframes(rule)) {
+      const analyses: SelectorAnalysis[] = [];
       for (const selector of rule.selectors) {
-        validateSelector(selector, issues);
+        analyses.push(...validateSelector(selector, issues));
       }
+      ruleAnalyses.set(rule, analyses);
     }
   });
 
@@ -381,10 +333,14 @@ export function validateCustomCss(
     const parentRule = declaration.parent?.type === 'rule'
       ? declaration.parent
       : null;
+    const analyses = parentRule ? ruleAnalyses.get(parentRule) ?? [] : [];
+    const targetsRoot = analyses.some((analysis) => analysis.targetsVirtualRoot);
+    const targetsRhythm = analyses.some((analysis) => analysis.targetsRhythmElement);
+    const targetsWholePage = analyses.some((analysis) => analysis.targetsWholePage);
     if (
       parentRule &&
       reservedRootGeometryProperties.has(property) &&
-      parentRule.selectors.some((selector) => selectorTargetsVirtualRoot(selector))
+      targetsRoot
     ) {
       issues.push({
         severity: 'error',
@@ -395,9 +351,21 @@ export function validateCustomCss(
     }
     if (
       parentRule &&
+      reservedRootAvailabilityProperties.has(property) &&
+      targetsRoot
+    ) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” could make the entire .page or .page-content unavailable.`,
+        fix: 'Apply this effect to a specific Markdown descendant instead of the page root.',
+      });
+    }
+    if (
+      parentRule &&
       options.protectRhythm === true &&
       reservedRhythmProperties.has(property) &&
-      parentRule.selectors.some((selector) => selectorTargetsRhythmElement(selector))
+      targetsRhythm
     ) {
       issues.push({
         severity: 'error',
@@ -425,17 +393,25 @@ export function validateCustomCss(
         fix: 'Use relative, absolute, or sticky positioning inside the page.',
       });
     }
-    if (property === 'z-index' && Number.parseFloat(value) > 20) {
+    const zIndexValue = value.trim();
+    const literalZIndex = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(zIndexValue)
+      ? Number(zIndexValue)
+      : null;
+    if (
+      property === 'z-index' &&
+      literalZIndex !== null &&
+      (literalZIndex < -1 || literalZIndex > 20)
+    ) {
       issues.push({
         severity: 'error',
         path: 'css.z-index',
-        message: 'z-index values above 20 can escape the page’s visual layer.',
+        message: 'z-index values must stay between -1 and 20.',
         fix: 'Use a z-index between -1 and 20.',
       });
     }
     if (
       property === 'z-index' &&
-      !/^(?:auto|inherit|initial|revert|revert-layer|unset|-?\d+(?:\.\d+)?)$/.test(value.trim())
+      !/^(?:auto|inherit|initial|revert|revert-layer|unset|-?(?:\d+(?:\.\d+)?|\.\d+))$/.test(zIndexValue)
     ) {
       issues.push({
         severity: 'error',
@@ -446,7 +422,7 @@ export function validateCustomCss(
     }
     if (
       declaration.parent?.type === 'rule' &&
-      selectorCanHideWholePage(declaration.parent) &&
+      targetsWholePage &&
       ((property === 'display' && value.trim() === 'none') ||
         (property === 'visibility' && value.trim() === 'hidden') ||
         (property === 'content-visibility' && value.trim() === 'hidden') ||

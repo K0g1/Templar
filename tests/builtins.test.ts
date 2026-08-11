@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { validateCustomCss } from '../src/services/css-validator';
 import { contrastRatio } from '../src/templates/accessibility';
@@ -15,6 +17,27 @@ describe('built-in template catalog', () => {
     expect(new Set(BUILT_IN_TEMPLATES.map((template) => template.name)).size).toBe(
       BUILT_IN_TEMPLATES.length,
     );
+  });
+
+  it('matches deliberate appearance fingerprints independent of catalog order', () => {
+    const fingerprints = JSON.parse(
+      readFileSync('tests/fixtures/builtin-fingerprints.json', 'utf8'),
+    ) as Record<string, string>;
+    const fingerprint = (value: unknown): string => createHash('sha256')
+      .update(canonicalize(value), 'utf8')
+      .digest('hex');
+    const current = Object.fromEntries(
+      BUILT_IN_TEMPLATES.map((template) => [template.id, `sha256-${fingerprint(template)}`]),
+    );
+    expect(current).toEqual(fingerprints);
+    expect(Object.fromEntries([...BUILT_IN_TEMPLATES].reverse().map((template) => [template.id, `sha256-${fingerprint(template)}`])))
+      .toEqual(fingerprints);
+    expect(Object.fromEntries([
+      { id: 'new-seed' },
+      ...BUILT_IN_TEMPLATES,
+    ].filter((template): template is typeof BUILT_IN_TEMPLATES[number] => 'version' in template)
+      .map((template) => [template.id, `sha256-${fingerprint(template)}`])))
+      .toEqual(fingerprints);
   });
 
   it('organizes the catalog into a diverse set of useful folders', () => {
@@ -164,3 +187,12 @@ describe('built-in template catalog', () => {
     expect(failures).toEqual([]);
   });
 });
+
+function canonicalize(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}

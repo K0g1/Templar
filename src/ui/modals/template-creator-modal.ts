@@ -1,0 +1,1 @@
+export { TemplateCreatorModal } from './legacy';

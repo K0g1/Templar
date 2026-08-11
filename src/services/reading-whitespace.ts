@@ -56,11 +56,36 @@ export function blankLinesBeforeFirstSection(
     .length;
 }
 
+export interface FenceState {
+  marker: '`' | '~';
+  length: number;
+}
+
+export function parseFenceOpening(line: string): FenceState | null {
+  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match) return null;
+  const run = match[1] ?? '';
+  const marker = run.charAt(0);
+  if (marker === '`' && (match[2] ?? '').includes('`')) {
+    return null;
+  }
+  return marker === '`' || marker === '~'
+    ? { marker, length: run.length }
+    : null;
+}
+
+export function isFenceClosing(line: string, state: FenceState): boolean {
+  const match = /^ {0,3}(`+|~+)([ \t]*)$/.exec(line);
+  if (!match) return false;
+  const run = match[1] ?? '';
+  return run.charAt(0) === state.marker && run.length >= state.length;
+}
+
 /** Counts Markdown blank-line runs while ignoring fenced-code contents. */
 export function internalBlankLineRuns(markdown: string): number[] {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
   const runs: number[] = [];
-  let fence: { marker: '`' | '~'; length: number } | null = null;
+  let fence: FenceState | null = null;
   let run = 0;
 
   const flush = (): void => {
@@ -71,23 +96,15 @@ export function internalBlankLineRuns(markdown: string): number[] {
   };
 
   for (const line of lines) {
-    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    if (fenceMatch) {
-      const marker = fenceMatch[1]?.charAt(0);
-      if (!fence && (marker === '`' || marker === '~')) {
-        flush();
-        fence = { marker, length: fenceMatch[1]?.length ?? 3 };
-        continue;
-      }
-      const activeFence = fence;
-      if (
-        activeFence &&
-        activeFence.marker === marker &&
-        (fenceMatch[1]?.length ?? 0) >= activeFence.length
-      ) {
-        fence = null;
-        continue;
-      }
+    const opening = parseFenceOpening(line);
+    if (!fence && opening) {
+      flush();
+      fence = opening;
+      continue;
+    }
+    if (fence && isFenceClosing(line, fence)) {
+      fence = null;
+      continue;
     }
     if (fence) {
       continue;
@@ -104,7 +121,7 @@ export function internalBlankLineRuns(markdown: string): number[] {
   if (lines[0]?.trim() === '') {
     runs.shift();
   }
-  if (lines.at(-1)?.trim() === '') {
+  if (lines[lines.length - 1]?.trim() === '') {
     runs.pop();
   }
   return runs;

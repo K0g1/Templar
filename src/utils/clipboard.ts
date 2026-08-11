@@ -19,6 +19,7 @@ export async function writeTextToClipboard(
     }
   }
 
+  const previous = ownerDocument.activeElement;
   const helper = ownerDocument.createElement('textarea');
   helper.className = 'templar-clipboard-helper';
   helper.value = text;
@@ -34,5 +35,15 @@ export async function writeTextToClipboard(
     }
   } finally {
     helper.remove();
+    const HTMLElementConstructor = ownerDocument.defaultView?.HTMLElement;
+    if (
+      previous &&
+      HTMLElementConstructor &&
+      previous.instanceOf(HTMLElementConstructor) &&
+      previous.isConnected &&
+      (previous.tabIndex >= 0 || previous.matches('button, input, select, textarea, a[href], [contenteditable="true"]'))
+    ) {
+      previous.focus({ preventScroll: true });
+    }
   }
 }

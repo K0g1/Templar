@@ -130,4 +130,34 @@ describe('safe CSS compiler', () => {
     expect(protectedResult.valid).toBe(false);
     expect(protectedResult.issues.some((issue) => issue.path === 'css.line-height')).toBe(true);
   });
+
+  it('uses decoded selector semantics for escaped rhythm elements and root subjects', () => {
+    const escapedRhythm = validateCustomCss(String.raw`.page h\31  { margin-top: 13px; }`, {
+      protectRhythm: true,
+    });
+    expect(escapedRhythm.valid).toBe(false);
+    expect(escapedRhythm.issues.some((issue) => issue.path === 'css.margin-top')).toBe(true);
+    expect(transformVirtualSelector(String.raw`.page h\31`, '[data-templar-scope="escaped"]'))
+      .toContain(':is(h1, .HyperMD-header-1, .inline-title)');
+
+    for (const css of [
+      '.page:not(.class-that-never-exists) { opacity: 0; }',
+      '.page:is(.page) { pointer-events: none; }',
+      '.page[data-x] { filter: opacity(0); }',
+    ]) {
+      const result = validateCustomCss(css);
+      expect(result.valid, css).toBe(false);
+      expect(result.issues.some((issue) => issue.path.startsWith('css.'))).toBe(true);
+    }
+  });
+
+  it('enforces the inclusive literal z-index interval', () => {
+    expect(validateCustomCss('.page h1 { z-index: -2; }').valid).toBe(false);
+    expect(validateCustomCss('.page h1 { z-index: -999; }').valid).toBe(false);
+    expect(validateCustomCss('.page h1 { z-index: -1; }').valid).toBe(true);
+    expect(validateCustomCss('.page h1 { z-index: 20; }').valid).toBe(true);
+    expect(validateCustomCss('.page h1 { z-index: 21; }').valid).toBe(false);
+    expect(validateCustomCss('.page h1 { z-index: calc(1 + 1); }').valid).toBe(false);
+    expect(validateCustomCss('.page h1 { z-index: var(--layer); }').valid).toBe(false);
+  });
 });

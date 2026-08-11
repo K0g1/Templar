@@ -4,6 +4,9 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+- Added a documented BRAT alpha installation path, frozen-version workflow, release artifact verifier, checksums, and a read-only build / publish release gate.
+- Hardened persistence, CSS trust boundaries, DOM-realm ownership, runtime privacy checks, and generated-style resource limits.
+
 ## 1.2.0-alpha.2 — 2026-08-11
 
 - Fixed Live Preview pointer hit-testing so clicking styled paragraphs, headings, lists, and text around blank-line runs places the caret on the visible source line. Generated editor CSS now keeps every CodeMirror line margin-free and uses measured line-box padding for heading spacing.

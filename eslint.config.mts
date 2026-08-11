@@ -22,6 +22,11 @@ export default defineConfig(
             'manifest.json',
             'scripts/verify-mobile-bundle.mjs',
             'scripts/verify-release.mjs',
+            'scripts/update-builtin-fingerprints.mjs',
+            'scripts/verify-runtime-policy.mjs',
+            'scripts/verify-brat-release.mjs',
+            'scripts/verify-ship.mjs',
+            'vitest.config.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,
@@ -31,6 +36,34 @@ export default defineConfig(
   },
   ...obsidianmd.configs.recommended,
   {
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { group: ['node:*', 'electron'], message: 'Node and Electron APIs are not available in the Obsidian runtime.' },
+        ],
+      }],
+      'no-restricted-globals': ['error',
+        { name: 'Buffer', message: 'Use browser-compatible APIs in runtime source.' },
+        { name: 'EventSource', message: 'Network APIs are not part of Templar runtime policy.' },
+        { name: 'fetch', message: 'Network APIs are not part of Templar runtime policy.' },
+        { name: 'process', message: 'Node APIs are not available in the Obsidian runtime.' },
+        { name: 'require', message: 'Dynamic Node loading is not available in the Obsidian runtime.' },
+        { name: 'WebSocket', message: 'Network APIs are not part of Templar runtime policy.' },
+        { name: 'XMLHttpRequest', message: 'Network APIs are not part of Templar runtime policy.' },
+      ],
+      'no-restricted-properties': ['error', {
+        object: 'navigator',
+        property: 'sendBeacon',
+        message: 'Network APIs are not part of Templar runtime policy.',
+      }],
+      'no-restricted-syntax': ['error', {
+        selector: "Identifier[name='FileSystemAdapter']",
+        message: 'FileSystemAdapter requires an explicitly reviewed desktop-only exception.',
+      }],
+    },
+  },
+  {
     files: ['scripts/**/*.mjs'],
     languageOptions: {
       globals: { ...globals.node },
@@ -38,6 +71,26 @@ export default defineConfig(
     rules: {
       'obsidianmd/no-nodejs-modules': 'off',
       'obsidianmd/rule-custom-message': 'off',
+    },
+  },
+  {
+    files: ['tests/**/*.test.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+    rules: {
+      // Test-only tooling never ships in the mobile runtime bundle.
+      'obsidianmd/no-nodejs-modules': 'off',
+    },
+  },
+  {
+    // This integration test deliberately exercises the renderer's owned
+    // <style> lifecycle; the element is never part of the plugin UI.
+    files: ['tests/rendering-controllers.test.ts'],
+    rules: {
+      'obsidianmd/no-forbidden-elements': 'off',
+      'obsidianmd/prefer-create-el': 'off',
+      'obsidianmd/ui/sentence-case': 'off',
     },
   },
   {

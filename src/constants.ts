@@ -9,6 +9,15 @@ export const DEFAULT_TEMPLATE_ID = 'classic-ruled';
 export const MAX_CUSTOM_CSS_BYTES = 50_000;
 export const MAX_IMPORT_BYTES = 8_000_000;
 export const MAX_PACK_TEMPLATES = 256;
+export const MAX_CALLOUT_VARIANTS = 64;
+export const MAX_ATTACHMENT_OVERRIDES = 512;
+export const MAX_ATTACHMENT_FILENAME_BYTES = 512;
+export const MAX_TEMPLATE_TAGS = 64;
+export const MAX_TAG_LENGTH = 80;
+export const MAX_STYLE_RULES = 128;
+export const MAX_RULE_CONDITIONS = 32;
+export const MAX_NORMALIZED_NOTE_STYLE_BYTES = 512 * 1024;
+export const MAX_GENERATED_STYLE_BYTES = 1024 * 1024;
 
 export const VIRTUAL_SELECTORS = [
   '.page',

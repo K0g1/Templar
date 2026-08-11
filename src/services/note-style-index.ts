@@ -1,4 +1,5 @@
 import type { TemplarNoteStyle } from '../types';
+import { clone } from '../utils/value';
 
 export interface IndexedNote {
   path: string;
@@ -19,15 +20,29 @@ export class NoteStyleIndex {
 
   public ensureBuilt(source: () => Iterable<IndexedNote>): void {
     if (this.built) return;
+    const nextNotes = new Map<string, IndexedNote>();
+    const nextUsage = new Map<string, number>();
+    const nextTemplatePaths = new Map<string, Set<string>>();
+    const nextFolderUsage = new Map<string, Map<string, number>>();
+    for (const rawNote of source()) {
+      const note = cloneIndexedNote(rawNote);
+      const previous = nextNotes.get(note.path);
+      if (previous) {
+        adjustMaps(previous, -1, nextUsage, nextTemplatePaths, nextFolderUsage);
+      }
+      nextNotes.set(note.path, note);
+      adjustMaps(note, 1, nextUsage, nextTemplatePaths, nextFolderUsage);
+    }
+    this.replaceMaps(nextNotes, nextUsage, nextTemplatePaths, nextFolderUsage);
     this.built = true;
-    for (const note of source()) this.update(note);
   }
 
   public update(note: IndexedNote): void {
-    const previous = this.notes.get(note.path);
+    const next = cloneIndexedNote(note);
+    const previous = this.notes.get(next.path);
     if (previous) this.adjust(previous, -1);
-    this.notes.set(note.path, note);
-    this.adjust(note, 1);
+    this.notes.set(next.path, next);
+    this.adjust(next, 1);
   }
 
   public remove(path: string): void {
@@ -53,41 +68,76 @@ export class NoteStyleIndex {
   public entriesForTemplate(templateId: string): IndexedNote[] {
     return [...(this.templatePaths.get(templateId) ?? [])].flatMap((path) => {
       const note = this.notes.get(path);
-      return note ? [note] : [];
+      return note ? [cloneIndexedNote(note)] : [];
     });
   }
 
   public allEntries(): IndexedNote[] {
-    return [...this.notes.values()];
+    return [...this.notes.values()].map(cloneIndexedNote);
+  }
+
+  private replaceMaps(
+    notes: Map<string, IndexedNote>,
+    usage: Map<string, number>,
+    templatePaths: Map<string, Set<string>>,
+    folderUsage: Map<string, Map<string, number>>,
+  ): void {
+    this.notes.clear();
+    this.usage.clear();
+    this.templatePaths.clear();
+    this.folderUsage.clear();
+    for (const [path, note] of notes) this.notes.set(path, note);
+    for (const [id, count] of usage) this.usage.set(id, count);
+    for (const [id, paths] of templatePaths) this.templatePaths.set(id, new Set(paths));
+    for (const [folder, counts] of folderUsage) this.folderUsage.set(folder, new Map(counts));
   }
 
   private adjust(note: IndexedNote, delta: 1 | -1): void {
-    const id = note.style?.sourceTemplateId;
-    if (!id) return;
-    this.setCount(this.usage, id, delta);
-    let paths = this.templatePaths.get(id);
-    if (delta === 1) {
-      if (!paths) {
-        paths = new Set();
-        this.templatePaths.set(id, paths);
-      }
-      paths.add(note.path);
-    } else if (paths) {
-      paths.delete(note.path);
-      if (paths.size === 0) this.templatePaths.delete(id);
-    }
-    let folder = this.folderUsage.get(note.folder);
-    if (!folder) {
-      folder = new Map();
-      this.folderUsage.set(note.folder, folder);
-    }
-    this.setCount(folder, id, delta);
-    if (folder.size === 0) this.folderUsage.delete(note.folder);
+    adjustMaps(note, delta, this.usage, this.templatePaths, this.folderUsage);
   }
 
-  private setCount(map: Map<string, number>, key: string, delta: 1 | -1): void {
-    const next = (map.get(key) ?? 0) + delta;
-    if (next <= 0) map.delete(key);
-    else map.set(key, next);
+}
+
+function cloneIndexedNote(note: IndexedNote): IndexedNote {
+  return {
+    path: note.path,
+    folder: note.folder,
+    style: note.style ? clone(note.style) : null,
+  };
+}
+
+function adjustMaps(
+  note: IndexedNote,
+  delta: 1 | -1,
+  usage: Map<string, number>,
+  templatePaths: Map<string, Set<string>>,
+  folderUsage: Map<string, Map<string, number>>,
+): void {
+  const id = note.style?.sourceTemplateId;
+  if (!id) return;
+  setCount(usage, id, delta);
+  let paths = templatePaths.get(id);
+  if (delta === 1) {
+    if (!paths) {
+      paths = new Set();
+      templatePaths.set(id, paths);
+    }
+    paths.add(note.path);
+  } else if (paths) {
+    paths.delete(note.path);
+    if (paths.size === 0) templatePaths.delete(id);
   }
+  let folder = folderUsage.get(note.folder);
+  if (!folder) {
+    folder = new Map();
+    folderUsage.set(note.folder, folder);
+  }
+  setCount(folder, id, delta);
+  if (folder.size === 0) folderUsage.delete(note.folder);
+}
+
+function setCount(map: Map<string, number>, key: string, delta: 1 | -1): void {
+  const next = (map.get(key) ?? 0) + delta;
+  if (next <= 0) map.delete(key);
+  else map.set(key, next);
 }

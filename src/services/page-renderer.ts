@@ -9,7 +9,6 @@ import {
   TEMPLAR_CLASS,
   TEMPLAR_CONTENT_CLASS,
   TEMPLAR_PAGE_CLASS,
-  TEMPLAR_STYLE_ELEMENT_CLASS,
 } from '../constants';
 import type { TemplarNoteStyle, TemplarSettings, ValidationIssue } from '../types';
 import {
@@ -40,6 +39,9 @@ import {
   readingRootNeedsRetarget,
 } from './reading-whitespace';
 import { compilePageStyle, type PageMetricSet } from './style-compiler';
+import { realmFor, type DomRealm } from './dom-realm';
+import { OwnedStyleHost } from './rendering/style-host';
+import { ReadingRootRegistry } from './rendering/reading-root-registry';
 
 interface StyledView {
   contentEl: HTMLElement;
@@ -125,7 +127,8 @@ export class PageRenderer {
   private readonly fontDocumentCleanups = new Map<Document, () => void>();
   private readonly pageLayout = new PageLayoutService();
   private readonly readingSections = new WeakMap<HTMLElement, ReadingSectionInfo>();
-  private readonly readingRoots = new Map<HTMLElement, ReadingRootState>();
+  private readonly readingRoots = new ReadingRootRegistry<ReadingRootState>();
+  private readonly styleHost = new OwnedStyleHost();
   private readonly scheduledReadingRoots = new Map<HTMLElement, number>();
   private readonly previews = new Map<WorkspaceLeaf, PreviewState>();
 
@@ -353,8 +356,13 @@ export class PageRenderer {
     const scope = `[data-templar-scope="${escapeCssAttribute(scopeValue)}"]`;
     const compiled = compilePageStyle(style, scope, scopeValue, metrics);
     this.issuesByFile.set(file.path, compiled.issues);
+    if (compiled.issues.some((issue) => issue.path === 'css.generated')) {
+      this.clearLeaf(leaf);
+      this.issuesByFile.set(file.path, compiled.issues);
+      return;
+    }
 
-    const styleEl = this.getOrCreateStyleElement(view.contentEl);
+    const styleEl = this.styleHost.ensure(view.contentEl);
     styleEl.textContent = compiled.css;
     this.styledViews.set(leaf, { contentEl: view.contentEl, filePath: file.path });
     this.configurePaperOrigin(leaf, view.contentEl, style, metrics);
@@ -403,20 +411,6 @@ export class PageRenderer {
     }
   }
 
-  private getOrCreateStyleElement(contentEl: HTMLElement): HTMLStyleElement {
-    const existing = contentEl.querySelector<HTMLStyleElement>(
-      `:scope > style.${TEMPLAR_STYLE_ELEMENT_CLASS}`,
-    );
-    if (existing) {
-      return existing;
-    }
-    const element = contentEl.ownerDocument.createElement('style');
-    element.className = TEMPLAR_STYLE_ELEMENT_CLASS;
-    element.dataset.templarOwned = 'true';
-    contentEl.prepend(element);
-    return element;
-  }
-
   private observeFontDocument(document: Document): void {
     for (const [known, cleanup] of this.fontDocumentCleanups) {
       if (known.defaultView?.closed) {
@@ -449,13 +443,22 @@ export class PageRenderer {
       image.style.removeProperty('--templar-image-snap');
     }
 
+    let realm: DomRealm;
+    try {
+      realm = realmFor(contentEl);
+    } catch {
+      return;
+    }
+    const ResizeObserverConstructor = realm.ResizeObserver;
+    const MutationObserverConstructor = realm.MutationObserver;
+    const OwnerHTMLElement = (realm.window as Window & { HTMLElement: typeof HTMLElement }).HTMLElement;
     const enabled =
       style.baseline.enabled &&
       style.baseline.mode !== 'free' &&
       style.baseline.snapImages &&
-      typeof ResizeObserver !== 'undefined' &&
-      typeof MutationObserver !== 'undefined';
-    if (!enabled) {
+      ResizeObserverConstructor !== null &&
+      MutationObserverConstructor !== null;
+    if (!enabled || !ResizeObserverConstructor || !MutationObserverConstructor) {
       return;
     }
 
@@ -478,15 +481,15 @@ export class PageRenderer {
       const compensation = imageGridCompensation(footprint, style.baseline.unit);
       image.style.setProperty('--templar-image-snap', `${String(round(compensation))}px`);
     };
-    const resizeObserver = new ResizeObserver((entries) => {
+    const resizeObserver = new ResizeObserverConstructor((entries) => {
       for (const entry of entries) {
-        if (entry.target.instanceOf(HTMLElement)) {
+        if (entry.target.instanceOf(OwnerHTMLElement)) {
           update(entry.target);
         }
       }
     });
     const state: ImageObservationState = {
-      mutationObserver: new MutationObserver(() => scanImages()),
+      mutationObserver: new MutationObserverConstructor(() => scanImages()),
       observedImages: new Set(),
       resizeObserver,
     };
@@ -526,14 +529,21 @@ export class PageRenderer {
       pageContent.style.removeProperty('--templar-paper-baseline-position');
     }
 
-    const view = contentEl.ownerDocument.defaultView;
+    let realm: DomRealm;
+    try {
+      realm = realmFor(contentEl);
+    } catch {
+      return;
+    }
+    const view = realm.window;
+    const ResizeObserverConstructor = realm.ResizeObserver;
+    const MutationObserverConstructor = realm.MutationObserver;
     const enabled =
       style.baseline.enabled &&
       style.baseline.mode !== 'free' &&
-      view !== null &&
-      typeof ResizeObserver !== 'undefined' &&
-      typeof MutationObserver !== 'undefined';
-    if (!enabled || !view) {
+      ResizeObserverConstructor !== null &&
+      MutationObserverConstructor !== null;
+    if (!enabled || !ResizeObserverConstructor || !MutationObserverConstructor) {
       return;
     }
 
@@ -640,10 +650,10 @@ export class PageRenderer {
     };
     state = {
       frame: null,
-      mutationObserver: new MutationObserver(scheduleFrame),
+      mutationObserver: new MutationObserverConstructor(scheduleFrame),
       observedElements: new Set(),
       pageContents,
-      resizeObserver: new ResizeObserver(scheduleFrame),
+      resizeObserver: new ResizeObserverConstructor(scheduleFrame),
       targets: new Map(),
       view,
     };
@@ -681,14 +691,22 @@ export class PageRenderer {
     this.disconnectVariableBlockSnapping(leaf);
     this.clearVariableBlockSnapping(contentEl);
 
-    const view = contentEl.ownerDocument.defaultView;
+    let realm: DomRealm;
+    try {
+      realm = realmFor(contentEl);
+    } catch {
+      return;
+    }
+    const view = realm.window;
+    const ResizeObserverConstructor = realm.ResizeObserver;
+    const MutationObserverConstructor = realm.MutationObserver;
+    const OwnerHTMLElement = (realm.window as Window & { HTMLElement: typeof HTMLElement }).HTMLElement;
     const enabled =
       style.baseline.enabled &&
       style.baseline.mode !== 'free' &&
-      view !== null &&
-      typeof ResizeObserver !== 'undefined' &&
-      typeof MutationObserver !== 'undefined';
-    if (!enabled || !view) {
+      ResizeObserverConstructor !== null &&
+      MutationObserverConstructor !== null;
+    if (!enabled || !ResizeObserverConstructor || !MutationObserverConstructor) {
       return;
     }
 
@@ -749,9 +767,9 @@ export class PageRenderer {
         state.frame = view.requestAnimationFrame(flush);
       }
     };
-    const resizeObserver = new ResizeObserver((entries) => {
+    const resizeObserver = new ResizeObserverConstructor((entries) => {
       for (const entry of entries) {
-        if (!entry.target.instanceOf(HTMLElement)) {
+        if (!entry.target.instanceOf(OwnerHTMLElement)) {
           continue;
         }
         const borderBox = entry.borderBoxSize[0];
@@ -764,7 +782,7 @@ export class PageRenderer {
     });
     state = {
       frame: null,
-      mutationObserver: new MutationObserver(() => {
+      mutationObserver: new MutationObserverConstructor(() => {
         state.needsScan = true;
         scheduleFrame();
       }),
@@ -872,9 +890,7 @@ export class PageRenderer {
       delete contentEl.dataset.templarScope;
       delete contentEl.dataset.templarFile;
       delete contentEl.dataset.templarMode;
-      contentEl
-        .querySelector(`:scope > style.${TEMPLAR_STYLE_ELEMENT_CLASS}`)
-        ?.remove();
+      this.styleHost.clear(contentEl);
       for (const element of contentEl.querySelectorAll(`.${TEMPLAR_PAGE_CLASS}`)) {
         element.removeClass(TEMPLAR_PAGE_CLASS);
       }
@@ -1056,7 +1072,7 @@ export class PageRenderer {
     }
     const renderedBlocks = Array.from(pageContent.children).filter(
       (element): element is HTMLElement =>
-        element.instanceOf(HTMLElement) &&
+        isOwnedHTMLElement(element) &&
         !element.matches(
           '.markdown-preview-pusher, .mod-header, .mod-ui, .templar-blank-line-spacer',
         ),
@@ -1226,7 +1242,7 @@ export class PageRenderer {
         : range.text;
     const blocks = Array.from(section.children).filter(
       (element): element is HTMLElement =>
-        element.instanceOf(HTMLElement) &&
+        isOwnedHTMLElement(element) &&
         !element.hasClass('templar-blank-line-spacer') &&
         !element.matches('.metadata-container, .mod-ui'),
     );
@@ -1269,4 +1285,9 @@ export class PageRenderer {
       }
     }
   }
+}
+
+function isOwnedHTMLElement(element: Element): element is HTMLElement {
+  const HTMLElementConstructor = element.ownerDocument.defaultView?.HTMLElement;
+  return HTMLElementConstructor !== undefined && element.instanceOf(HTMLElementConstructor);
 }

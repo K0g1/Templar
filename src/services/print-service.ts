@@ -1,10 +1,14 @@
-import { MarkdownView, Platform, type TFile, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, Platform, type TFile, type WorkspaceLeaf } from 'obsidian';
 import type { FrontmatterService } from './frontmatter';
 import type { PageRenderer } from './page-renderer';
 import { printPageSize } from './print-layout';
+import { waitForLayoutQuiet } from './print-layout-quiet';
+
+export { waitForLayoutQuiet } from './print-layout-quiet';
 
 export class PrintService {
   private cleanupCurrent: (() => void) | null = null;
+  private restoration: Promise<void> | null = null;
   private busy = false;
 
   public constructor(
@@ -39,11 +43,12 @@ export class PrintService {
         throw new Error('The active note changed while Templar was preparing it for print.');
       }
     };
-    const restoreViewMode = (): void => {
+    const restoreViewMode = async (): Promise<void> => {
       if (switchedMode && leaf.view === view && view.file?.path === file.path) {
-        void view.setState(originalState, { history: false }).then(() =>
-          this.renderer.refreshLeafNow(leaf),
-        );
+        await view.setState(originalState, { history: false });
+        if (leaf.view === view && view.file?.path === file.path) {
+          await this.renderer.refreshLeafNow(leaf);
+        }
       }
     };
 
@@ -118,8 +123,7 @@ export class PrintService {
         for (const ancestor of ancestors) ancestor.removeClass('templar-print-ancestor');
         document.body.removeClass('templar-printing');
         this.renderer.restoreAfterPrint(leaf, style);
-        restoreViewMode();
-        this.busy = false;
+        this.beginRestoration(restoreViewMode);
         if (this.cleanupCurrent === cleanup) this.cleanupCurrent = null;
       };
       this.cleanupCurrent = cleanup;
@@ -129,9 +133,8 @@ export class PrintService {
       if (!Platform.isMobile) cleanup();
     } catch (error) {
       this.cleanupCurrent?.();
-      if (this.busy) {
-        restoreViewMode();
-        this.busy = false;
+      if (this.busy && !this.restoration) {
+        this.beginRestoration(restoreViewMode);
       }
       throw error;
     }
@@ -140,41 +143,27 @@ export class PrintService {
   public destroy(): void {
     this.cleanupCurrent?.();
   }
+
+  private beginRestoration(restore: () => Promise<void>): void {
+    if (this.restoration) return;
+    const restoration = Promise.resolve().then(restore);
+    this.restoration = restoration;
+    void restoration.then(
+      () => this.releaseAfterRestoration(restoration),
+      (error: unknown) => {
+        new Notice(`Templar could not restore the note after printing: ${errorMessage(error)}`);
+        this.releaseAfterRestoration(restoration);
+      },
+    );
+  }
+
+  private releaseAfterRestoration(restoration: Promise<void>): void {
+    if (this.restoration !== restoration) return;
+    this.restoration = null;
+    this.busy = false;
+  }
 }
 
-async function waitForLayoutQuiet(target: HTMLElement, window: Window): Promise<void> {
-  await new Promise<void>((resolve) => {
-    let quietTimer = 0;
-    let maximumTimer = 0;
-    let complete = false;
-    const finish = (): void => {
-      if (complete) return;
-      complete = true;
-      if (quietTimer) window.clearTimeout(quietTimer);
-      if (maximumTimer) window.clearTimeout(maximumTimer);
-      resizeObserver?.disconnect();
-      mutationObserver.disconnect();
-      resolve();
-    };
-    const changed = (): void => {
-      if (quietTimer) window.clearTimeout(quietTimer);
-      quietTimer = window.setTimeout(finish, 120);
-    };
-    const resizeObserver = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(changed);
-    const mutationObserver = new MutationObserver(changed);
-    resizeObserver?.observe(target);
-    mutationObserver.observe(target, {
-      attributes: true,
-      characterData: true,
-      childList: true,
-      subtree: true,
-    });
-    maximumTimer = window.setTimeout(finish, 3000);
-    changed();
-  });
-  await new Promise<void>((resolve) =>
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())),
-  );
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

@@ -20,18 +20,19 @@ npm run dev
 Reload the plugin after a build. Before opening a pull request:
 
 ```bash
-npm audit
+npm audit --audit-level=moderate
+npm audit --omit=dev --audit-level=moderate
 npm run check
 ```
 
-`npm run check` is the normal local gate: it runs lint, the pure Vitest suite, strict TypeScript, a production browser bundle, and the mobile-bundle scan. Run `npm run verify:release -- <exact-version>` as well when changing release metadata or release notes. For a local Obsidian smoke test, build first and copy the generated `main.js`, `manifest.json`, and `styles.css` into a disposable vault's `.obsidian/plugins/templar/` folder.
+`npm run check` is the normal local gate: it runs lint, test-inclusive strict TypeScript, the pure plus targeted DOM Vitest suite, a production browser bundle, mobile/privacy scans, and the BRAT artifact verifier. Run `npm run verify:ship -- <exact-version>` for the authoritative release gate and `npm run verify:release -- <exact-version>` when changing release metadata or release notes. For a local Obsidian smoke test, build first and copy the generated `main.js`, `manifest.json`, and `styles.css` into a disposable vault's `.obsidian/plugins/templar/` folder.
 
 ## Pull request expectations
 
 - Explain the user-visible behavior and the notes/frontmatter it touches.
 - Add tests for pure logic, schema changes, CSS rules, or regressions.
 - Update the template specification, architecture docs, and [`docs/DEVELOPER_REFERENCE.md`](docs/DEVELOPER_REFERENCE.md) when contracts or current behavior change. Update `src/templates/llm-kit.ts` when the authoring schema changes.
-- Include desktop Reading/Live Preview results and mobile/emulation results for renderer work.
+- Include desktop Reading/Live Preview results and mobile/emulation results for renderer work. Physical iOS/Android evidence is required for stable/community-candidate releases; alpha notes may explicitly record pending device checks.
 - For preview, rules, usage, synchronization, inspector, print, or bulk work, document event/observer ownership, stale-work protection, cleanup, and exact confirmation behavior.
 - Do not include unrelated formatting or generated dependency churn.
 - Do not add default hotkeys.

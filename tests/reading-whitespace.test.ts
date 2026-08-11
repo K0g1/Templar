@@ -5,6 +5,8 @@ import {
   bodyStartLineAfterFrontmatter,
   hasReadingWhitespaceWork,
   internalBlankLineRuns,
+  isFenceClosing,
+  parseFenceOpening,
   readingRootNeedsRetarget,
 } from '../src/services/reading-whitespace';
 
@@ -38,6 +40,27 @@ describe('Reading View blank-line preservation', () => {
     expect(
       internalBlankLineRuns('Before\n\n````md\n```\n\ninside\n```\n````\n\nAfter'),
     ).toEqual([1, 1]);
+  });
+
+  it('follows CommonMark fence marker and indentation rules', () => {
+    const backticks = parseFenceOpening('```ts');
+    expect(backticks).toEqual({ marker: '`', length: 3 });
+    expect(parseFenceOpening('````js `not allowed`')).toBeNull();
+    expect(parseFenceOpening('    ```')).toBeNull();
+    expect(parseFenceOpening('~~~yaml')).toEqual({ marker: '~', length: 3 });
+
+    expect(isFenceClosing('  ```', backticks!)).toBe(true);
+    expect(isFenceClosing('```\t', backticks!)).toBe(true);
+    expect(isFenceClosing('````', backticks!)).toBe(true);
+    expect(isFenceClosing('``', backticks!)).toBe(false);
+    expect(isFenceClosing('``` trailing text', backticks!)).toBe(false);
+    expect(isFenceClosing('    ```', backticks!)).toBe(false);
+    expect(isFenceClosing('~~~', backticks!)).toBe(false);
+  });
+
+  it('keeps blank lines after a false close candidate inside code', () => {
+    expect(internalBlankLineRuns('Before\n\n```\n``` trailing\n\ninside\n```\n\nAfter'))
+      .toEqual([1, 1]);
   });
 
   it('retargets a reused Reading root when a leaf opens another file', () => {

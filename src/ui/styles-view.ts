@@ -197,10 +197,10 @@ export class TemplarStylesView extends ItemView {
       exportFolder.addEventListener('click', () => this.plugin.showPackExporter(templates.filter((template) => sameFolder(template.metadata.folder, this.activeFolder!))));
     }
 
-    const query = this.searchQuery.toLocaleLowerCase();
+    const query = this.searchQuery.toLowerCase();
     templates = templates.filter((template) => {
       if (this.activeFolder && !sameFolder(template.metadata.folder, this.activeFolder)) return false;
-      return !query || [template.name, template.metadata.folder, template.metadata.description, template.metadata.author, ...template.metadata.tags].join('\n').toLocaleLowerCase().includes(query);
+      return !query || [template.name, template.metadata.folder, template.metadata.description, template.metadata.author, ...template.metadata.tags].join('\n').toLowerCase().includes(query);
     });
     if (this.sort === 'most-used') {
       templates.sort((a, b) => this.plugin.usageIndex.count(b.id) - this.plugin.usageIndex.count(a.id) || a.name.localeCompare(b.name));
@@ -331,8 +331,7 @@ export class TemplarStylesView extends ItemView {
   }
 
   private async setDensity(density: LibraryDensity): Promise<void> {
-    this.plugin.settings.libraryDensity = density;
-    await this.plugin.saveSettings();
+    await this.plugin.updateSettings((draft) => { draft.libraryDensity = density; });
     this.render();
   }
 
@@ -388,7 +387,7 @@ export class TemplarStylesView extends ItemView {
     else if (event.key === 'End') { event.preventDefault(); const last = this.cardEls[this.cardEls.length - 1]; this.selectedId = last?.dataset.templateId ?? null; this.updateRovingFocus(); last?.focus(); }
     else if (event.key === ' ') { event.preventDefault(); this.previewTemplate(template); }
     else if (event.key === 'Enter') { event.preventDefault(); void this.plugin.applyTemplate(template); }
-    else if (event.key.toLocaleLowerCase() === 'f') { event.preventDefault(); void this.plugin.library.toggleFavourite(template.id).then(() => this.render()); }
+    else if (event.key.toLowerCase() === 'f') { event.preventDefault(); void this.plugin.library.toggleFavourite(template.id).then(() => this.render()); }
   };
 
   private confirmDelete(template: TemplarTemplate): void {

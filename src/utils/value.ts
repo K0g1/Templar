@@ -18,6 +18,9 @@ export function numberValue(
   minimum: number,
   maximum: number,
 ): number {
+  if (typeof value === 'string' && value.trim() === '') {
+    return fallback;
+  }
   const number = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(number)) {
     return fallback;

@@ -32,7 +32,10 @@ describe('template synchronization', () => {
     latest.paper.color = '#111111';
     latest.typography.bodySize = 22;
     latest.blocks.calloutVariants = { warning: { accent: '#ff0000' } };
-    const merged = mergeTemplateUpdate(note, latest);
+    const mergedResult = mergeTemplateUpdate(note, latest);
+    expect(mergedResult.ok).toBe(true);
+    if (!mergedResult.ok) return;
+    const merged = mergedResult.style;
     expect(merged.paper.color).toBe('#abcdef');
     expect(merged.typography.bodySize).toBe(22);
     expect(merged.blocks.calloutVariants.warning?.accent).toBe('#ff0000');

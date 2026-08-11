@@ -1,4 +1,5 @@
 import esbuild from 'esbuild';
+import { writeFileSync } from 'node:fs';
 import process from 'process';
 
 const banner = `/*
@@ -31,6 +32,7 @@ const context = await esbuild.context({
   ],
   format: 'cjs',
   logLevel: 'info',
+  metafile: production,
   minify: production,
   outfile: 'main.js',
   platform: 'browser',
@@ -40,7 +42,10 @@ const context = await esbuild.context({
 });
 
 if (production) {
-  await context.rebuild();
+  const result = await context.rebuild();
+  if (result.metafile) {
+    writeFileSync('main.js.meta.json', JSON.stringify(result.metafile));
+  }
   await context.dispose();
 } else {
   await context.watch();

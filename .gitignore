@@ -6,6 +6,8 @@ coverage/
 # main.js is required in a GitHub release and for local installation, but the
 # Obsidian review checklist recommends omitting generated bundles from source.
 main.js
+main.js.meta.json
+SHA256SUMS.txt
 
 # Per-vault plugin settings and local user data.
 data.json
