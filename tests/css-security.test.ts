@@ -452,3 +452,24 @@ describe('CSS round 9 bypass regression suite', () => {
     expect(result.valid).toBe(true);
   });
 });
+
+describe('CSS round 10 bypass regression suite', () => {
+  it('rejects shorthand iteration count before animation name', () => {
+    const result = errors([
+      '@keyframes spin { from { opacity: .9; } to { opacity: 1; } }',
+      '.page p { animation: .1s 100 spin; }',
+      '.page p { animation-duration: 1s; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects :not(:not(*)) universal descendant hiding', () => {
+    const result = errors('.page :not(:not(*)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :not(:not(:where(*))) nested double negation', () => {
+    const result = errors('.page :not(:not(:where(*))) { visibility: hidden; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});

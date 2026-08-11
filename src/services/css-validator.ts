@@ -265,10 +265,20 @@ function compoundMatchesEverything(
         continue;
       }
       // `:is(...)` / `:where(...)`: any single branch that matches
-      // everything makes the pseudo match everything. `:not(...)` matches
-      // the complement, so it is never universal-capable by itself.
+      // everything makes the pseudo match everything.
       if (forgivingPseudos.has(pseudoName)) {
         if (pseudoMatchesEverything(part, structuralPseudos, forgivingPseudos)) {
+          sawMeaningful = true;
+          continue;
+        }
+        return false;
+      }
+      // `:not(...)`: logical negation. `:not(:not(X))` is equivalent to X,
+      // so a double negation of a universal resolves back to universal
+      // (e.g. `:not(:not(*))` matches every element). A single `:not(*`
+      // matches nothing and is never universal-capable.
+      if (pseudoName === 'not') {
+        if (pseudoIsDoubleNegationOfUniversal(part, structuralPseudos, forgivingPseudos)) {
           sawMeaningful = true;
           continue;
         }
@@ -318,6 +328,9 @@ function pseudoMatchesEverything(
       if (forgivingPseudos.has(pseudoName)) {
         return pseudoMatchesEverything(inner, structuralPseudos, forgivingPseudos);
       }
+      if (pseudoName === 'not') {
+        return pseudoIsDoubleNegationOfUniversal(inner, structuralPseudos, forgivingPseudos);
+      }
       if (structuralPseudos.has(pseudoName)) {
         return true;
       }
@@ -325,6 +338,89 @@ function pseudoMatchesEverything(
     }
     return inner.type === 'universal' || inner.type === 'comment';
   });
+}
+
+/**
+ * True when a `:not(...)` pseudo is the double negation of a universal-
+ * capable selector (`:not(:not(*))`, `:not(:not(:where(*)))`), which by
+ * logical equivalence matches every element. A plain `:not(universal)`
+ * matches nothing and is never universal-capable; triple negation
+ * `:not(:not(:not(*)))` is equivalent to `:not(*)` (matches nothing) and
+ * is also not universal-capable.
+ */
+function pseudoIsDoubleNegationOfUniversal(
+  part: import('postcss-selector-parser').Node,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  // part is `:not(...)`; extract its single argument node.
+  const inner = singlePseudoArgument(part);
+  if (!inner || inner.type !== 'pseudo') {
+    return false;
+  }
+  const innerName = inner.value.replace(/^:/, '').toLowerCase();
+  if (innerName !== 'not') {
+    // `:not(:is(*))` matches nothing (complement of universal), so it is
+    // not universal-capable. Only a double negation resolves to universal.
+    return false;
+  }
+  // inner is `:not(Y)`; Y must itself match everything.
+  const innermost = singlePseudoArgument(inner);
+  if (!innermost) {
+    return false;
+  }
+  return pseudoArgumentMatchesEverything(innermost, structuralPseudos, forgivingPseudos);
+}
+
+/** Returns the single argument node of a functional pseudo, if any. */
+function singlePseudoArgument(
+  part: import('postcss-selector-parser').Node,
+): import('postcss-selector-parser').Node | null {
+  if (!('nodes' in part) || !Array.isArray(part.nodes) || part.nodes.length !== 1) {
+    return null;
+  }
+  const inner = part.nodes[0];
+  if (!inner) {
+    return null;
+  }
+  if (inner.type === 'selector') {
+    if (!('nodes' in inner) || !Array.isArray(inner.nodes) || inner.nodes.length !== 1) {
+      return null;
+    }
+    const leaf = inner.nodes[0];
+    return leaf ?? null;
+  }
+  return inner;
+}
+
+/**
+ * True when a selector node inside a negation chain matches every element:
+ * a universal, a structural pseudo, a forgiving list pseudo with a
+ * universal branch, or another double negation (e.g. `:not(:not(*))` as
+ * the argument of `:not(...)`).
+ */
+function pseudoArgumentMatchesEverything(
+  part: import('postcss-selector-parser').Node,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  if (part.type === 'universal' || part.type === 'comment') {
+    return true;
+  }
+  if (part.type !== 'pseudo') {
+    return false;
+  }
+  const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+  if (structuralPseudos.has(pseudoName)) {
+    return true;
+  }
+  if (forgivingPseudos.has(pseudoName)) {
+    return pseudoMatchesEverything(part, structuralPseudos, forgivingPseudos);
+  }
+  if (pseudoName === 'not') {
+    return pseudoIsDoubleNegationOfUniversal(part, structuralPseudos, forgivingPseudos);
+  }
+  return false;
 }
 
 /** True when a selector list node starts with .page or .page-content. */
@@ -732,9 +828,24 @@ export function validateCustomCss(css: string): ValidationResult {
         maxDurationSeconds = Math.max(maxDurationSeconds, partSeconds);
       }
       if (isIteration) {
-        const match = part.match(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)\s*$/);
-        const parsed = match ? Number.parseFloat(match[1] ?? '1') : NaN;
-        maxIterationCount = Math.max(maxIterationCount, Number.isNaN(parsed) ? 1 : Math.abs(parsed));
+        if (property === 'animation') {
+          // Shorthand: the iteration count is a bare number token anywhere
+          // in the part (`spin .1s 100`, `.1s 100 spin`, `100 .1s spin`).
+          // Reuse the full CSS number grammar with token boundaries.
+          const bareNumbers = [...part.matchAll(/(^|[\s,])([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)]
+            .map((match) => Number.parseFloat(match[2] ?? '0'))
+            .filter((value) => !Number.isNaN(value))
+            .map((value) => Math.abs(value));
+          maxIterationCount = Math.max(
+            maxIterationCount,
+            bareNumbers.length > 0 ? Math.max(...bareNumbers) : 1,
+          );
+        } else {
+          // Longhand: the whole value is the iteration count.
+          const match = part.match(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)\s*$/);
+          const parsed = match ? Number.parseFloat(match[1] ?? '1') : NaN;
+          maxIterationCount = Math.max(maxIterationCount, Number.isNaN(parsed) ? 1 : Math.abs(parsed));
+        }
       }
     }
   });
