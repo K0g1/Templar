@@ -2,7 +2,7 @@
 
 The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). It records the alpha version, command/settings surface, source map, persistence and lifecycle contracts, release artifacts, and known limitations. This guide is the executable smoke-test and release checklist.
 
-At `1.2.0-alpha.1`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and the only supported distribution path is manual installation of the three release artifacts.
+At `1.2.0-alpha.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and the only supported distribution path is manual installation of the three release artifacts.
 
 ## Local workflow
 

@@ -1,7 +1,7 @@
 {
   "id": "templar",
   "name": "Templar",
-  "version": "1.2.0-alpha.1",
+  "version": "1.2.0-alpha.2",
   "minAppVersion": "1.8.0",
   "description": "Give each Markdown note a self-contained visual page design with safely scoped CSS and a typography-aware baseline grid.",
   "author": "Kevin Deng",

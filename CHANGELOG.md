@@ -4,6 +4,8 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.2.0-alpha.2 — 2026-08-11
+
 - Fixed Live Preview pointer hit-testing so clicking styled paragraphs, headings, lists, and text around blank-line runs places the caret on the visible source line. Generated editor CSS now keeps every CodeMirror line margin-free and uses measured line-box padding for heading spacing.
 - Fixed diagonal and cross-hatch paper rendering so each tile paints complete edge-to-edge strokes instead of one-pixel corner fragments. Reworked hex and scallop geometry, made multi-layer repeat/position/size lists explicit, and added paged/pageless regression coverage for all nine paper patterns with and without margin lines.
 - Fixed Reading View blank-line preservation after closing, reopening, or switching notes, including blank rows at the very start of the Markdown body after hidden YAML. Reused Reading roots now discard file-specific post-processor state, and metadata-backed cached sections reconcile even when Obsidian does not rerun Markdown post-processors.

@@ -2,7 +2,7 @@
 
 Technical documentation for the Templar Obsidian plugin.
 
-The current implementation snapshot builds on `1.2.0-alpha.1`: 132 built-in styles, leaf-scoped live try-on, note customization, source synchronization, event-driven style rules and usage indexing, bounded pack import/export, settled Reading-mode print preparation, keyboard-first browsing, three density modes, paged/pageless notes, measured cross-view paper origins, and variable-height rhythm correction. [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md) is the handoff document for the complete feature map, source map, persistence rules, test/release runbook, and known limitations.
+The current implementation snapshot is `1.2.0-alpha.2`: 132 built-in styles, leaf-scoped live try-on, note customization, source synchronization, event-driven style rules and usage indexing, bounded pack import/export, settled Reading-mode print preparation, keyboard-first browsing, three density modes, paged/pageless notes, measured cross-view paper origins, and variable-height rhythm correction. [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md) is the handoff document for the complete feature map, source map, persistence rules, test/release runbook, and known limitations.
 
 ## Getting started
 
@@ -18,7 +18,8 @@ The current implementation snapshot builds on `1.2.0-alpha.1`: 132 built-in styl
 - [`SECURITY.md`](SECURITY.md) — trust boundaries, CSS validation model, privacy, and denial-of-service considerations.
 - [`MAINTAINER_GUIDE.md`](MAINTAINER_GUIDE.md) — test layout, manual smoke tests, the mobile release gate, schema change recipe, and release steps.
 - [`releases/`](releases/) — versioned GitHub release notes, including validation status and known alpha limitations.
-- [`releases/1.2.0-alpha.1.md`](releases/1.2.0-alpha.1.md) — UX expansion prerelease notes, test evidence, and pending physical-mobile gates.
+- [`releases/1.2.0-alpha.2.md`](releases/1.2.0-alpha.2.md) — renderer-rhythm, paper-pattern, isolation, and security audit release notes.
+- [`releases/1.2.0-alpha.1.md`](releases/1.2.0-alpha.1.md) — UX expansion prerelease notes and historical test evidence.
 
 ## Reading order
 

@@ -8,7 +8,7 @@ This is the current implementation reference for Templar. It is deliberately mor
 | --- | --- |
 | Product | Templar, an Obsidian plugin that gives each Markdown note a portable visual page style |
 | Repository | [`K0g1/Templar`](https://github.com/K0g1/Templar) |
-| Current release | `1.2.0-alpha.1` (UX expansion prerelease) |
+| Current release | `1.2.0-alpha.2` (renderer and baseline audit prerelease) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
 | Installation channel | Manual release artifacts; not listed in Community Plugins yet |
@@ -17,7 +17,7 @@ This is the current implementation reference for Templar. It is deliberately mor
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
 | Test status at this snapshot | 108 Vitest tests; `npm run check` and `npm audit` are the required gates |
 
-`1.2.0-alpha.1` adds leaf-scoped live try-on, a note inspector, provenance-aware synchronization, event-driven rules and usage, print preparation, template packs, keyboard-first/density-aware browsing, expanded context-sensitive commands, deterministic one-click apply, and the horizontal-rule baseline correction. The release note is [`releases/1.2.0-alpha.1.md`](releases/1.2.0-alpha.1.md).
+`1.2.0-alpha.2` audits the UX expansion at the renderer boundary: measured cross-view paper origins, margin-contained variable-block snapping, exact Reading whitespace, corrected pattern geometry, leaf-unique scopes, settled print preparation, stricter untrusted-input handling, and catalog-wide render regressions. The release note is [`releases/1.2.0-alpha.2.md`](releases/1.2.0-alpha.2.md).
 
 ### Source-of-truth rules
 
@@ -353,7 +353,7 @@ npm test                    # 108 pure Vitest tests at this snapshot
 npm run build               # strict tsc, production browser bundle, mobile guard
 npm run check               # lint + test + build
 npm run verify:mobile       # scan the generated main.js directly
-npm run verify:release -- 1.2.0-alpha.1
+npm run verify:release -- 1.2.0-alpha.2
 git diff --check
 ```
 
