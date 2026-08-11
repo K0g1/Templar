@@ -422,3 +422,33 @@ describe('CSS round 8 bypass regression suite', () => {
     expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
   });
 });
+
+describe('CSS round 9 bypass regression suite', () => {
+  it('rejects cross-rule animation duration + iteration combination', () => {
+    const result = errors([
+      '.page p { animation-duration: 30s; }',
+      '.page p { animation-iteration-count: 1000; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects cross-rule combination with overlapping selectors', () => {
+    const result = errors([
+      '.page p { animation-duration: 30s; }',
+      '.page .foo { animation-iteration-count: 1000; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('handles huge animation lists in linear time', () => {
+    const durations = Array.from({ length: 3000 }, (_, i) => `${String((i % 30) + 1)}s`).join(', ');
+    const iterations = Array.from({ length: 3001 }, () => '1').join(', ');
+    const css = `.page p { animation-duration: ${durations}; animation-iteration-count: ${iterations}; }`;
+    expect(css.length).toBeLessThan(50_000);
+    const start = Date.now();
+    const result = validateCustomCss(css);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(1000);
+    expect(result.valid).toBe(true);
+  });
+});

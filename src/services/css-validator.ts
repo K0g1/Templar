@@ -699,72 +699,53 @@ export function validateCustomCss(css: string): ValidationResult {
     }
   });
 
-  // Combined animation check: after shorthand/longhand cascade AND
-  // !important precedence, effective duration x iteration per animation can
-  // exceed the runtime budget even when each declaration passes
-  // independently. Rather than model the full cascade (source order,
-  // important vs normal, shorthand resets), collect every duration and
-  // iteration candidate and test every plausible pairing conservatively.
-  // The 250-rule / 40-declaration caps bound this candidate set.
-  root.walkRules((rule) => {
-    const durationCandidates: number[] = [];
-    const iterationCandidates: number[] = [];
-    let unsafeVar = false;
-    rule.walkDecls((declaration) => {
-      const property = decodeCssEscapes(declaration.prop).toLowerCase();
-      const value = decodeCssEscapes(declaration.value);
-      if (property === 'animation' || property === 'animation-duration') {
-        for (const part of splitTopLevel(value)) {
-          let partSeconds = 0;
-          for (const match of part.matchAll(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(ms|s)\b/gi)) {
-            const amount = Number.parseFloat(match[1] ?? '0');
-            partSeconds += Number.isNaN(amount) ? 0 : (match[2] === 'ms' ? Math.abs(amount) / 1000 : Math.abs(amount));
-          }
-          durationCandidates.push(partSeconds);
-          if (property === 'animation') {
-            const bareNumbers = [...part.matchAll(/(^|[\s,])([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)]
-              .map((match) => Number.parseFloat(match[2] ?? '0'))
-              .filter((value) => !Number.isNaN(value))
-              .map((value) => Math.abs(value));
-            iterationCandidates.push(bareNumbers.length > 0 ? Math.max(...bareNumbers) : 1);
-          }
-        }
-      }
-      if (property === 'animation-iteration-count') {
-        for (const part of splitTopLevel(value)) {
-          const match = part.match(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)\s*$/);
-          const parsed = match ? Number.parseFloat(match[1] ?? '1') : NaN;
-          iterationCandidates.push(Number.isNaN(parsed) ? 1 : Math.abs(parsed));
-        }
-      }
-      if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {
-        unsafeVar = true;
-      }
-    });
-    if (unsafeVar) {
-      return; // var()/math function case already reported at declaration level.
-    }
-    if (durationCandidates.length === 0 || iterationCandidates.length === 0) {
+  // Combined animation check: after shorthand/longhand cascade, !important
+  // precedence, AND cross-rule cascade, effective duration x iteration per
+  // animation can exceed the runtime budget even when each declaration
+  // passes independently. Conservative approach: track the maximum duration
+  // and maximum iteration count anywhere in the stylesheet, then test the
+  // product once. Since candidates are nonnegative, this is both O(n) and a
+  // safe over-approximation of every possible cascade pairing (same-rule
+  // lists, !important overrides, and overlapping selectors in separate
+  // rules all reduce to some duration paired with some iteration count).
+  let maxDurationSeconds = 0;
+  let maxIterationCount = 1;
+  root.walkDecls((declaration) => {
+    const property = decodeCssEscapes(declaration.prop).toLowerCase();
+    const value = decodeCssEscapes(declaration.value);
+    const isAnimationShorthand = property === 'animation';
+    const isDuration = property === 'animation' || property === 'animation-duration';
+    const isIteration = property === 'animation' || property === 'animation-iteration-count';
+    if (!isDuration && !isIteration) {
       return;
     }
-    // Every plausible pairing: any duration candidate with any iteration
-    // candidate. A normal later declaration cannot rescue an earlier
-    // !important one, and vice versa, so testing all pairs is the safe
-    // conservative over-approximation.
-    for (const duration of durationCandidates) {
-      for (const iteration of iterationCandidates) {
-        if (duration * iteration > MAX_ANIMATION_DURATION_SECONDS) {
-          issues.push({
-            severity: 'error',
-            path: 'css.animation',
-            message: `Animation total runtime exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
-            fix: 'Shorten the duration or reduce the iteration count.',
-          });
-          return;
+    if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {
+      return; // var()/math function case already reported at declaration level.
+    }
+    for (const part of splitTopLevel(value)) {
+      if (isDuration) {
+        let partSeconds = 0;
+        for (const match of part.matchAll(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(ms|s)\b/gi)) {
+          const amount = Number.parseFloat(match[1] ?? '0');
+          partSeconds += Number.isNaN(amount) ? 0 : (match[2] === 'ms' ? Math.abs(amount) / 1000 : Math.abs(amount));
         }
+        maxDurationSeconds = Math.max(maxDurationSeconds, partSeconds);
+      }
+      if (isIteration) {
+        const match = part.match(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)\s*$/);
+        const parsed = match ? Number.parseFloat(match[1] ?? '1') : NaN;
+        maxIterationCount = Math.max(maxIterationCount, Number.isNaN(parsed) ? 1 : Math.abs(parsed));
       }
     }
   });
+  if (maxDurationSeconds * maxIterationCount > MAX_ANIMATION_DURATION_SECONDS) {
+    issues.push({
+      severity: 'error',
+      path: 'css.animation',
+      message: `Animation total runtime exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
+      fix: 'Shorten the duration or reduce the iteration count.',
+    });
+  }
 
   let ruleCount = 0;
   root.walkRules((rule) => {
