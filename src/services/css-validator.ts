@@ -354,7 +354,7 @@ function compoundMatchesEverything(
     if (part.type === 'pseudo') {
       // postcss-selector-parser includes the leading colon in pseudo.value
       // (e.g. ":nth-child"), so strip it before comparing against the sets.
-      const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+      const pseudoName = normalizedPseudoName(part);
       if (structuralPseudos.has(pseudoName)) {
         sawMeaningful = true;
         continue;
@@ -422,7 +422,7 @@ function pseudoMatchesEverything(
     }
     if (inner.type === 'pseudo') {
       // Handle nested functional pseudos like :where(*) inside :is().
-      const pseudoName = inner.value.replace(/^:/, '').toLowerCase();
+      const pseudoName = normalizedPseudoName(inner);
       if (forgivingPseudos.has(pseudoName)) {
         return pseudoMatchesEverything(inner, structuralPseudos, forgivingPseudos);
       }
@@ -470,7 +470,7 @@ function pseudoMatchesNothing(
   if (part.type !== 'pseudo') {
     return false;
   }
-  const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+  const pseudoName = normalizedPseudoName(part);
   const branches = pseudoArgumentBranches(part);
   if (pseudoName === 'not') {
     return branches.some((branch) =>
@@ -548,7 +548,7 @@ function compoundMatchesNothing(
 ): boolean {
   const pseudos = compound.filter((part) => part.type === 'pseudo');
   for (const part of pseudos) {
-    const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+    const pseudoName = normalizedPseudoName(part);
     if (pseudoName === 'not' || forgivingPseudos.has(pseudoName)) {
       if (pseudoMatchesNothing(part, structuralPseudos, forgivingPseudos)) {
         return true;
@@ -569,22 +569,49 @@ function compoundMatchesNothing(
   return compoundIsContradiction(compound);
 }
 
-/** True when pseudo `a` is exactly `:not(b)` (single argument). */
+/**
+ * True when pseudo `a` is exactly `:not(b)` (single argument), unwrapping
+ * single-branch :is()/:where() wrappers on either side.
+ */
 function pseudoIsExactNegationOf(
   a: import('postcss-selector-parser').Node,
   b: import('postcss-selector-parser').Node,
 ): boolean {
-  if (a.type !== 'pseudo') {
+  const aUnwrapped = unwrapForgivingSingleBranch(a);
+  if (!aUnwrapped || normalizedPseudoName(aUnwrapped) !== 'not') {
     return false;
   }
-  if (a.value.replace(/^:/, '').toLowerCase() !== 'not') {
-    return false;
-  }
-  const branches = pseudoArgumentBranches(a);
+  const branches = pseudoArgumentBranches(aUnwrapped);
   if (branches.length !== 1) {
     return false;
   }
-  return branchCoversBranch(b, branches[0]!);
+  return branchCoversBranch(unwrapForgivingSingleBranch(b) ?? b, branches[0]!);
+}
+
+/**
+ * Unwraps single-branch `:is()`/`:where()` wrappers: `:is(:not(.x))`
+ * becomes the inner `:not(.x)` pseudo so nested negations are discovered.
+ */
+function unwrapForgivingSingleBranch(
+  node: import('postcss-selector-parser').Node,
+): import('postcss-selector-parser').Node | null {
+  if (node.type !== 'pseudo') {
+    return null;
+  }
+  const name = normalizedPseudoName(node);
+  if (name !== 'is' && name !== 'where') {
+    return null;
+  }
+  const branches = pseudoArgumentBranches(node);
+  if (branches.length !== 1) {
+    return null;
+  }
+  const children = branchChildren(branches[0]!);
+  if (children.length !== 1) {
+    return null;
+  }
+  const inner = children[0]!;
+  return inner.type === 'pseudo' ? unwrapForgivingSingleBranch(inner) ?? inner : inner;
 }
 
 /**
@@ -643,32 +670,29 @@ function negatedAtomPartitionCoversEverything(
 ): boolean {
   const seenAtoms = new Set<string>();
   for (const branch of branches) {
-    for (const child of branchChildren(branch)) {
-      if (child.type !== 'pseudo') {
+    for (const notPseudo of findNotPseudos(branch)) {
+      const argBranches = pseudoArgumentBranches(notPseudo);
+      if (argBranches.length === 0) {
         continue;
       }
-      if (child.value.replace(/^:/, '').toLowerCase() !== 'not') {
-        continue;
-      }
-      const argBranches = pseudoArgumentBranches(child);
-      if (argBranches.length !== 1) {
-        continue;
-      }
-      const atom = argBranches[0]!;
-      const atomKey = atom.toString();
+      // The negated set L may be a single selector (.x) or a selector
+      // list (.x, .y). Positive coverage of L means every branch of L is
+      // covered by some sibling branch.
+      const atomKey = argBranches.map((arg) => arg.toString()).join('|');
       if (seenAtoms.has(atomKey)) {
         continue;
       }
       seenAtoms.add(atomKey);
-      // Some branch must positively cover the atom.
-      if (!branches.some((other) => branchCoversBranch(other, atom))) {
+      if (!argBranches.every((arg) =>
+        branches.some((other) => other !== branch && branchCoversBranch(other, arg)),
+      )) {
         continue;
       }
-      // Residual branches: keep branches whose :not() covers the atom,
-      // with those negations removed.
+      // Residual branches: keep branches whose :not() covers the negated
+      // set L, with those negations removed.
       const residuals: import('postcss-selector-parser').Node[] = [];
       for (const other of branches) {
-        const residual = stripNegationsCoveringAtom(other, atom);
+        const residual = stripNegationsCoveringSet(other, argBranches);
         if (residual !== null) {
           residuals.push(residual);
         }
@@ -693,28 +717,44 @@ function negatedAtomPartitionCoversEverything(
 }
 
 /**
- * Clones a branch with every `:not(...)` that covers `atom` removed, or
- * returns null when the branch has no such negation. An empty residual
- * (the branch was only negations) is returned as a universal selector.
+ * Finds all `:not(...)` pseudos in a branch, unwrapping single-branch
+ * `:is()`/`:where()` wrappers recursively so nested negations
+ * (`:is(:not(.x))`) are discovered.
  */
-function stripNegationsCoveringAtom(
+function findNotPseudos(
   branch: import('postcss-selector-parser').Node,
-  atom: import('postcss-selector-parser').Node,
-): import('postcss-selector-parser').Node | null {
-  const children = branchChildren(branch);
-  let removed = false;
-  for (const child of children) {
+): Array<import('postcss-selector-parser').Node> {
+  const found: Array<import('postcss-selector-parser').Node> = [];
+  for (const child of branchChildren(branch)) {
     if (child.type !== 'pseudo') {
       continue;
     }
-    if (child.value.replace(/^:/, '').toLowerCase() !== 'not') {
-      continue;
+    const name = normalizedPseudoName(child);
+    if (name === 'not') {
+      found.push(child);
+    } else if ((name === 'is' || name === 'where') && 'nodes' in child && Array.isArray(child.nodes)) {
+      for (const inner of child.nodes) {
+        found.push(...findNotPseudos(inner));
+      }
     }
-    const argBranches = pseudoArgumentBranches(child);
-    if (argBranches.length !== 1) {
-      continue;
-    }
-    if (branchCoversBranch(argBranches[0]!, atom)) {
+  }
+  return found;
+}
+
+/**
+ * Clones a branch with every `:not(...)` whose argument covers the whole
+ * negated set removed, or returns null when the branch has no such
+ * negation. An empty residual (the branch was only negations) is returned
+ * as a universal selector.
+ */
+function stripNegationsCoveringSet(
+  branch: import('postcss-selector-parser').Node,
+  negatedSet: Array<import('postcss-selector-parser').Node>,
+): import('postcss-selector-parser').Node | null {
+  const notPseudos = findNotPseudos(branch);
+  let removed = false;
+  for (const notPseudo of notPseudos) {
+    if (notCoversSet(notPseudo, negatedSet)) {
       removed = true;
       break;
     }
@@ -723,19 +763,10 @@ function stripNegationsCoveringAtom(
     return null;
   }
   const clone = branch.clone();
-  for (const child of branchChildren(clone)) {
-    if (child.type !== 'pseudo') {
-      continue;
-    }
-    if (child.value.replace(/^:/, '').toLowerCase() !== 'not') {
-      continue;
-    }
-    const argBranches = pseudoArgumentBranches(child);
-    if (argBranches.length !== 1) {
-      continue;
-    }
-    if (branchCoversBranch(argBranches[0]!, atom)) {
-      child.remove();
+  const cloneNotPseudos = findNotPseudos(clone);
+  for (const notPseudo of cloneNotPseudos) {
+    if (notCoversSet(notPseudo, negatedSet)) {
+      notPseudo.remove();
     }
   }
   if (branchChildren(clone).length === 0) {
@@ -745,22 +776,40 @@ function stripNegationsCoveringAtom(
   return clone;
 }
 
+/** True when a :not(...) pseudo's argument list covers the whole negated set. */
+function notCoversSet(
+  notPseudo: import('postcss-selector-parser').Node,
+  negatedSet: Array<import('postcss-selector-parser').Node>,
+): boolean {
+  const args = pseudoArgumentBranches(notPseudo);
+  if (args.length === 0) {
+    return false;
+  }
+  // Every member of the negated set must be covered by some argument of
+  // this :not(...).
+  return negatedSet.every((member) =>
+    args.some((arg) => branchCoversBranch(arg, member)),
+  );
+}
+
 /**
- * Returns the argument branches a `:not(...)` branch negates, or an empty
- * array when the branch is not a plain `:not(list)`.
+ * Clones a branch with every `:not(...)` that covers `atom` removed, or
+ * returns null when the branch has no such negation. An empty residual
+ * (the branch was only negations) is returned as a universal selector.
+ */
+/**
+ * Returns the argument branches of the FIRST `:not(...)` pseudo in a
+ * branch (unwrapping single-branch :is()/:where() wrappers), or an empty
+ * array when the branch has no negation.
  */
 function negatedSelectorList(
   branch: import('postcss-selector-parser').Node,
 ): Array<import('postcss-selector-parser').Node> {
-  const children = branchChildren(branch);
-  if (children.length !== 1 || children[0]?.type !== 'pseudo') {
+  const notPseudos = findNotPseudos(branch);
+  if (notPseudos.length === 0) {
     return [];
   }
-  const pseudo = children[0];
-  if (pseudo.value.replace(/^:/, '').toLowerCase() !== 'not') {
-    return [];
-  }
-  return pseudoArgumentBranches(pseudo);
+  return pseudoArgumentBranches(notPseudos[0]!);
 }
 
 /**
@@ -831,7 +880,7 @@ function childAlternativesForToken(
     return [new Set(attributeTokensFor(child))];
   }
   if (child.type === 'pseudo') {
-    const pseudoName = child.value.replace(/^:/, '').toLowerCase();
+    const pseudoName = normalizedPseudoName(child);
     if ((pseudoName === 'is' || pseudoName === 'where') && 'nodes' in child && Array.isArray(child.nodes)) {
       // OR of the branch alternatives.
       const merged: Array<Set<string>> = [];
@@ -843,7 +892,7 @@ function childAlternativesForToken(
     if (pseudoName === 'not') {
       // Double negation is semantically transparent.
       const inner = singlePseudoArgument(child);
-      if (inner && inner.type === 'pseudo' && inner.value.replace(/^:/, '').toLowerCase() === 'not') {
+      if (inner && inner.type === 'pseudo' && normalizedPseudoName(inner) === 'not') {
         const innermost = singlePseudoArgument(inner);
         if (innermost) {
           return branchAlternatives(innermost);
@@ -925,15 +974,17 @@ function selectorTokenFor(node: import('postcss-selector-parser').Node): string 
 
 /**
  * Tokens for an attribute selector: an existence token (attribute name,
- * escape-decoded, case-sensitive) and, when the selector constrains the
- * value, a full token so `[x]` can cover `[x="a"]` but not vice versa.
- * Uses the parser's structured attribute field, not serialization text, so
- * whitespace variants (`[x = "a"]`) normalize to the same name.
+ * ASCII-lowercased for HTML DOM matching, escape-decoded) and, when the
+ * selector constrains the value, a full token so `[x]` can cover
+ * `[x="a"]` but not vice versa. Uses the parser's structured attribute
+ * field, not serialization text, so whitespace variants (`[x = "a"]`)
+ * normalize to the same name.
  */
 function attributeTokensFor(node: import('postcss-selector-parser').Node): string[] {
   const attribute = (node as unknown as { attribute?: string }).attribute ?? '';
   const operator = (node as unknown as { operator?: string }).operator ?? '';
-  const name = decodeCssEscapes(attribute);
+  // HTML element attributes match case-insensitively by name.
+  const name = decodeCssEscapes(attribute).toLowerCase();
   const tokens = [`attr-name:${name}`];
   if (operator) {
     const raw = decodeCssEscapes(node.toString());
@@ -963,7 +1014,7 @@ function collectSelectorTokens(
     } else if (node.type === 'attribute') {
       out.add(`attribute:${decodeCssEscapes(node.toString())}`);
     } else if (node.type === 'pseudo') {
-      const pseudoName = node.value.replace(/^:/, '').toLowerCase();
+      const pseudoName = normalizedPseudoName(node);
       if ((pseudoName === 'is' || pseudoName === 'where') && 'nodes' in node && Array.isArray(node.nodes)) {
         for (const inner of node.nodes) {
           collectSelectorTokens(inner, out);
@@ -973,7 +1024,7 @@ function collectSelectorTokens(
         // matches exactly `.x`. Collect the innermost tokens when the
         // single argument is itself a single `:not(...)`.
         const inner = singlePseudoArgument(node);
-        if (inner && inner.type === 'pseudo' && inner.value.replace(/^:/, '').toLowerCase() === 'not') {
+        if (inner && inner.type === 'pseudo' && normalizedPseudoName(inner) === 'not') {
           const innermost = singlePseudoArgument(inner);
           if (innermost) {
             collectSelectorTokens(innermost, out);
@@ -1025,7 +1076,7 @@ function compoundIsContradiction(
     if (part.type !== 'pseudo') {
       continue;
     }
-    const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+    const pseudoName = normalizedPseudoName(part);
     if (pseudoName !== 'not') {
       continue;
     }
@@ -1080,6 +1131,12 @@ function branchMatchesEverything(
       compoundMatchesEverything(compound, structuralPseudos, forgivingPseudos),
     )
   );
+}
+
+
+/** Normalized pseudo-class name: escape-decoded, colon-stripped, lowercased. */
+function normalizedPseudoName(node: import('postcss-selector-parser').Node): string {
+  return decodeCssEscapes(node.value ?? '').replace(/^:+/, '').toLowerCase();
 }
 
 /** Returns the leaf nodes of a selector branch (or the branch itself). */

@@ -721,3 +721,37 @@ describe('CSS round 21 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 22 bypass regression suite', () => {
+  it('rejects escaped pseudo-class names', () => {
+    const result = errors('.page :\\69s(*) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects nested single-branch :is(:not(.x)) complement', () => {
+    const result = errors('.page :is(.x, :is(:not(.x))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :where(:not(.x)) complement', () => {
+    const result = errors('.page :is(.x, :where(:not(.x))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects multi-selector complement partition', () => {
+    const result = errors([
+      '.page :is(',
+      '  .x,',
+      '  .y,',
+      '  :not(.x, .y).z,',
+      '  :not(.x, .y):not(.z)',
+      ') { display: none; }',
+    ].join('\n'));
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects uppercase attribute name coverage', () => {
+    const result = errors('.page :is([CLASS], :not(.x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
