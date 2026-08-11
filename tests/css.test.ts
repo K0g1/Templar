@@ -27,6 +27,9 @@ describe('safe CSS compiler', () => {
     expect(transformVirtualSelector('.page h1, .page h6', scope)).toContain(
       ':is(h6, .HyperMD-header-6)',
     );
+    expect(transformVirtualSelector('.page :is(h1, p)', scope)).toContain(
+      ':is(:is(h1, .HyperMD-header-1, .inline-title), :is(p, .HyperMD-paragraph))',
+    );
   });
 
   it('prefixes every ordinary selector with the note scope', () => {
@@ -106,5 +109,25 @@ describe('safe CSS compiler', () => {
     const result = validateCustomCss('.page h1 { position: fixed; z-index: 9999; }');
     expect(result.valid).toBe(false);
     expect(result.issues.filter((issue) => issue.severity === 'error')).toHaveLength(2);
+  });
+
+  it('rejects browser-differential string and comment escapes', () => {
+    for (const css of [
+      '.page { --escape: "\n;} body { display: none }/*"; }',
+      '.page { --escape: "unterminated; }',
+      '.page { color: red; /* unterminated',
+    ]) {
+      const result = validateCustomCss(css);
+      expect(result.valid, css).toBe(false);
+      expect(compileCustomCss(css, '[data-templar-scope="safe"]', 'safe').css).toBe('');
+    }
+  });
+
+  it('protects gridded text geometry while allowing free-layout customization', () => {
+    const css = '.page p { line-height: 11px; margin-top: 7px; }';
+    expect(validateCustomCss(css).valid).toBe(true);
+    const protectedResult = validateCustomCss(css, { protectRhythm: true });
+    expect(protectedResult.valid).toBe(false);
+    expect(protectedResult.issues.some((issue) => issue.path === 'css.line-height')).toBe(true);
   });
 });

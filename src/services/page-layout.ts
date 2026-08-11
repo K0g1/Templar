@@ -18,6 +18,7 @@ interface PagePair {
 
 export class PageLayoutService {
   private readonly states = new Map<WorkspaceLeaf, PageLayoutState>();
+  private readonly scopes = new Map<WorkspaceLeaf, HTMLElement>();
 
   public configure(
     leaf: WorkspaceLeaf,
@@ -25,6 +26,7 @@ export class PageLayoutService {
     style: TemplarNoteStyle,
   ): void {
     this.clear(leaf);
+    this.scopes.set(leaf, scopeEl);
     scopeEl.dataset.templarMode = style.page.mode;
     if (style.page.mode !== 'paged') {
       return;
@@ -59,6 +61,7 @@ export class PageLayoutService {
 
   public clear(leaf: WorkspaceLeaf): void {
     const state = this.states.get(leaf);
+    const scopeEl = state?.scopeEl ?? this.scopes.get(leaf);
     if (state) {
       state.resizeObserver.disconnect();
       state.mutationObserver.disconnect();
@@ -71,10 +74,15 @@ export class PageLayoutService {
       for (const { pageContent } of this.pagePairs(state.scopeEl)) {
         pageContent.style.removeProperty('--templar-page-scale');
       }
-      delete state.scopeEl.dataset.templarMode;
       this.clearBreaks(state.scopeEl);
     }
+    if (scopeEl) {
+      delete scopeEl.dataset.templarMode;
+      scopeEl.style.removeProperty('--templar-page-scale');
+      this.clearBreaks(scopeEl);
+    }
     this.states.delete(leaf);
+    this.scopes.delete(leaf);
   }
 
   public destroy(): void {
@@ -201,11 +209,10 @@ export class PageLayoutService {
   ): void {
     this.clearBreaks(pageContent);
     const candidates = this.pageBreakCandidates(pageContent);
-    const pageGap = pageGapOverride ?? alignedPageGap(
-      style.page.height,
-      style.page.gap,
-      style.baseline.unit,
-    );
+    const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
+    const pageGap = pageGapOverride ?? (gridded
+      ? alignedPageGap(style.page.height, style.page.gap, style.baseline.unit)
+      : style.page.gap);
     const pageSpan = style.page.height + pageGap;
     const usableHeight = Math.max(
       style.baseline.unit,
@@ -249,7 +256,10 @@ export class PageLayoutService {
       const rect = element.getBoundingClientRect();
       contentBottom = Math.max(
         contentBottom,
-        (rect.bottom - contentRect.top) / geometryScale,
+        (rect.bottom - contentRect.top) / geometryScale +
+          this.pixelValue(
+            pageContent.ownerDocument.defaultView?.getComputedStyle(element).marginBlockEnd,
+          ),
       );
     }
     contentBottom += style.layout.paddingBottom;

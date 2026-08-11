@@ -316,7 +316,7 @@ function normalizeCalloutVariants(raw: unknown): Record<string, CalloutVariant> 
     if (typeof variant.iconColor === 'string') {
       normalized.iconColor = variant.iconColor;
     }
-    variants[type] = normalized;
+    variants[type.toLocaleLowerCase()] = normalized;
   }
   return variants;
 }
@@ -350,6 +350,12 @@ export function templateFolderKey(raw: unknown): string {
 
 export function normalizeTemplate(raw: unknown): TemplarTemplate {
   const source = record(raw);
+  if (source.version !== undefined && source.version !== TEMPLAR_FORMAT_VERSION) {
+    const version = typeof source.version === 'string' || typeof source.version === 'number'
+      ? String(source.version)
+      : 'unknown';
+    throw new Error(`Unsupported Templar template version ${version}.`);
+  }
   const metadata = record(source.metadata);
   const paper = record(source.paper);
   const baseline = record(pick(source, 'baseline', 'baseline-grid'));
@@ -780,6 +786,9 @@ export function normalizeNoteStyle(raw: unknown): TemplarNoteStyle | null {
     return null;
   }
   const source = record(raw);
+  if (source.version !== TEMPLAR_FORMAT_VERSION) {
+    return null;
+  }
   const normalized = normalizeTemplate(source) as TemplarNoteStyle;
   normalized.page = normalizePageOptions(source.page);
   normalized.sourceTemplateId = stringValue(
@@ -790,7 +799,11 @@ export function normalizeNoteStyle(raw: unknown): TemplarNoteStyle | null {
   const provenance = record(source.provenance);
   const sourceSnapshotValue = pick(provenance, 'sourceSnapshot', 'source-snapshot');
   const appliedByRule = record(pick(provenance, 'appliedByRule', 'applied-by-rule'));
-  if (sourceSnapshotValue && typeof sourceSnapshotValue === 'object') {
+  if (
+    sourceSnapshotValue &&
+    typeof sourceSnapshotValue === 'object' &&
+    record(sourceSnapshotValue).version === TEMPLAR_FORMAT_VERSION
+  ) {
     const sourceSnapshot = normalizeTemplate(sourceSnapshotValue);
     delete sourceSnapshot.builtIn;
     normalized.provenance = { sourceSnapshot };
@@ -825,7 +838,7 @@ export function normalizeNoteStyle(raw: unknown): TemplarNoteStyle | null {
   if (Object.keys(attachments).length > 0) {
     normalized.attachments = attachments;
   }
-  return normalized;
+  return validateTemplate(normalized).valid ? normalized : null;
 }
 
 export function normalizePageOptions(raw: unknown): NotePageOptions {
@@ -840,8 +853,12 @@ export function normalizePageOptions(raw: unknown): NotePageOptions {
   return {
     mode: enumValue(page.mode, pageModes, DEFAULT_PAGE_OPTIONS.mode),
     size,
-    width: numberValue(page.width, preset.width, 480, 1800),
-    height: numberValue(page.height, preset.height, 640, 2400),
+    width: size === 'custom'
+      ? numberValue(page.width, preset.width, 480, 1800)
+      : preset.width,
+    height: size === 'custom'
+      ? numberValue(page.height, preset.height, 640, 2400)
+      : preset.height,
     gap: numberValue(page.gap, DEFAULT_PAGE_OPTIONS.gap, 8, 120),
     scaleToFit: booleanValue(
       pick(page, 'scaleToFit', 'scale-to-fit'),

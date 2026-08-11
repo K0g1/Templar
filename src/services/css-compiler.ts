@@ -30,9 +30,9 @@ function isInsideKeyframes(rule: Rule): boolean {
 
 function expandVirtualElements(selector: string): string {
   return selector.replace(
-    /(^|[\s>+~])(?:h[1-6]|p|ul|ol|li|blockquote|img|table|code|pre|hr|a|mark|input)(?=$|[\s>+~.#:[])/g,
+    /(^|[\s>+~(,])(?:h[1-6]|p|ul|ol|li|blockquote|img|table|code|pre|hr|a|mark|input)(?=$|[\s>+~,.#:)\]])/g,
     (match) => {
-      const prefix = /^[\s>+~]/.test(match) ? match.charAt(0) : '';
+      const prefix = /^[\s>+~(,]/.test(match) ? match.charAt(0) : '';
       const element = match.slice(prefix.length);
       return `${prefix}${livePreviewElements[element] ?? element}`;
     },
@@ -85,8 +85,13 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function compileCustomCss(css: string, scope: string, scopeId: string): CompiledPageStyle {
-  const validation = validateCustomCss(css);
+export function compileCustomCss(
+  css: string,
+  scope: string,
+  scopeId: string,
+  protectRhythm = false,
+): CompiledPageStyle {
+  const validation = validateCustomCss(css, { protectRhythm });
   if (!validation.valid || !css.trim()) {
     return { css: '', issues: validation.issues };
   }

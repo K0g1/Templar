@@ -34,7 +34,8 @@ compilePageStyle()
       ▼
 one scoped <style> in one Markdown view
       │
-      ├─ Image grid compensation
+      ├─ measured paper origin
+      ├─ image/variable-block grid compensation
       └─ PageLayoutService (paged only)
 ```
 
@@ -110,12 +111,12 @@ Invalid advanced CSS is omitted from rendering and reported as human-readable is
 Each Markdown leaf receives:
 
 ```text
-data-templar-scope="templar-<stable-path-hash>"
+data-templar-scope="templar-leaf-<runtime-sequence>"
 data-templar-file="path/to/note.md"
 data-templar-mode="pageless|paged"
 ```
 
-The renderer adds `.templar-page` to the active Reading/Live Preview surface and `.templar-page-content` to its content box. Generated CSS starts with the exact scope attribute. Even two panes showing differently styled notes remain isolated.
+The scope value is a collision-free, runtime leaf token (`templar-leaf-<sequence>`), not a file-path hash. The renderer adds `.templar-page` to the active Reading/Live Preview surface and `.templar-page-content` to its content box. Generated CSS starts with the exact scope attribute. Two panes remain isolated even when they show the same file and only one pane owns a temporary preview.
 
 The style element is a direct child of the leaf's content root and is removed when the style disappears, the leaf closes, or the plugin unloads.
 
@@ -125,25 +126,32 @@ The style element is a direct child of the leaf's content root and is removed wh
 
 - Waits for `document.fonts.load()` where available.
 - Creates an invisible inline marker whose bottom border-box edge is the browser's real baseline within the requested line box.
+- Records the browser's actual rendered line-box height when a font's ascent/descent expands it beyond the requested CSS line-height.
 - Uses Canvas text metrics for ascent/descent diagnostics.
 - Caches family/size/weight/line-height/device-scale combinations with a bounded LRU policy.
 - Measures body, H1–H6, and fenced-code typography separately.
 
-The compiler derives one paper coordinate system from the measured body baseline plus the effective content padding. Ruled strokes, dot centers, and graph intersections share that origin in both page modes. A ruled stroke begins at the baseline and paints downward, keeping normal glyph bodies above the line while allowing descenders to cross it.
+The compiler provides a safe fallback origin, then `PageRenderer` measures the first real rhythmic text target in each attached content root and writes `--templar-paper-baseline-position` for that root. Source and Live Preview use the first ordinary CodeMirror line outside frontmatter, rules, tables, code boundaries, and renderer widgets; Reading uses the first visible heading, paragraph, list item, or code line outside Properties/frontmatter and variable-height blocks. The target's DOM position, border/padding, font-specific alphabetic baseline, CSS zoom, and grid unit define the repeating paper phase. Properties panes, inline titles, and note-specific top structure can therefore change height without shifting text relative to the ruling. While a virtual scroller has moved away from the document start, the renderer retains the established origin instead of re-anchoring to the first currently attached block. A ruled stroke begins at the measured alphabetic baseline and paints downward, keeping ordinary glyph bodies above the line while allowing descenders to cross it.
 
 Paper and watermark pseudo-elements sit at negative z-indices inside an isolated `.templar-page-content` stacking context. This keeps them behind note content while preventing the Reading-view page background from covering pattern and margin layers.
 
+Every paper pattern serializes parallel `background-image`, `background-size`, `background-position`, and `background-repeat` lists. Optional margin lines are inserted as a complete non-repeating layer rather than relying on CSS list-value repetition. Diagonal and cross-hatch tiles use centered edge-to-edge strokes, hex uses six anchored edge layers, and scallop uses two staggered outline layers; this prevents missing directions, corner specks, and layer-repeat drift.
+
 The rhythm compiler never emits a fractional-grid block offset in a gridded mode: strict reserves one extra grid row, balanced reserves none, and list items explicitly inherit the body line-height with theme list padding neutralized. Consequently, every following block remains congruent with the paper pattern.
+
+Live Preview treats CodeMirror line geometry as an editor-owned measurement contract. Generated CSS never adds vertical margins to `.cm-line` elements: ordinary block spacing remains a Reading View concern, while Live Preview headings express their visual space as border-box padding that CodeMirror can measure. This keeps pointer coordinates, the visible glyph line, and CodeMirror's height map congruent even around headings and long source blank-line runs.
 
 In strict and balanced modes, Reading `<hr>` blocks and Live Preview `HyperMD-hr` lines own exactly one baseline unit with zero theme margins. The visible solid/dashed/dotted/double/fade stroke is centered inside that row and its rendered thickness is clamped without mutating the stored template value. Free or disabled baseline modes retain ordinary divider spacing.
 
-Heading padding makes the heading baseline congruent with the body baseline modulo the grid and adds complementary padding so the total remains a grid multiple. Structured block colors also compile explicit background and foreground colors for Markdown highlights, covering Reading View's `mark` and Live Preview's highlight spans without inheriting theme defaults.
+Heading padding makes the heading baseline congruent with the body baseline modulo the grid and adds the remaining padding so the actual rendered line box plus padding remains a grid multiple. Structured block colors also compile explicit background and foreground colors for Markdown highlights, covering Reading View's `mark` and Live Preview's highlight spans without inheriting theme defaults.
 
-Reading code blocks use the same complementary baseline-padding calculation as headings, but retain a configurable monospace font. `reading-whitespace.ts` provides the pure helpers for source blank lines that standard Markdown normally collapses: `internalBlankLineRuns` counts runs inside a section while ignoring fenced-code bodies, `blankLinesBetweenSections` derives the inter-section gap from exact line ranges, and `createBlankLineSpacer` builds the owned grid-sized element. `PageRenderer` owns the reconciliation policy:
+Reading code blocks use the same measured baseline-padding calculation as headings, but retain a configurable monospace font. `reading-whitespace.ts` provides the pure helpers for source blank lines that standard Markdown normally collapses: `internalBlankLineRuns` counts runs inside a section while ignoring fenced-code bodies, `blankLinesBetweenSections` derives the inter-section gap from exact line ranges, and `createBlankLineSpacer` builds the owned grid-sized element. `PageRenderer` owns the reconciliation policy:
 
 - **Synchronous insertion inside the post-processor.** Obsidian's Reading View renders a section, runs post-processors, attaches the section to the sizer, measures its height, and paints — all within one task. Inserting spacers during the post-processor therefore puts them in the DOM before the first paint (no flash) and before the height measurement (the virtual scroller's stored heights always include the spacers, so its layout model never drifts).
 - **Spacers live inside section elements, never in the sizer.** Obsidian's virtual scroller owns the sizer's direct children: it calls `setChildrenInPlace` on every render pass and scroll and *removes* any child it does not list. A spacer that is the first child of the section below its gap is invisible to that bookkeeping, survives scrolling (detach/attach cycles travel with the section), and survives cached-view reuse.
 - **Fresh ranges from the renderer, not from stale registries.** `context.getSectionInfo(element)` resolves any element — attached or detached — against Obsidian's live section objects, which are updated at every parse. The Reading root stashes the last post-processor context so deferred passes get the same fresh lookups. The function returns the whole note text; `PageRenderer` slices the section's own line range for internal blank-line runs.
+- **Reading roots are retargeted by file path.** Obsidian can reuse one `.markdown-preview-view` as a leaf opens a different note. Templar records which file owns each root and clears its context, section ownership, and owned spacers before adopting another file. A cached reopen may not invoke post-processors; in that case complete `MetadataCache.sections` mappings remain eligible for reconciliation without a context.
+- **The hidden-frontmatter boundary is the body origin.** Obsidian's `frontmatterPosition.end.line` identifies the closing YAML delimiter. The first Markdown-body row is therefore `end.line + 1`; the gap from that row to the first rendered section becomes an owned leading spacer. YAML lines themselves never contribute to the visible count.
 - **One deferred pass remains.** Style changes and cached Reading Views do not re-run post-processors, so `refreshFile` schedules a single animation-frame reconcile for those paths. Because spacers are inside section elements, this pass cannot be wiped and does not flicker.
 
 Two residual behaviors follow from Obsidian's measurement model (heights are re-measured only when a section re-renders): a gap count that changes while both adjacent sections stay rendered (for example, adding a blank line without touching either section's content) converges on the next re-render of either section, and a section measured before such a change drifts by at most the gap delta until then. Spacers are grid-sized, participate in pagination, and are removed during leaf cleanup.
@@ -161,7 +169,11 @@ Two residual behaviors follow from Obsidian's measurement model (heights are re-
 
 ### Image compensation
 
-A `ResizeObserver` measures rendered image boxes. In strict/balanced gridded modes, it adds only the missing bottom space needed to reach the next grid multiple. Original image files are untouched.
+A `ResizeObserver` measures rendered image boxes. In strict/balanced gridded modes, it includes the configured block-start/block-end margins and adds only the missing bottom space needed to make the complete image footprint a grid multiple. Original image files are untouched.
+
+The same renderer owns a generalized rhythm observer for variable-height output. It watches one outer layout owner per table, Mermaid/code-block result, callout, embed, iframe, video, audio, canvas, or corresponding CodeMirror widget. Its natural footprint is the precise border box plus external block margins, with any previous Templar-owned tail subtracted. Wrappers receive a trailing pseudo-element; direct replaced/table elements extend their captured natural end margin. Both strategies add `ceil(outer footprint / unit) * unit - outer footprint` without resizing content. Reading walks to the candidate's direct renderer-owned child of the whole-note `.markdown-preview-section`; it never observes that document root or frontmatter UI. Live Preview uses the containing table/embed widget. Resize entries are frame-coalesced and values within a small sub-pixel tolerance of a grid boundary add no row. This prevents feedback loops while keeping subsequent Markdown on the same ruled phase. Explicit source blank-line spacers remain separate children after this compensation and therefore still contribute their full requested rows. Mutations discover replaced async widgets, resizes update only the active owners, and leaf cleanup cancels pending frames, disconnects all observers, and removes every generated class/property.
+
+Templar defines a complete callout palette, so the callout adapter also normalizes `mix-blend-mode` to `normal` inside the isolated paper surface. Host themes may otherwise blend dark callout content into a light page until it disappears even though the DOM remains visible. Template and per-type callout colors remain authoritative.
 
 ### PageLayoutService
 

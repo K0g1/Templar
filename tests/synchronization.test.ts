@@ -50,4 +50,18 @@ describe('template synchronization', () => {
     expect(replacement.page.size).toBe('letter');
     expect(replacement.attachments?.['photo.png']?.rotation).toBe(-2);
   });
+
+  it('ignores object key insertion order when comparing snapshots', () => {
+    const source = clone(BUILT_IN_TEMPLATES[0]!);
+    source.blocks.calloutVariants = {
+      info: { accent: '#112233' },
+      warning: { accent: '#aabbcc' },
+    };
+    const note = templateToNoteStyle(source);
+    note.blocks.calloutVariants = {
+      warning: { accent: '#aabbcc' },
+      info: { accent: '#112233' },
+    };
+    expect(synchronizationStatus(note, source).state).toBe('up-to-date');
+  });
 });

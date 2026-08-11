@@ -30,4 +30,25 @@ describe('template packs', () => {
   it('creates deterministic conflict copy IDs', () => {
     expect(uniqueCopyId('paper', new Set(['paper-copy']))).toBe('paper-copy-2');
   });
+
+  it('surfaces duplicate IDs inside the incoming pack', () => {
+    const exported = templatePackToExportObject(
+      { name: 'Duplicates', description: '', author: '', tags: [] },
+      [BUILT_IN_TEMPLATES[0]!, BUILT_IN_TEMPLATES[0]!],
+    );
+    const review = parseTemplatePack(exported)!;
+    expect(review.templates.every((entry) => !entry.valid)).toBe(true);
+    expect(review.templates[0]?.issues.some((issue) => issue.message.includes('duplicate'))).toBe(true);
+  });
+
+  it('bounds pack member count before member normalization', () => {
+    const exported = templatePackToExportObject(
+      { name: 'Bounded', description: '', author: '', tags: [] },
+      [BUILT_IN_TEMPLATES[0]!],
+    );
+    const pack = exported['templar-pack'] as Record<string, unknown>;
+    const member = (pack.templates as unknown[])[0];
+    pack.templates = Array.from({ length: 257 }, () => member);
+    expect(() => parseTemplatePack(exported)).toThrow(/at most 256/i);
+  });
 });

@@ -7,6 +7,8 @@ export const TEMPLAR_CONTENT_CLASS = 'templar-page-content';
 export const TEMPLAR_STYLE_ELEMENT_CLASS = 'templar-note-style';
 export const DEFAULT_TEMPLATE_ID = 'classic-ruled';
 export const MAX_CUSTOM_CSS_BYTES = 50_000;
+export const MAX_IMPORT_BYTES = 8_000_000;
+export const MAX_PACK_TEMPLATES = 256;
 
 export const VIRTUAL_SELECTORS = [
   '.page',

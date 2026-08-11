@@ -58,9 +58,10 @@ describe('preview sessions', () => {
     const view = { requestAnimationFrame: vi.fn(() => 1), cancelAnimationFrame: vi.fn() };
     const leaf = { view: { containerEl: { ownerDocument: { defaultView: view } } } } as unknown as WorkspaceLeaf;
     const file = fixture<TFile>({ path: 'note.md' });
+    const cancelPreview = vi.fn(async () => undefined);
     const renderer = {
       setPreview: vi.fn(async () => undefined),
-      cancelPreview: vi.fn(async () => undefined),
+      cancelPreview,
       cancelPreviewsByOwner: vi.fn(),
     } as unknown as PageRenderer;
     const service = new PreviewSessionService(
@@ -71,5 +72,43 @@ describe('preview sessions', () => {
     service.preview('sidebar', leaf, file, BUILT_IN_TEMPLATES[0]!);
     await expect(service.cancelMissingLeaves(new Set())).resolves.toBe(true);
     expect(service.current()).toBeNull();
+  });
+
+  it('survives a transient file-less Markdown mode rebuild but cancels a real file change', async () => {
+    const viewWindow = {
+      requestAnimationFrame: vi.fn(() => 1),
+      cancelAnimationFrame: vi.fn(),
+    };
+    const leafView: {
+      containerEl: { ownerDocument: { defaultView: typeof viewWindow } };
+      file: TFile | null;
+      getViewType: () => string;
+    } = {
+      containerEl: { ownerDocument: { defaultView: viewWindow } },
+      file: null,
+      getViewType: () => 'markdown',
+    };
+    const leaf = { view: leafView } as unknown as WorkspaceLeaf;
+    const file = fixture<TFile>({ path: 'Research/note.md' });
+    const cancelPreview = vi.fn(async () => undefined);
+    const renderer = {
+      setPreview: vi.fn(async () => undefined),
+      cancelPreview,
+      cancelPreviewsByOwner: vi.fn(),
+    } as unknown as PageRenderer;
+    const service = new PreviewSessionService(
+      clone(DEFAULT_SETTINGS),
+      { getStyle: vi.fn(() => null) } as unknown as FrontmatterService,
+      renderer,
+    );
+    service.preview('sidebar', leaf, file, BUILT_IN_TEMPLATES[0]!);
+
+    await service.cancelMismatchedLeaves();
+    expect(service.current('sidebar')?.file.path).toBe(file.path);
+
+    leafView.file = fixture<TFile>({ path: 'Research/other.md' });
+    await service.cancelMismatchedLeaves();
+    expect(service.current()).toBeNull();
+    expect(cancelPreview).toHaveBeenCalledWith(leaf, 'sidebar');
   });
 });

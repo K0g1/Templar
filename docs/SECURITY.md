@@ -11,7 +11,7 @@ Templar processes four user-controlled inputs:
 3. advanced template CSS.
 4. `.templar-pack` files containing multiple templates.
 
-All three can be synced or received from someone else and are treated as untrusted until normalized and validated.
+All four can be synced or received from someone else and are treated as untrusted until normalized and validated.
 
 ## YAML and frontmatter
 
@@ -19,14 +19,18 @@ All three can be synced or received from someone else and are treated as untrust
 - Imported objects are normalized into the known v1 schema; unknown keys are dropped.
 - Numeric values are finite and clamped.
 - Enum values fall back to a documented safe member.
+- Note styles require the supported explicit version and otherwise fail closed; unsupported content is not silently normalized into a styled note.
 - Writes use `FileManager.processFrontMatter()` and touch only `frontmatter.templar`.
 - No imported text is passed to `innerHTML` or executed.
 - Import preview is isolated and saving requires an explicit user action.
-- Every pack member traverses the standalone normalizer, source validator, structured validator, and CSS validator independently. Invalid members are blocked, built-in IDs cannot be overwritten, and folder labels never become filesystem paths.
+- Raw imports are capped at 8 MB before YAML parsing; packs are capped at 256 members and 8 MB of aggregate custom CSS.
+- Every pack member traverses the standalone normalizer, source validator, structured validator, and CSS validator independently. Duplicate member IDs are errors, invalid members are blocked, built-in IDs cannot be overwritten, and folder labels never become filesystem paths.
 
 ## CSS controls
 
 Custom CSS has a 50 KB limit and is parsed by patched PostCSS plus `postcss-selector-parser`.
+
+Before PostCSS recovery, a small tokenizer rejects physical control characters inside strings and unterminated strings/comments. This closes browser/parser differentials where a malformed quoted value could terminate a scoped declaration and create a global rule. Structured frontmatter strings are independently escaped/guarded before interpolation, so note metadata cannot escape a generated CSS string.
 
 Every non-keyframe selector must start with `.page` or `.page-content`. The validator rejects:
 
@@ -39,10 +43,11 @@ Every non-keyframe selector must start with `.page` or `.page-content`. The vali
 - legacy executable binding/behavior properties;
 - viewport media queries that would make a fixed page reflow;
 - viewport/container/environment-dependent lengths, container queries, `!important`, and private runtime selectors that could override the fixed canvas.
+- vertical box/font geometry on rhythmic descendants while a baseline grid is active.
 
 Infinite animations and backdrop filters produce warnings. Validation errors omit advanced CSS from rendering.
 
-The compiler replaces virtual roots with a unique view scope and plugin-owned page class. It maps stable element vocabulary onto Reading/Live Preview adapters and prefixes keyframe names per note. CSS is assigned with `style.textContent`, not HTML parsing.
+The compiler replaces virtual roots with a collision-free per-leaf runtime scope and plugin-owned page class. It maps stable element vocabulary—including selectors nested in functional pseudos—onto Reading/Live Preview adapters and prefixes keyframe names per leaf. File paths are not used as scope identity, so two panes showing the same note cannot share a preview stylesheet. CSS is assigned with `style.textContent`, not HTML parsing.
 
 Structured fields pass through a conservative scalar CSS-value guard that rejects declaration terminators, braces, markup delimiters, `url()`, and `expression()` before interpolation.
 
@@ -68,7 +73,7 @@ The initial implementation upgraded PostCSS and Vitest in response to advisories
 
 ## Denial-of-service considerations
 
-- CSS size is bounded.
+- Raw import bytes, pack members, aggregate pack CSS, and per-template CSS are bounded before expensive validation/rendering.
 - font cache size is bounded.
 - refreshes and pagination are animation-frame/microtask coalesced.
 - observers are per open styled leaf and disconnect on reconfigure/cleanup.

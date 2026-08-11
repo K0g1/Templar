@@ -1,5 +1,9 @@
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 
+export function isTemplarFrontmatterKey(line: string): boolean {
+  return /^(?:templar|["']templar["'])\s*:/.test(line);
+}
+
 function templarLineRange(view: EditorView): { startLine: number; endLine: number } | null {
   const document = view.state.doc;
   if (document.lines < 3 || document.line(1).text.trim() !== '---') {
@@ -19,7 +23,7 @@ function templarLineRange(view: EditorView): { startLine: number; endLine: numbe
 
   let startLine = 0;
   for (let lineNumber = 2; lineNumber < closingLine; lineNumber += 1) {
-    if (/^templar\s*:/.test(document.line(lineNumber).text)) {
+    if (isTemplarFrontmatterKey(document.line(lineNumber).text)) {
       startLine = lineNumber;
       break;
     }

@@ -65,6 +65,8 @@ The requested gap is adjusted upward to make this equation true:
 
 Because the page span is a grid multiple, a continuous repeating ruling has the same phase at the top of every sheet. The paper therefore follows the measured font baseline on page 2 exactly as on page 1.
 
+The compiler provides a fallback paper origin, then `PageRenderer` measures the first real rhythmic text target in each active Source, Live Preview, or Reading content root. It converts that DOM baseline into unscaled page coordinates and stores the resulting grid phase on the content root. Properties/frontmatter UI and independently snapped renderer widgets are excluded. The established document phase stays locked while Obsidian virtualizes blocks away from the beginning of the note. Pagination and paper paint therefore use the exact active adapter geometry, so ordinary glyphs rest on the rule and descenders cross below it without a one-row phase change when the view switches or a note omits Properties.
+
 ## Page-break fitting
 
 CSS alone cannot paginate editable CodeMirror DOM vertically. `PageLayoutService` uses rendered-block fitting without rewriting Markdown:
@@ -106,19 +108,24 @@ Live Preview is CodeMirror 6 and virtualizes long documents. Templar fits curren
 
 `PrintService` cooperates with the host browser/Obsidian print pipeline; it does not generate PDF files itself. Before invoking `window.print()` it:
 
-1. forces the active leaf through the latest renderer generation;
-2. waits for `document.fonts.ready`;
-3. waits for current images to decode or settle;
-4. prepares `PageLayoutService` at scale 1 with the screen gap removed and repaginates;
-5. appends temporary print rules to that leaf's renderer-owned scoped style.
+1. acquires a per-service busy lock and verifies that the requested file still owns the requested leaf;
+2. stores the exact Markdown view state and temporarily switches that leaf to Reading View;
+3. forces the leaf through the latest renderer generation;
+4. waits for `document.fonts.ready`, current images to decode or settle, and a quiet mutation/resize window followed by two animation frames;
+5. prepares `PageLayoutService` at scale 1 with the screen gap removed and repaginates;
+6. appends temporary print rules to that leaf's renderer-owned scoped style.
 
-A4 emits `@page { size: A4 }`, Letter emits `@page { size: Letter }`, and custom pages request their stored CSS-pixel dimensions. Paged sheets lose screen-only shadows/gaps while keeping paper, pattern, watermark, images, tables, callouts, code, and calculated breaks. Pageless notes use natural paper pagination while retaining content styling. `afterprint`, a mobile fallback timeout, or service destruction removes temporary CSS and restores screen scaling/layout.
+A4 emits `@page { size: A4 }`, Letter emits `@page { size: Letter }`, and custom pages request their stored CSS-pixel dimensions. Paged sheets lose screen-only shadows/gaps while keeping paper, pattern, watermark, images, tables, callouts, code, and calculated breaks. Pageless notes use natural paper pagination while retaining content styling. `afterprint`, a platform fallback timeout, an exception, or service destruction removes temporary CSS/ownership classes, restores screen scaling/layout, and returns the leaf to its exact pre-print mode.
 
 Printing remains unavailable where the host platform does not expose a usable print action; no Electron or Node dependency is introduced.
 
 ## Divider rhythm
 
 With strict or balanced baseline alignment, a Markdown horizontal rule owns one complete grid row in both Reading and Live Preview. Its external margins are zero, the visible stroke is centered, and all five divider styles share the same footprint. Pagination therefore measures a divider as exactly one unit: it either fits as a whole row or moves according to the ordinary fitted-block algorithm. Free/disabled baseline modes retain non-grid spacing.
+
+## Variable-height block rhythm
+
+Tables, Mermaid and other rendered fenced blocks, callouts, embeds, and media retain their natural height. In strict/balanced modes, `PageRenderer` observes each direct renderer-owned Reading section or Live Preview widget and appends only the missing fraction to make its complete border-box-plus-margins footprint the next baseline multiple. It never observes the whole Reading document. Precise resize measurements and DOM writes are coalesced to an animation frame, and the previous owned tail is subtracted before recalculation so the observer cannot feed back into itself. Wrappers use an owned trailing pseudo-element; direct table/replaced elements extend their captured natural end margin. The page-layout observer sees the corrected size and schedules normal block fitting, including after an async diagram or embed changes height. Explicit blank-line rows are separate from this correction, so pagination measures and preserves them. Pageless, A4, Letter, and custom pages share the same calculation; free/disabled baseline modes skip it.
 
 ## Mobile behavior
 
@@ -142,3 +149,4 @@ For a paged renderer change:
 10. Run on physical iOS and Android before release.
 11. Print A4, Letter, custom, and pageless samples; verify gap/shadow removal, page-size requests, patterns, watermarks, images, tables, callouts, code, and page breaks.
 12. Place solid/dashed/dotted/double/fade rules before, after, consecutively, and near a page boundary at several grid units; every following baseline must remain congruent.
+13. Place tables, Mermaid diagrams, callouts, embeds, and media before ordinary text, with zero/one/several explicit blank lines, then resize or let async content settle near A4 and Letter boundaries; following text must remain congruent without observer loops.

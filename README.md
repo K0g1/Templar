@@ -30,7 +30,7 @@ Templar includes **132 built-in styles** organized into themed folders, with ins
 
 ## Designed for real notes
 
-- **Rich Markdown:** headings through H6, emphasis, highlights, links, lists, tasks, quotes, code, tables, callouts, embeds, dividers, and images.
+- **Rich Markdown:** headings through H6, emphasis, highlights, links, lists, tasks, quotes, code, tables, callouts, Mermaid/rendered blocks, embeds, dividers, and images. Baseline-aware styles return following text to the next ruled row after variable-height content.
 - **Two page modes:** use a natural reflowing note or a fixed A4, Letter, or custom page that scales as one sheet on narrow screens.
 - **Visual depth:** paper patterns, baseline-aware typography, image treatments, watermarks, callout palettes, table styling, and more.
 - **Your own designs:** create a style with guided controls, edit its raw definition, or import and export portable `.templar` files.
@@ -60,7 +60,7 @@ Previewing never writes the note. Applying a style never rewrites the Markdown b
 
 ## Private, portable, and yours
 
-Templar has no account, telemetry, ads, API key, or network traffic. It reads and writes through Obsidian's vault APIs, keeps each note's complete design in one frontmatter property, and validates imported styles before using them.
+Templar has no account, telemetry, ads, API key, or network traffic. It reads and writes through Obsidian's vault APIs, keeps each note's complete design in one frontmatter property, and treats imported styles, packs, custom CSS, and synced note frontmatter as untrusted. Imports are bounded and validated before use; generated CSS is isolated to the exact Markdown leaf, including when the same note is open in two panes.
 
 ## Project links
 

@@ -9,7 +9,9 @@
 }
 
 .templar-font-ruler {
-  contain: strict;
+  /* Keep layout/style/paint isolated, but do not apply size containment: the
+     renderer intentionally measures the font's real line box. */
+  contain: layout style paint;
   display: block;
   left: -100000px;
   margin: 0;

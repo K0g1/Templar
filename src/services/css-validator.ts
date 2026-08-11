@@ -89,8 +89,79 @@ const reservedRootGeometryProperties = new Set([
   'width',
   'zoom',
 ]);
+const reservedRhythmProperties = new Set([
+  'block-size',
+  'box-sizing',
+  'display',
+  'font',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'height',
+  'line-height',
+  'margin',
+  'margin-block',
+  'margin-block-end',
+  'margin-block-start',
+  'margin-bottom',
+  'margin-top',
+  'max-block-size',
+  'max-height',
+  'min-block-size',
+  'min-height',
+  'padding',
+  'padding-block',
+  'padding-block-end',
+  'padding-block-start',
+  'padding-bottom',
+  'padding-top',
+]);
 const unstableLengthUnit =
   /[-+]?(?:\d+|\d*\.\d+)\s*(?:cqb|cqh|cqi|cqmax|cqmin|cqw|dvh|dvw|lvh|lvw|svh|svw|vb|vh|vi|vmax|vmin|vw)\b/i;
+
+/**
+ * PostCSS deliberately recovers from malformed strings more liberally than a
+ * browser CSS tokenizer. Reject physical controls inside strings before
+ * parsing so an accepted template cannot become an unscoped browser rule.
+ */
+function hasUnsafeStringControl(css: string): boolean {
+  let quote: '"' | "'" | null = null;
+  let comment = false;
+  let escaped = false;
+  for (let index = 0; index < css.length; index += 1) {
+    const character = css[index] ?? '';
+    const next = css[index + 1] ?? '';
+    if (comment) {
+      if (character === '*' && next === '/') {
+        comment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (!quote && character === '/' && next === '*') {
+      comment = true;
+      index += 1;
+      continue;
+    }
+    if (quote) {
+      if (character === '\n' || character === '\r' || character === '\f' || character === '\0') {
+        return true;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    }
+  }
+  return quote !== null || comment;
+}
 
 function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as AtRule).name);
@@ -102,6 +173,12 @@ function selectorStartsWithVirtualRoot(selector: string): boolean {
 
 function selectorTargetsVirtualRoot(selector: string): boolean {
   return /^\.page(?:-content)?(?=$|[.:#[])/.test(selector.trim());
+}
+
+function selectorTargetsRhythmElement(selector: string): boolean {
+  return /(?:^|[\s>+~(,])(?:h[1-6]|p|ul|ol|li|blockquote|pre|hr)(?=$|[\s>+~,.#:)\]])/.test(
+    selector,
+  );
 }
 
 function decodeCssEscapes(value: string): string {
@@ -216,7 +293,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function validateCustomCss(css: string): ValidationResult {
+export function validateCustomCss(
+  css: string,
+  options: { protectRhythm?: boolean } = {},
+): ValidationResult {
   const issues: ValidationIssue[] = [];
   if (!css.trim()) {
     return { valid: true, issues };
@@ -228,6 +308,15 @@ export function validateCustomCss(css: string): ValidationResult {
       message: 'Custom CSS exceeds the 50 KB safety and portability limit.',
       fix: 'Remove generated repetition and embedded assets.',
     });
+  }
+  if (hasUnsafeStringControl(css)) {
+    issues.push({
+      severity: 'error',
+      path: 'css',
+      message: 'Custom CSS contains an unterminated string/comment or a physical control character inside a string.',
+      fix: 'Keep CSS strings on one line and use ordinary CSS escapes for control characters.',
+    });
+    return { valid: false, issues };
   }
 
   let root;
@@ -302,6 +391,19 @@ export function validateCustomCss(css: string): ValidationResult {
         path: `css.${property}`,
         message: `“${property}” is managed by Templar on the .page or .page-content root.`,
         fix: 'Use the structured typography/layout fields, or apply this declaration to a Markdown descendant.',
+      });
+    }
+    if (
+      parentRule &&
+      options.protectRhythm === true &&
+      reservedRhythmProperties.has(property) &&
+      parentRule.selectors.some((selector) => selectorTargetsRhythmElement(selector))
+    ) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” on a text rhythm element would desynchronize Reading View and the editor cursor.`,
+        fix: 'Use Templar’s structured typography, heading, divider, and baseline fields for vertical geometry.',
       });
     }
     if (
