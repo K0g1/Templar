@@ -279,3 +279,45 @@ describe('CSS round 4 bypass regression suite', () => {
     expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
   });
 });
+
+describe('CSS round 5 bypass regression suite', () => {
+  it('rejects structural pseudo hiding via child combinator', () => {
+    const a = errors('.page > *:nth-child(n) { display: none; }');
+    expect(a.some((m) => m.includes('hide or disable'))).toBe(true);
+    const b = errors('.page-content > :nth-child(n) { opacity: 0; }');
+    expect(b.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects calc() in animation iteration count', () => {
+    const result = errors('.page p { animation-duration: 1s; animation-iteration-count: calc(31); }');
+    expect(result.some((m) => m.toLowerCase().includes('math functions'))).toBe(true);
+  });
+
+  it('rejects calc() in animation duration', () => {
+    const result = errors('.page p { animation-duration: calc(1s * 31); }');
+    expect(result.some((m) => m.toLowerCase().includes('math functions'))).toBe(true);
+  });
+
+  it('short-circuits oversized CSS with an error', () => {
+    const huge = `.page p { color: red; }\n`.repeat(20000);
+    const result = validateCustomCss(huge);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.message.includes('50 KB'))).toBe(true);
+  });
+
+  it('handles large animation lists in O(n+m) without hangs', () => {
+    // Keep the combined declarations just under the 50 KB cap: 2000
+    // durations + 2000 iterations is enough to expose an O(lcm) blowup if
+    // one existed (lcm(2000, 2000) = 2000; use coprime lengths to force a
+    // large lcm: 1001 and 1000 -> lcm ~1,001,000 iterations).
+    const durations = Array.from({ length: 1000 }, (_, i) => `${String((i % 30) + 1)}s`).join(', ');
+    const iterations = Array.from({ length: 1001 }, () => '1').join(', ');
+    const css = `.page p { animation-duration: ${durations}; animation-iteration-count: ${iterations}; }`;
+    expect(css.length).toBeLessThan(50_000);
+    const start = Date.now();
+    const result = validateCustomCss(css);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(1000);
+    expect(result.valid).toBe(true); // durations up to 30s x 1 iteration
+  });
+});

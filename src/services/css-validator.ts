@@ -103,11 +103,37 @@ function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && isKeyframesAtRuleName((rule.parent as AtRule).name);
 }
 
-/** Least common multiple, used to cover one full CSS list-repetition cycle. */
-function lcm(left: number, right: number): number {
-  if (left === 0 || right === 0) {
-    return Math.max(left, right);
+/**
+ * Maximum effective runtime under CSS list repetition semantics.
+ *
+ * Lists pair by index with cyclic wrapping, so the realized pairs are those
+ * with indices congruent modulo g = gcd(dl, il). Computing the maximum
+ * product per residue class is O(dl + il), avoiding the O(lcm(dl, il))
+ * enumeration that an attacker could abuse with large lists.
+ */
+function maxAnimationRuntime(durations: number[], iterations: number[]): number {
+  const dl = durations.length;
+  const il = iterations.length;
+  if (dl === 0 || il === 0) {
+    return 0;
   }
+  const g = gcd(dl, il);
+  let maxProduct = 0;
+  for (let residue = 0; residue < g; residue += 1) {
+    let maxDuration = 0;
+    for (let index = residue; index < dl; index += g) {
+      maxDuration = Math.max(maxDuration, durations[index] ?? 0);
+    }
+    let maxIteration = 0;
+    for (let index = residue; index < il; index += g) {
+      maxIteration = Math.max(maxIteration, iterations[index] ?? 0);
+    }
+    maxProduct = Math.max(maxProduct, maxDuration * maxIteration);
+  }
+  return maxProduct;
+}
+
+function gcd(left: number, right: number): number {
   let a = left;
   let b = right;
   while (b !== 0) {
@@ -115,7 +141,7 @@ function lcm(left: number, right: number): number {
     a = b;
     b = remainder;
   }
-  return (left / a) * right;
+  return a;
 }
 
 /**
@@ -191,44 +217,141 @@ function isSafePreferenceMediaQuery(params: string): boolean {
 }
 
 /**
- * Detects selectors that would hide or disable the entire note, including
- * universal selectors wrapped in :is()/:where()/:not() and combinator
- * variants (`.page *`, `.page > *`, `.page-content :is(*)`).
+ * Detects selectors that would hide or disable the entire note.
  *
- * The check operates on the decoded selector string (escapes resolved) and
- * treats any selector that can match every element inside the page root as
- * whole-page capable. It is intentionally conservative: a false positive
- * rejects a template; a false negative would let a malicious template blank
- * the user's note or overlay fake UI.
+ * Uses the selector AST so structural pseudos are recognized on explicit or
+ * implicit universal compounds after descendant/child combinators (`.page > *:nth-child(n)`,
+ * `.page-content > :nth-child(n)`), not just the literal `.page *:` spelling.
+ * The check is intentionally conservative: a false positive rejects a
+ * template; a false negative would let a malicious template blank the user's
+ * note or overlay fake UI.
  */
 function selectorCanHideWholePage(rule: Rule): boolean {
   return rule.selectors.some((selector) => {
-    const decoded = decodeCssEscapes(selector).toLowerCase();
-    const trimmed = decoded.trim();
-    // Direct root or root + universal child with any combinator.
-    if (/^\.page(?:-content)?(?:\s*[>+~]?\s*\*)?$/.test(trimmed)) {
-      return true;
+    let ast;
+    try {
+      ast = selectorParser().astSync(selector);
+    } catch {
+      return false;
     }
-    // Universal wrapped in a forgiving selector list: :is(*), :where(*),
-    // :not(*) — including nested and spaced forms.
-    const universalWrapped = /:\s*(?:is|where|not)\s*\(\s*(?:\*|\*\s*\)|.*\*)/.test(trimmed);
-    if (universalWrapped && /^\.page(?:-content)?(?:\s|[:.#[>+~])/.test(trimmed)) {
-      return true;
-    }
-    // A bare :is(:where(*)) or :not(*) that can degrade to universal.
-    if (/^\.page(?:-content)?\s*:\s*(?:is|where|not)\s*\(\s*:?\s*(?:is|where|not)?\s*\(\s*\*/.test(trimmed)) {
-      return true;
-    }
-    // Universal with a structural pseudo that can match every element:
-    // `*:nth-child(n)`, `*:nth-child(1n)`, `*:nth-child(n+1)`, and the
-    // single-match forms (`:first-child`, `:last-child`). Enumerating An+B
-    // spellings is error-prone, so classify any structural pseudo on a
-    // universal descendant conservatively.
-    if (/^\.page(?:-content)?\s*\*\s*:(?:nth-child|nth-of-type|first-child|last-child|only-child)\s*\(?/.test(trimmed)) {
-      return true;
+    const structuralPseudos = new Set([
+      'nth-child',
+      'nth-of-type',
+      'first-child',
+      'last-child',
+      'only-child',
+      'nth-last-child',
+      'nth-last-of-type',
+    ]);
+    const forgivingPseudos = new Set(['is', 'where', 'not']);
+    for (const node of ast.nodes) {
+      if (!isPageRooted(node)) {
+        continue;
+      }
+      const compounds = compoundSequence(node);
+      // Direct root (`.page`, `.page-content`): the property denylist
+      // covers hiding declarations on the root itself.
+      if (compounds.length === 1 && compounds[0]!.every((part) => part.type === 'class' || part.type === 'comment')) {
+        return true;
+      }
+      for (let index = 1; index < compounds.length; index += 1) {
+        const compound = compounds[index]!;
+        if (compoundMatchesEverything(compound, structuralPseudos, forgivingPseudos)) {
+          return true;
+        }
+      }
     }
     return false;
   });
+}
+
+/**
+ * A compound matches every element when it contains only universal
+ * selectors, comments, structural pseudos (`*:nth-child(n)`,
+ * `*:first-child`), or a forgiving list pseudo whose argument is a
+ * universal (`.page :is(*)`, `.page :where(*)`).
+ */
+function compoundMatchesEverything(
+  compound: Array<import('postcss-selector-parser').Node>,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  if (compound.length === 0) {
+    return false;
+  }
+  let sawMeaningful = false;
+  for (const part of compound) {
+    if (part.type === 'comment') {
+      continue;
+    }
+    if (part.type === 'universal') {
+      sawMeaningful = true;
+      continue;
+    }
+    if (part.type === 'pseudo') {
+      // postcss-selector-parser includes the leading colon in pseudo.value
+      // (e.g. ":nth-child"), so strip it before comparing against the sets.
+      const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+      if (structuralPseudos.has(pseudoName)) {
+        sawMeaningful = true;
+        continue;
+      }
+      // `:is(*)`, `:where(*)`, `:not(*)` with a universal-only argument.
+      if (
+        forgivingPseudos.has(pseudoName) &&
+        'nodes' in part &&
+        Array.isArray(part.nodes) &&
+        part.nodes.length > 0 &&
+        part.nodes.every((inner) => {
+          if (inner.type === 'selector') {
+            return 'nodes' in inner && Array.isArray(inner.nodes) &&
+              inner.nodes.every((leaf) => leaf.type === 'universal' || leaf.type === 'comment');
+          }
+          return inner.type === 'universal' || inner.type === 'comment';
+        })
+      ) {
+        sawMeaningful = true;
+        continue;
+      }
+    }
+    // Any other selector part (class, attribute, element, non-universal
+    // pseudo) narrows the match: not whole-page capable.
+    return false;
+  }
+  return sawMeaningful;
+}
+
+/** True when a selector list node starts with .page or .page-content. */
+function isPageRooted(node: import('postcss-selector-parser').Node): boolean {
+  return /^\s*\.page(?:-content)?(?=$|[\s.:#[>+~])/.test(node.toString());
+}
+
+/**
+ * Splits a selector list node into compounds separated by combinators,
+ * discarding the combinators themselves.
+ */
+function compoundSequence(
+  node: import('postcss-selector-parser').Node,
+): Array<Array<import('postcss-selector-parser').Node>> {
+  const compounds: Array<Array<import('postcss-selector-parser').Node>> = [];
+  if (!('nodes' in node) || !Array.isArray(node.nodes)) {
+    return compounds;
+  }
+  let current: Array<import('postcss-selector-parser').Node> = [];
+  for (const child of node.nodes) {
+    if (child.type === 'combinator' || (child.type === 'comment' && /^\s+$/.test(child.value ?? ''))) {
+      if (current.length > 0) {
+        compounds.push(current);
+        current = [];
+      }
+    } else {
+      current.push(child);
+    }
+  }
+  if (current.length > 0) {
+    compounds.push(current);
+  }
+  return compounds;
 }
 
 function validateSelector(selector: string, issues: ValidationIssue[]): void {
@@ -303,6 +426,9 @@ export function validateCustomCss(css: string): ValidationResult {
       message: 'Custom CSS exceeds the 50 KB safety and portability limit.',
       fix: 'Remove generated repetition and embedded assets.',
     });
+    // No point validating further: the template is already rejected, and
+    // continuing can waste work proportional to attacker-controlled size.
+    return { valid: false, issues };
   }
 
   let root;
@@ -495,12 +621,13 @@ export function validateCustomCss(css: string): ValidationResult {
         });
       }
       // Bound total runtime for every comma-separated animation: duration x
-      // iterations. Iteration counts must be literal numbers (var() rejected).
-      if (/var\s*\(|attr\s*\(/.test(value)) {
+      // iterations. Iteration counts must be literal numbers (var()/attr()/
+      // calc() rejected because they can represent unbounded values).
+      if (/var\s*\(|attr\s*\(|calc\s*\(/.test(value)) {
         issues.push({
           severity: 'error',
           path: `css.${property}`,
-          message: 'Animation values using variables cannot be safety-bounded.',
+          message: 'Animation values using variables or math functions cannot be safety-bounded.',
           fix: 'Use literal animation durations and iteration counts.',
         });
       }
@@ -603,17 +730,20 @@ export function validateCustomCss(css: string): ValidationResult {
           iterationOverride.push(match ? Number.parseFloat(match[1] ?? '1') : 1);
         }
       }
-      if (/var\s*\(|attr\s*\(/.test(value)) {
+      if (/var\s*\(|attr\s*\(|calc\s*\(/.test(value)) {
         unsafeVar = true;
       }
     });
     if (unsafeVar) {
-      return; // var() case already reported by the declaration-level check.
+      return; // var()/calc() case already reported by the declaration-level check.
     }
     // CSS cascade: the `animation` shorthand resets unspecified longhands to
     // their initial values, and longhands declared after override the
     // shorthand. Rather than model source order, check every plausible
     // effective pairing conservatively: if any exceeds the budget, reject.
+    // O(n+m): instead of enumerating the LCM repetition cycle (which is an
+    // algorithmic DoS path for attacker-controlled list lengths), compute
+    // the maximum product over residue classes of gcd(dl, il).
     const durationSets = [
       durationOverride ?? shorthandDurations,
       shorthandDurations,
@@ -630,19 +760,13 @@ export function validateCustomCss(css: string): ValidationResult {
         if (iterations.length === 0) {
           continue;
         }
-        const count = lcm(durations.length, iterations.length);
-        for (let index = 0; index < count; index += 1) {
-          const duration = durations[index % durations.length] ?? 0;
-          const iteration = iterations[index % iterations.length] ?? 1;
-          if (duration * iteration > MAX_ANIMATION_DURATION_SECONDS) {
-            issues.push({
-              severity: 'error',
-              path: 'css.animation',
-              message: `Animation total runtime (${String(Math.round(duration * iteration))}s) exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
-              fix: 'Shorten the duration or reduce the iteration count.',
-            });
-            break;
-          }
+        if (maxAnimationRuntime(durations, iterations) > MAX_ANIMATION_DURATION_SECONDS) {
+          issues.push({
+            severity: 'error',
+            path: 'css.animation',
+            message: `Animation total runtime exceeds the limit of ${String(MAX_ANIMATION_DURATION_SECONDS)}s.`,
+            fix: 'Shorten the duration or reduce the iteration count.',
+          });
         }
       }
     }
