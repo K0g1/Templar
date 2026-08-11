@@ -625,7 +625,124 @@ function forgivingListCoversEverything(
       return true;
     }
   }
+  // Negation-partition tautology: branches like `:not(.x).y` and
+  // `:not(.x):not(.y)` jointly cover every non-.x element; with a branch
+  // positively covering `.x`, the list covers everything.
+  return negatedAtomPartitionCoversEverything(branches);
+}
+
+/**
+ * True when the branch list covers every element through a negated-atom
+ * partition: some branch positively covers atom X, and the branches whose
+ * `:not(...)` covers X have residuals (the :not(X) parts removed) that
+ * jointly cover everything. Example: `:is(.x, :not(.x).y, :not(.x):not(.y))`
+ * - `.x` covers X; residuals `.y` and `:not(.y)` cover the complement.
+ */
+function negatedAtomPartitionCoversEverything(
+  branches: Array<import('postcss-selector-parser').Node>,
+): boolean {
+  const seenAtoms = new Set<string>();
+  for (const branch of branches) {
+    for (const child of branchChildren(branch)) {
+      if (child.type !== 'pseudo') {
+        continue;
+      }
+      if (child.value.replace(/^:/, '').toLowerCase() !== 'not') {
+        continue;
+      }
+      const argBranches = pseudoArgumentBranches(child);
+      if (argBranches.length !== 1) {
+        continue;
+      }
+      const atom = argBranches[0]!;
+      const atomKey = atom.toString();
+      if (seenAtoms.has(atomKey)) {
+        continue;
+      }
+      seenAtoms.add(atomKey);
+      // Some branch must positively cover the atom.
+      if (!branches.some((other) => branchCoversBranch(other, atom))) {
+        continue;
+      }
+      // Residual branches: keep branches whose :not() covers the atom,
+      // with those negations removed.
+      const residuals: import('postcss-selector-parser').Node[] = [];
+      for (const other of branches) {
+        const residual = stripNegationsCoveringAtom(other, atom);
+        if (residual !== null) {
+          residuals.push(residual);
+        }
+      }
+      if (residuals.length === 0) {
+        continue;
+      }
+      try {
+        const unionAst = selectorParser().astSync(
+          `:is(${residuals.map((node) => node.toString()).join(',')})`,
+        );
+        const pseudoNode = unionAst.first?.first;
+        if (pseudoNode && pseudoNode.type === 'pseudo' && forgivingListCoversEverything(pseudoNode)) {
+          return true;
+        }
+      } catch {
+        // Unparseable residual union: skip this atom.
+      }
+    }
+  }
   return false;
+}
+
+/**
+ * Clones a branch with every `:not(...)` that covers `atom` removed, or
+ * returns null when the branch has no such negation. An empty residual
+ * (the branch was only negations) is returned as a universal selector.
+ */
+function stripNegationsCoveringAtom(
+  branch: import('postcss-selector-parser').Node,
+  atom: import('postcss-selector-parser').Node,
+): import('postcss-selector-parser').Node | null {
+  const children = branchChildren(branch);
+  let removed = false;
+  for (const child of children) {
+    if (child.type !== 'pseudo') {
+      continue;
+    }
+    if (child.value.replace(/^:/, '').toLowerCase() !== 'not') {
+      continue;
+    }
+    const argBranches = pseudoArgumentBranches(child);
+    if (argBranches.length !== 1) {
+      continue;
+    }
+    if (branchCoversBranch(argBranches[0]!, atom)) {
+      removed = true;
+      break;
+    }
+  }
+  if (!removed) {
+    return null;
+  }
+  const clone = branch.clone();
+  for (const child of branchChildren(clone)) {
+    if (child.type !== 'pseudo') {
+      continue;
+    }
+    if (child.value.replace(/^:/, '').toLowerCase() !== 'not') {
+      continue;
+    }
+    const argBranches = pseudoArgumentBranches(child);
+    if (argBranches.length !== 1) {
+      continue;
+    }
+    if (branchCoversBranch(argBranches[0]!, atom)) {
+      child.remove();
+    }
+  }
+  if (branchChildren(clone).length === 0) {
+    // The branch was only negations: its residual matches everything.
+    return selectorParser().astSync('*').first?.first ?? clone;
+  }
+  return clone;
 }
 
 /**
@@ -768,16 +885,32 @@ function alternativeCovers(
 
 /**
  * True when `coveredToken` is at least as broad as `targetToken`:
- * identical, or an attribute existence token covering a value-constrained
- * token on the same attribute name (`[x]` covers `[x="a"]`).
+ * identical; an attribute existence token covering a value-constrained
+ * token on the same attribute name (`[x]` covers `[x="a"]`); or the
+ * `class`/`id` attribute existence covering class/id selectors
+ * (`[class]` covers `.x`, `[id]` covers `#x`).
  */
 function tokenCovers(coveredToken: string, targetToken: string): boolean {
   if (coveredToken === targetToken) {
     return true;
   }
-  if (coveredToken.startsWith('attr-name:') && targetToken.startsWith('attr-name:')) {
+  if (coveredToken.startsWith('attr-name:')) {
     const name = coveredToken.slice('attr-name:'.length);
-    return targetToken === `attr-name:${name}` || targetToken.startsWith(`attr-name:${name}=`) || targetToken.startsWith(`attr-full:${name}=`) || targetToken.startsWith(`attr-full:${name} `);
+    if (targetToken.startsWith('attr-name:') || targetToken.startsWith('attr-full:')) {
+      return targetToken === `attr-name:${name}` ||
+        targetToken.startsWith(`attr-name:${name}=`) ||
+        targetToken.startsWith(`attr-name:${name} `) ||
+        targetToken.startsWith(`attr-full:${name}=`) ||
+        targetToken.startsWith(`attr-full:${name} `) ||
+        targetToken.startsWith(`attr-full:[${name}`) ||
+        targetToken === `attr-full:[${name}]`;
+    }
+    if (name === 'class' && targetToken.startsWith('class:')) {
+      return true;
+    }
+    if (name === 'id' && targetToken.startsWith('id:')) {
+      return true;
+    }
   }
   return false;
 }
@@ -794,13 +927,16 @@ function selectorTokenFor(node: import('postcss-selector-parser').Node): string 
  * Tokens for an attribute selector: an existence token (attribute name,
  * escape-decoded, case-sensitive) and, when the selector constrains the
  * value, a full token so `[x]` can cover `[x="a"]` but not vice versa.
+ * Uses the parser's structured attribute field, not serialization text, so
+ * whitespace variants (`[x = "a"]`) normalize to the same name.
  */
 function attributeTokensFor(node: import('postcss-selector-parser').Node): string[] {
-  const raw = decodeCssEscapes(node.toString());
-  const nameMatch = raw.match(/^\[([^\]=~^$*|]+)/);
-  const name = nameMatch?.[1] ?? raw;
+  const attribute = (node as unknown as { attribute?: string }).attribute ?? '';
+  const operator = (node as unknown as { operator?: string }).operator ?? '';
+  const name = decodeCssEscapes(attribute);
   const tokens = [`attr-name:${name}`];
-  if (/[=~^$*|]/.test(raw)) {
+  if (operator) {
+    const raw = decodeCssEscapes(node.toString());
     tokens.push(`attr-full:${raw}`);
   }
   return tokens;

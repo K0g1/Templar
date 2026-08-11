@@ -699,3 +699,25 @@ describe('CSS round 20 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 21 bypass regression suite', () => {
+  it('rejects negation-partition tautology', () => {
+    const result = errors('.page :is(.x, :not(.x).y, :not(.x):not(.y)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects attribute coverage with whitespace variants', () => {
+    const result = errors('.page :is([x], :not([x = "a"])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects [class] covering .x tautology', () => {
+    const result = errors('.page :is([class], :not(.x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects [id] covering #x tautology', () => {
+    const result = errors('.page :is([id], :not(#x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
