@@ -124,7 +124,17 @@ export class PreviewSessionService {
 
   public async cancelMismatchedLeaves(): Promise<void> {
     for (const [owner, session] of [...this.sessions]) {
-      const viewFile = (session.leaf.view as { file?: TFile | null }).file ?? null;
+      const view = session.leaf.view as {
+        file?: TFile | null;
+        getViewType?: () => string;
+      };
+      const viewFile = view.file ?? null;
+      if (!viewFile && view.getViewType?.() === 'markdown') {
+        // Obsidian temporarily clears MarkdownView.file while rebuilding the
+        // same leaf for a Source/Live Preview/Reading mode change. That is not
+        // a note change and must not end an in-memory try-on session.
+        continue;
+      }
       if (!viewFile || viewFile.path !== session.file.path) await this.cancel(owner);
     }
   }

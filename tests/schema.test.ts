@@ -7,6 +7,8 @@ import {
   templateToNoteStyle,
 } from '../src/templates/note-format';
 import {
+  normalizeNoteStyle,
+  normalizePageOptions,
   normalizeTemplate,
   validateTemplate,
   validateTemplateSource,
@@ -258,5 +260,36 @@ describe('Templar v1 schema', () => {
       expect(template.headings.h6.font, template.name).toBeTruthy();
       expect(template.headings.h5.size).toBeGreaterThan(template.headings.h6.size);
     }
+  });
+
+  it('fails closed for malformed or unsupported live note styles', () => {
+    expect(normalizeNoteStyle({})).toBeNull();
+    expect(normalizeNoteStyle({ version: 2 })).toBeNull();
+    expect(() => normalizeTemplate({ version: 2 })).toThrow(/unsupported/i);
+  });
+
+  it('canonicalizes named page presets and retains custom geometry', () => {
+    expect(normalizePageOptions({ size: 'a4', width: 1800, height: 2400 })).toMatchObject({
+      size: 'a4',
+      width: 794,
+      height: 1123,
+    });
+    expect(normalizePageOptions({ size: 'letter', width: 480, height: 640 })).toMatchObject({
+      size: 'letter',
+      width: 816,
+      height: 1056,
+    });
+    expect(normalizePageOptions({ size: 'custom', width: 900, height: 1400 })).toMatchObject({
+      width: 900,
+      height: 1400,
+    });
+  });
+
+  it('normalizes callout type keys to Obsidian data-callout casing', () => {
+    const template = normalizeTemplate({
+      version: 1,
+      blocks: { 'callout-variants': { INFO: { accent: '#123456' } } },
+    });
+    expect(template.blocks.calloutVariants).toEqual({ info: { accent: '#123456' } });
   });
 });

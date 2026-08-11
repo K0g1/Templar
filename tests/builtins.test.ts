@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { validateCustomCss } from '../src/services/css-validator';
 import { contrastRatio } from '../src/templates/accessibility';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
-import { validateTemplate } from '../src/templates/schema';
+import { frontmatterToNoteStyle, noteStyleToFrontmatter, templateToNoteStyle } from '../src/templates/note-format';
+import { synchronizationStatus } from '../src/services/synchronization';
+import { normalizeTemplate, validateTemplate } from '../src/templates/schema';
 
 describe('built-in template catalog', () => {
   it('ships at least 124 uniquely named templates', () => {
@@ -41,6 +43,17 @@ describe('built-in template catalog', () => {
     for (const template of BUILT_IN_TEMPLATES) {
       expect(validateTemplate(template).valid, template.name).toBe(true);
       expect(validateCustomCss(template.css).valid, template.name).toBe(true);
+      expect(normalizeTemplate(template), template.name).toEqual(template);
+    }
+  });
+
+  it('round-trips every applied built-in without a false synchronization update', () => {
+    for (const template of BUILT_IN_TEMPLATES) {
+      const restored = frontmatterToNoteStyle(
+        noteStyleToFrontmatter(templateToNoteStyle(template)),
+      );
+      expect(restored, template.name).not.toBeNull();
+      expect(synchronizationStatus(restored!, template).state, template.name).toBe('up-to-date');
     }
   });
 
@@ -71,6 +84,11 @@ describe('built-in template catalog', () => {
           template.blocks.quoteBackground,
           template.paper.color,
         ), 4.5],
+        ['quote accent', contrastRatio(
+          template.blocks.quoteAccent,
+          template.blocks.quoteBackground,
+          template.paper.color,
+        ), 3],
         ['code text', contrastRatio(
           template.blocks.codeTextColor,
           template.blocks.codeBackground,
@@ -86,6 +104,11 @@ describe('built-in template catalog', () => {
           template.blocks.calloutBackground,
           template.paper.color,
         ), 4.5],
+        ['callout accent', contrastRatio(
+          template.blocks.calloutAccent,
+          template.blocks.calloutBackground,
+          template.paper.color,
+        ), 3],
         ['table text', contrastRatio(template.blocks.tableTextColor, template.paper.color), 4.5],
         ['striped table text', contrastRatio(
           template.blocks.tableTextColor,
@@ -97,6 +120,8 @@ describe('built-in template catalog', () => {
           template.blocks.tableHeaderBackground,
           template.paper.color,
         ), 4.5],
+        ['table borders', contrastRatio(template.blocks.tableBorder, template.paper.color), 3],
+        ['dividers', contrastRatio(template.blocks.dividerColor, template.paper.color), 3],
         ['list markers', contrastRatio(template.lists.markerColor, template.paper.color), 3],
         ['indent guides', contrastRatio(template.lists.indentGuideColor, template.paper.color), 3],
         ['checkboxes', contrastRatio(template.blocks.checkboxAccent, template.paper.color), 3],

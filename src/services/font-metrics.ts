@@ -21,8 +21,27 @@ export function baselineOffsetFromMarker(
   return round(Number.isFinite(measured) && measured > 0 ? measured : fallback);
 }
 
+/**
+ * The browser may expand a line box beyond the requested line-height when a
+ * font's own ascent/descent cannot fit inside it. Rhythm padding must use the
+ * box the browser actually laid out, otherwise that excess accumulates after
+ * headings and code even though the declared line-height is grid-sized.
+ */
+export function renderedLineBoxHeight(
+  requestedLineHeight: number,
+  measuredHeight: number,
+): number {
+  return round(
+    Number.isFinite(measuredHeight) && measuredHeight > 0
+      ? Math.max(requestedLineHeight, measuredHeight)
+      : requestedLineHeight,
+  );
+}
+
 export class FontMetricsService {
   private readonly cache = new Map<string, FontMetrics>();
+  private readonly documentIds = new WeakMap<Document, number>();
+  private nextDocumentId = 1;
 
   public constructor(private readonly maxEntries: () => number) {}
 
@@ -193,14 +212,21 @@ export class FontMetricsService {
       baseline: round(baseline),
       ascent: round(ascent),
       descent: round(descent),
-      lineHeight: request.lineHeight,
+      lineHeight: renderedLineBoxHeight(request.lineHeight, rulerRect.height),
       measuredAt: Date.now(),
     };
   }
 
   private cacheKey(request: FontMetricRequest, document: Document): string {
+    let documentId = this.documentIds.get(document);
+    if (documentId === undefined) {
+      documentId = this.nextDocumentId;
+      this.nextDocumentId += 1;
+      this.documentIds.set(document, documentId);
+    }
     const scale = document.defaultView?.devicePixelRatio ?? 1;
     return [
+      documentId,
       request.family,
       request.fontSize,
       request.fontWeight,

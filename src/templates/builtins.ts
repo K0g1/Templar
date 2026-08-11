@@ -103,14 +103,11 @@ const CORE_BUILT_IN_TEMPLATES: readonly TemplarTemplate[] = [
       template.blocks.linkColor = '#84512f';
       template.blocks.highlightBackground = 'rgba(190, 137, 57, 0.32)';
       template.blocks.highlightTextColor = '#4b3928';
+      template.blocks.dividerStyle = 'fade';
+      template.blocks.dividerColor = 'rgba(111, 56, 44, 0.65)';
+      template.blocks.dividerWidth = 1;
       template.css = `.page-content {
   background-image: radial-gradient(circle at 12% 4%, rgba(111, 70, 31, 0.06), transparent 24%);
-}
-
-.page hr {
-  border: 0;
-  height: 1px;
-  background: linear-gradient(to right, transparent, rgba(111, 56, 44, 0.65), transparent);
 }`;
     },
   ),

@@ -4,7 +4,7 @@
 
 A Page Style is structured visual data plus optional advanced CSS. Library exports use a top-level `templar-template` mapping. Notes use a top-level `templar` mapping and additionally store their page mode. For the current implementation's command/settings/source map, see [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md).
 
-Unknown fields are discarded during import. Missing fields receive defaults. Current import supports only version 1.
+Unknown fields are discarded during import. Missing v1 fields receive defaults. Current import supports only explicit version 1; an unsupported or missing note-style version fails closed instead of being reinterpreted as a styled note.
 
 The highlight color pair and template folder were added compatibly within v1: older v1 styles that omit them receive safe defaults, while every new export writes the fields explicitly. Folder names are portable display labels rather than filesystem paths; separators and reserved/control characters are flattened during import.
 
@@ -284,7 +284,7 @@ templar-pack:
       # ...complete normalized template...
 ```
 
-Folder values inside templates remain display metadata and never create vault folders. Every member is normalized and validated independently through the standalone import path. An invalid member is blocked without invalidating otherwise valid members. Built-in IDs cannot be replaced by imported content; conflicts must be kept or imported as a custom copy.
+Folder values inside templates remain display metadata and never create vault folders. The raw YAML import is capped at 8 MB and a pack at 256 template members before detailed validation. Every member is normalized and validated independently through the standalone import path. Duplicate IDs inside one pack are explicit member errors. An invalid member is blocked without invalidating otherwise valid members. Built-in IDs cannot be replaced by imported content; conflicts must be kept or imported as a custom copy.
 
 ## Baseline behavior
 
@@ -292,31 +292,37 @@ Folder values inside templates remain display metadata and never create vault fo
 - `balanced`: body and list baselines remain aligned, but blocks are packed on consecutive grid rows instead of reserving an empty row.
 - `free`: no baseline enforcement; best for blank/sketch layouts.
 
-Font size and grid unit are independent. Templar measures the requested font stack after loading. Its inline probe ends exactly at the browser's text baseline, so the probe's bottom border-box edge is the baseline measurement (not its top edge). Templar positions the pattern at:
+Font size and grid unit are independent. Templar measures the requested font stack after loading. Its inline probe ends exactly at the browser's text baseline, so the probe's bottom border-box edge is the baseline measurement (not its top edge). It also records the rendered line-box height when a font's ascent/descent forces the browser to exceed the requested line-height. For every active Source, Live Preview, or Reading content root, Templar finds the first real rhythmic text target outside frontmatter/Properties and independently snapped widgets, then calculates:
 
 ```text
-page top + content top padding + measured baseline inside line box
+paper phase = (target top - content top
+               + target border/padding top
+               + target font baseline) modulo grid unit
 ```
 
-Ruled, dot-grid, and graph paper all use that same vertical anchor and the effective content-left padding as their horizontal origin. A ruled stroke starts at the baseline and extends one CSS pixel downward. Ordinary glyph bodies therefore sit above the ink while descenders such as `g`, `p`, and `y` naturally cross it. Dot and graph intersections coincide with the text grid rather than an unrelated page origin.
+The calculation is normalized for CSS zoom. While Obsidian virtualizes away the beginning of a scrolled document, the established origin stays locked rather than following the first attached viewport block. Ruled, dot-grid, and graph paper use this active root anchor and the effective content-left padding as their horizontal origin. A ruled stroke starts at the alphabetic baseline and extends one CSS pixel downward. Ordinary glyph bodies therefore rest on the ink while descenders such as `g`, `p`, `q`, and `y` naturally cross it. Dot and graph intersections coincide with the text grid rather than an unrelated page origin, and switching Source/Live Preview/Reading or showing/hiding Properties does not introduce a ruled-row shift.
 
-The additional patterns are decorative overlays, not baseline rules: ledger adds a second margin line to the ruled pattern, cross-hatch and diagonal tile 45-degree strokes at the grid unit (multiplied by `pattern-scale`), hex tiles an isometric lattice, and scallop staggers semicircles on the baseline. `pattern-opacity` fades every pattern color by mixing toward transparent; dot-grid uses `dot-radius` for the dot size; graph uses `graph-major-interval` for the heavy lines.
+The additional patterns are decorative overlays, not baseline rules: ledger adds a second margin line to the ruled pattern, diagonal tiles one complete 45-degree stroke, cross-hatch tiles both crossing strokes, hex tiles a six-layer isometric lattice, and scallop staggers outlined semicircles on the baseline. Tile dimensions use the grid unit multiplied by `pattern-scale`. Each visual and optional margin line owns matching image/size/position/repeat entries, so adding a margin cannot change how another layer tiles. `pattern-opacity` fades every pattern color by mixing toward transparent; dot-grid uses `dot-radius` for the dot size; graph uses `graph-major-interval` for the heavy lines.
 
 `typography.body-line-height` overrides the automatic rhythm (1.55 × body size, minimum 22px) when gridded modes are off. `first-line-indent` and `nested-indent` only apply in Reading View because Live Preview wraps every paragraph line as its own element. `drop-cap` floats the first letter of the first paragraph after a heading. Older v1 styles that omit H5/H6 receive the safe v1 defaults for those levels; a complete export writes all six heading levels.
 
 `watermark.text` renders behind the page content (above the paper) as a rotated centered label at `watermark.size`, `rotation`, and `opacity`. Empty text hides it. The watermark sits below the content plane in both modes, so it never intercepts pointer events or selection.
 
-`blocks.callout-variants` is keyed by Obsidian callout type (for example, `warning` for `> [!warning]`). A variant can override any subset of `accent`, `background`, `textColor`, `titleColor`, and `iconColor`; omitted values inherit the base callout palette. These nested keys are camelCase even though top-level persisted field names use kebab-case. The six nested heading objects also use the internal camelCase keys `letterSpacing` and `textTransform` because the canonical serializer preserves their object shape; `normalizeTemplate()` accepts the same internal form.
+`blocks.callout-variants` is keyed by Obsidian callout type (for example, `warning` for `> [!warning]`). A variant can override any subset of `accent`, `background`, `textColor`, `titleColor`, and `iconColor`; omitted values inherit the base callout palette. Because this is a complete palette rendered on an isolated page surface, Templar uses normal compositing rather than inheriting a host theme's callout blend mode. These nested keys are camelCase even though top-level persisted field names use kebab-case. The six nested heading objects also use the internal camelCase keys `letterSpacing` and `textTransform` because the canonical serializer preserves their object shape; `normalizeTemplate()` accepts the same internal form.
 
 In both gridded modes, every inter-block offset is a whole multiple of the grid unit. Reading View list items and Live Preview list lines explicitly use the body line-height, with Obsidian's theme list padding removed. This prevents paragraphs, bullets, and later blocks from drifting between Graph Paper lines.
 
 Horizontal rules are rhythm blocks in strict and balanced modes. The complete Reading `<hr>` or Live Preview horizontal-rule line occupies exactly one baseline unit, external theme margins are removed, and the configured stroke is centered inside the row. Solid, dashed, dotted, double, and fade variants have identical vertical footprints. If the stored divider width is too large, rendering clamps only the visible stroke to at most one third of the active unit; the persisted value is not rewritten. Free mode and disabled baselines keep normal divider spacing.
 
+Other variable-height renderers keep their natural content height. In strict and balanced modes, Templar measures the renderer-owned outer block used by Reading or Live Preview and appends only enough generated space to make its complete border-box-plus-external-margins footprint reach the closest following grid boundary. This applies to tables, rendered fenced-block output such as Mermaid, callouts, embeds, iframes, video, audio, and canvas content. The whole Reading document and frontmatter UI are never measurement owners. Precise resizes are animation-frame coalesced, Templar's previous tail is removed from the natural-height calculation, and sub-pixel values already at a boundary add no row. Wrappers own a trailing pseudo-element, while direct table/replaced elements extend their captured natural end margin. Stored template fields and Markdown are untouched, and explicit empty source lines after the block remain additional whole baseline rows. Free mode and disabled baselines do not receive this correction.
+
 Reading View preserves source blank-line counts with plugin-owned, grid-sized spacer blocks. The Markdown remains unchanged; removing Templar returns to standard Markdown whitespace behavior. Fenced-code blank lines are ignored by the spacer parser because they already render inside the code block.
 
-Fenced code uses its own measured font baseline. Reading View receives complementary top/bottom padding whose total is one grid unit, while every code line uses the body grid line-height. This keeps the first code baseline, all following code lines, and the block after the fence on the paper ruling.
+Fenced code uses its own measured font baseline and actual rendered line-box height. Reading View receives calculated top/bottom padding whose complete footprint is a grid multiple, while every code line uses the body grid line-height. This keeps the first code baseline, all following code lines, and the block after the fence on the paper ruling.
 
 Heading line boxes round up to grid multiples. Extra top/bottom padding aligns the heading baseline while preserving a grid-multiple total.
+
+Live Preview must not apply vertical margins to CodeMirror `.cm-line` elements. CodeMirror's pointer hit-testing and height map require measurable line boxes; Templar therefore uses border-box padding for editor heading space and reserves ordinary block margins for Reading View. Source blank lines remain ordinary CodeMirror lines, so their visible height and click coordinates stay identical.
 
 The `blocks.highlight-background` and `blocks.highlight-text-color` fields always render together for `==highlighted text==` in Reading and Live Preview. Templates should choose the pair as one palette decision and maintain readable contrast; Templar does not inherit Obsidian's theme highlight colors.
 
@@ -366,7 +372,7 @@ h1 { ... }
 
 Viewport media queries are prohibited because paged notes must not reflow when the window changes. Preference media queries for reduced motion, color scheme, and contrast are allowed.
 
-Viewport/container units, `env()` lengths, `@container` queries, `!important`, and private `.templar-*` runtime classes are also prohibited. Templar reserves geometry and root typography declarations on `.page` and `.page-content` (width, height, padding, margin, overflow, positioning, transforms, zoom, font, and line height), because those declarations define the fixed canvas and measured baseline. Put decorative CSS on Markdown descendants and use the structured template fields for page geometry and base typography.
+Viewport/container units, `env()` lengths, `@container` queries, `!important`, and private `.templar-*` runtime classes are also prohibited. Physical newlines/controls inside CSS strings, unterminated strings/comments, and malformed constructs that PostCSS would recover differently from a browser are rejected before compilation. Templar reserves geometry and root typography declarations on `.page` and `.page-content` (width, height, padding, margin, overflow, positioning, transforms, zoom, font, and line height), because those declarations define the fixed canvas and measured baseline. When baseline alignment is active, descendants that participate in document rhythm also cannot override vertical box/font geometry; use structured fields for those dimensions and keep custom CSS decorative.
 
 ## Attachment overrides
 

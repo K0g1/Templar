@@ -12,6 +12,7 @@ import {
   type DropdownComponent,
   type TextComponent,
 } from 'obsidian';
+import { MAX_IMPORT_BYTES } from '../constants';
 import type TemplarPlugin from '../main';
 import { validateCustomCss } from '../services/css-validator';
 import { parseTemplatePack, uniqueCopyId, type PackReview } from '../services/template-pack';
@@ -274,7 +275,11 @@ export class TemplateImportModal extends Modal {
     this.saveButton.disabled = true;
     this.previewEl.empty();
     try {
-      const parsed = parseYaml(stripCodeFence(this.inputEl.value)) as unknown;
+      const input = stripCodeFence(this.inputEl.value);
+      if (new Blob([input]).size > MAX_IMPORT_BYTES) {
+        throw new Error('The import exceeds Templar’s 8 MB safety limit.');
+      }
+      const parsed = parseYaml(input) as unknown;
       const packReview = parseTemplatePack(parsed);
       if (packReview) {
         this.packReview = packReview;
@@ -830,7 +835,11 @@ export class RawStyleModal extends Modal {
 
   private readAndValidate(): TemplarNoteStyle | null {
     try {
-      const parsed = parseYaml(stripCodeFence(this.inputEl.value)) as unknown;
+      const input = stripCodeFence(this.inputEl.value);
+      if (new Blob([input]).size > MAX_IMPORT_BYTES) {
+        throw new Error('The page-style YAML exceeds Templar’s 8 MB safety limit.');
+      }
+      const parsed = parseYaml(input) as unknown;
       const root =
         typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
           ? (parsed as Record<string, unknown>)
@@ -2298,5 +2307,10 @@ function stripCodeFence(value: string): string {
 }
 
 function validateCompleteTemplate(template: TemplarTemplate): ValidationIssue[] {
-  return [...validateTemplate(template).issues, ...validateCustomCss(template.css).issues];
+  return [
+    ...validateTemplate(template).issues,
+    ...validateCustomCss(template.css, {
+      protectRhythm: template.baseline.enabled && template.baseline.mode !== 'free',
+    }).issues,
+  ];
 }

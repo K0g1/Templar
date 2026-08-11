@@ -620,8 +620,12 @@ export default class TemplarPlugin extends Plugin {
     );
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
-        const openLeaves = new Set<WorkspaceLeaf>();
-        this.app.workspace.iterateAllLeaves((leaf) => openLeaves.add(leaf));
+        // During a Reading/Editing mode rebuild, iterateAllLeaves can omit the
+        // active Markdown leaf for one layout event even though the leaf is
+        // still connected and getLeavesOfType already reports it. Preview
+        // sessions are Markdown-only, so use the authoritative typed list and
+        // avoid cancelling a try-on merely because the renderer was swapped.
+        const openLeaves = new Set(this.app.workspace.getLeavesOfType('markdown'));
         void this.preview.cancelMissingLeaves(openLeaves).then((changed) => {
           if (changed) this.refreshSidebars();
         });

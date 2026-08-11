@@ -31,7 +31,16 @@ export interface StyleCompilation {
 }
 
 function safeValue(value: string, fallback: string): string {
-  if (!value.trim() || /[;{}<>]/.test(value) || /(?:url|expression)\s*\(/i.test(value)) {
+  const hasControl = Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
+  if (
+    !value.trim() ||
+    hasControl ||
+    /[;{}<>]/.test(value) ||
+    /(?:url|expression)\s*\(/i.test(value)
+  ) {
     return fallback;
   }
   return value;
@@ -51,13 +60,12 @@ function withOpacity(color: string, opacity: number): string {
 
 function patternDeclarations(
   style: TemplarNoteStyle,
-  baseline: number,
+  baselineAnchor: string,
   inlineStart: string,
 ): string {
   const { paper, baseline: grid } = style;
   const unit = grid.unit;
   const tile = unit * paper.patternScale;
-  const baselineAnchor = px(baseline);
   const halfUnit = px(tile / 2);
   const dotPosition = `calc(${inlineStart} - ${halfUnit}) calc(${baselineAnchor} - ${halfUnit})`;
   const gridPosition = `${inlineStart} ${baselineAnchor}`;
@@ -75,7 +83,43 @@ function patternDeclarations(
   const marginStart = `calc(${marginOffset} - 0.75px)`;
   const marginEnd = `calc(${marginOffset} + 0.75px)`;
   const marginLayer = `linear-gradient(to right, transparent 0, transparent ${marginStart}, ${marginColor} ${marginStart}, ${marginColor} ${marginEnd}, transparent ${marginEnd})`;
-  const ledgerLayer = `linear-gradient(to right, transparent 0, transparent ${marginStart}, ${marginColor} ${marginStart}, ${marginColor} ${marginEnd}, transparent ${marginEnd})`;
+  const mirroredStart = `calc(100% - ${marginOffset} - 0.75px)`;
+  const mirroredEnd = `calc(100% - ${marginOffset} + 0.75px)`;
+  const ledgerLayer = `linear-gradient(to right, transparent 0, transparent ${marginStart}, ${marginColor} ${marginStart}, ${marginColor} ${marginEnd}, transparent ${marginEnd}, transparent ${mirroredStart}, ${marginColor} ${mirroredStart}, ${marginColor} ${mirroredEnd}, transparent ${mirroredEnd})`;
+
+  const serializeLayers = (
+    layers: string[],
+    sizes: string[],
+    positions: string[],
+    repeats: string[],
+  ): string => {
+    if (
+      layers.length !== sizes.length ||
+      layers.length !== positions.length ||
+      layers.length !== repeats.length
+    ) {
+      throw new Error('Templar paper-pattern layer declarations are out of sync.');
+    }
+    return `background-image: ${layers.join(',\n    ')};
+  background-size: ${sizes.join(', ')};
+  background-position: ${positions.join(', ')};
+  background-repeat: ${repeats.join(', ')};`;
+  };
+
+  const withMarginLayer = (
+    layers: string[],
+    sizes: string[],
+    positions: string[],
+    repeats: string[],
+  ): void => {
+    if (!paper.marginLine) {
+      return;
+    }
+    layers.unshift(marginLayer);
+    sizes.unshift('100% 100%');
+    positions.unshift('0 0');
+    repeats.unshift('no-repeat');
+  };
 
   if (paper.pattern === 'ruled' || paper.pattern === 'ledger') {
     // The baseline is the top edge of the ink. The one-pixel rule extends
@@ -99,14 +143,12 @@ function patternDeclarations(
 
   if (paper.pattern === 'dot-grid') {
     const dots = `radial-gradient(circle, ${patternColor} ${px(paper.dotRadius)}, transparent calc(${px(paper.dotRadius)} * 1.25))`;
-    return paper.marginLine
-      ? `background-image: ${marginLayer}, ${dots};
-  background-size: 100% 100%, ${px(tile)} ${px(tile)};
-  background-position: 0 0, ${dotPosition};
-  background-repeat: no-repeat, repeat;`
-      : `background-image: ${dots};
-  background-size: ${px(tile)} ${px(tile)};
-  background-position: ${dotPosition};`;
+    const layers = [dots];
+    const sizes = [`${px(tile)} ${px(tile)}`];
+    const positions = [dotPosition];
+    const repeats = ['repeat'];
+    withMarginLayer(layers, sizes, positions, repeats);
+    return serializeLayers(layers, sizes, positions, repeats);
   }
 
   if (paper.pattern === 'graph') {
@@ -138,69 +180,61 @@ function patternDeclarations(
   }
 
   if (paper.pattern === 'diagonal' || paper.pattern === 'cross-hatch') {
-    const stroke = `linear-gradient(to top right, ${patternColor} 1px, transparent 1px)`;
-    const counterStroke = `linear-gradient(to top left, ${patternColor} 1px, transparent 1px)`;
-    const layers = paper.pattern === 'cross-hatch' ? `${stroke}, ${counterStroke}` : stroke;
-    const sizes = paper.pattern === 'cross-hatch'
-      ? `${px(tile)} ${px(tile)}, ${px(tile)} ${px(tile)}`
-      : `${px(tile)} ${px(tile)}`;
-    const positions = paper.pattern === 'cross-hatch'
-      ? `${gridPosition}, ${gridPosition}`
-      : gridPosition;
-    if (paper.marginLine) {
-      return `background-image: ${marginLayer}, ${layers};
-  background-size: 100% 100%, ${sizes};
-  background-position: 0 0, ${positions};
-  background-repeat: no-repeat, repeat;`;
-    }
-    return `background-image: ${layers};
-  background-size: ${sizes};
-  background-position: ${positions};
-  background-repeat: repeat;`;
+    // A color stop at 1px only paints a corner of each tile. Centering the
+    // stroke in the tile creates a continuous diagonal from edge to edge.
+    const stroke = `linear-gradient(135deg, transparent calc(50% - 0.5px), ${patternColor} calc(50% - 0.5px), ${patternColor} calc(50% + 0.5px), transparent calc(50% + 0.5px))`;
+    const counterStroke = `linear-gradient(45deg, transparent calc(50% - 0.5px), ${patternColor} calc(50% - 0.5px), ${patternColor} calc(50% + 0.5px), transparent calc(50% + 0.5px))`;
+    const layers = paper.pattern === 'cross-hatch' ? [stroke, counterStroke] : [stroke];
+    const sizes = layers.map(() => `${px(tile)} ${px(tile)}`);
+    const positions = layers.map(() => gridPosition);
+    const repeats = layers.map(() => 'repeat');
+    withMarginLayer(layers, sizes, positions, repeats);
+    return serializeLayers(layers, sizes, positions, repeats);
   }
 
   if (paper.pattern === 'hex') {
+    const hexWidth = tile * Math.sqrt(3);
+    const hexHeight = tile * 2;
+    const halfWidth = px(hexWidth / 2);
+    const halfHeight = px(hexHeight / 2);
+    const shiftedPosition = `calc(${inlineStart} + ${halfWidth}) calc(${baselineAnchor} + ${halfHeight})`;
+    // Six interlocking edge layers form complete hexagons. Keeping every
+    // layer explicit also prevents a margin layer from changing repeat rules.
     const hexLayers = [
-      `linear-gradient(60deg, ${patternColor} 1px, transparent 1px)`,
-      `linear-gradient(-60deg, ${patternColor} 1px, transparent 1px)`,
-      `linear-gradient(to right, ${patternColor} 1px, transparent 1px)`,
+      `linear-gradient(30deg, ${patternColor} 12%, transparent 12.5%, transparent 87%, ${patternColor} 87.5%)`,
+      `linear-gradient(150deg, ${patternColor} 12%, transparent 12.5%, transparent 87%, ${patternColor} 87.5%)`,
+      `linear-gradient(30deg, ${patternColor} 12%, transparent 12.5%, transparent 87%, ${patternColor} 87.5%)`,
+      `linear-gradient(150deg, ${patternColor} 12%, transparent 12.5%, transparent 87%, ${patternColor} 87.5%)`,
+      `linear-gradient(60deg, ${patternColor} 25%, transparent 25.5%, transparent 75%, ${patternColor} 75%)`,
+      `linear-gradient(60deg, ${patternColor} 25%, transparent 25.5%, transparent 75%, ${patternColor} 75%)`,
     ];
-    const hexSizes = [
-      `${px(tile)} ${px(tile)}`,
-      `${px(tile)} ${px(tile)}`,
-      `${px(tile)} ${px(tile)}`,
-    ];
+    const hexSize = `${px(hexWidth)} ${px(hexHeight)}`;
+    const hexSizes = hexLayers.map(() => hexSize);
     const hexPositions = [
-      `${inlineStart} ${baselineAnchor}`,
-      `${inlineStart} ${baselineAnchor}`,
-      `${inlineStart} ${baselineAnchor}`,
+      gridPosition,
+      gridPosition,
+      shiftedPosition,
+      shiftedPosition,
+      gridPosition,
+      shiftedPosition,
     ];
-    if (paper.marginLine) {
-      hexLayers.unshift(marginLayer);
-      hexSizes.unshift('100% 100%');
-      hexPositions.unshift('0 0');
-    }
-    return `background-image: ${hexLayers.join(',\n    ')};
-  background-size: ${hexSizes.join(', ')};
-  background-position: ${hexPositions.join(', ')};
-  background-repeat: ${paper.marginLine ? 'no-repeat, ' : ''}repeat;`;
+    const hexRepeats = hexLayers.map(() => 'repeat');
+    withMarginLayer(hexLayers, hexSizes, hexPositions, hexRepeats);
+    return serializeLayers(hexLayers, hexSizes, hexPositions, hexRepeats);
   }
 
   if (paper.pattern === 'scallop') {
-    const bump = `radial-gradient(circle at 50% 100%, ${patternColor} 35%, transparent 37%)`;
-    const bumps = `${bump}, ${bump}`;
-    const bumpSize = `${px(tile)} ${px(tile)}, ${px(tile)} ${px(tile)}`;
-    const bumpPosition = `${inlineStart} ${baselineAnchor}, calc(${inlineStart} + ${halfUnit}) calc(${baselineAnchor} + ${halfUnit})`;
-    if (paper.marginLine) {
-      return `background-image: ${marginLayer}, ${bumps};
-  background-size: 100% 100%, ${bumpSize};
-  background-position: 0 0, ${bumpPosition};
-  background-repeat: no-repeat, repeat;`;
-    }
-    return `background-image: ${bumps};
-  background-size: ${bumpSize};
-  background-position: ${bumpPosition};
-  background-repeat: repeat;`;
+    const radius = tile / 2;
+    const bump = `radial-gradient(circle at 50% 100%, transparent ${px(Math.max(0, radius - 0.75))}, ${patternColor} ${px(Math.max(0, radius - 0.5))}, ${patternColor} ${px(radius + 0.5)}, transparent ${px(radius + 0.75)})`;
+    const layers = [bump, bump];
+    const sizes = layers.map(() => `${px(tile)} ${px(tile)}`);
+    const positions = [
+      gridPosition,
+      `calc(${inlineStart} + ${halfUnit}) calc(${baselineAnchor} + ${halfUnit})`,
+    ];
+    const repeats = layers.map(() => 'repeat');
+    withMarginLayer(layers, sizes, positions, repeats);
+    return serializeLayers(layers, sizes, positions, repeats);
   }
 
   if (paper.marginLine) {
@@ -223,7 +257,7 @@ function headingDecoration(style: HeadingLevelStyle): string {
     case 'underline':
       return 'text-decoration: underline; text-decoration-thickness: 0.08em; text-underline-offset: 0.16em;';
     case 'rule':
-      return 'border-bottom: 1px solid currentColor;';
+      return 'box-shadow: inset 0 -1px currentColor;';
     case 'highlight':
       return 'background-image: linear-gradient(to top, color-mix(in srgb, currentColor 18%, transparent) 42%, transparent 42%);';
     case 'none':
@@ -240,11 +274,22 @@ function headingRule(
   gridUnit: number,
   gridded: boolean,
 ): string {
-  const liveClass = level === 'h1' ? '.HyperMD-header-1, .inline-title' : `.HyperMD-header-${level[1]}`;
+  const liveClass = level === 'h1'
+    ? ':is(.HyperMD-header-1, .inline-title)'
+    : `.HyperMD-header-${level[1]}`;
   const lineHeight = gridded ? fitToGrid(style.size * 1.18, gridUnit) : style.size * 1.2;
   const padding = gridded
-    ? headingBaselinePadding(bodyBaseline, metric.baseline, gridUnit)
+    ? headingBaselinePadding(
+      bodyBaseline,
+      metric.baseline,
+      gridUnit,
+      metric.lineHeight,
+    )
     : { top: 0, bottom: 0 };
+  const readingMargin = gridded ? `${px(gridUnit)} 0` : '1.35em 0.55em';
+  const editorPadding = gridded
+    ? `${px(gridUnit + padding.top)} ${px(padding.bottom)}`
+    : '1.35em 0.55em';
   return `${scope} .templar-page :is(${level}, ${liveClass}) {
   color: ${safeValue(style.color, 'currentColor')};
   font-family: ${safeValue(style.font, 'inherit')};
@@ -252,10 +297,19 @@ function headingRule(
   font-weight: ${String(style.weight)};
   letter-spacing: ${px(style.letterSpacing)};
   line-height: ${px(lineHeight)};
-  margin-block: ${gridded ? `${px(gridUnit)} 0` : '1.35em 0.55em'} !important;
-  padding-block: ${px(padding.top)} ${px(padding.bottom)} !important;
   text-transform: ${style.textTransform};
   ${headingDecoration(style)}
+}
+
+${scope} .markdown-preview-view.templar-page ${level} {
+  margin-block: ${readingMargin} !important;
+  padding-block: ${px(padding.top)} ${px(padding.bottom)} !important;
+}
+
+${scope} .markdown-source-view.mod-cm6 .templar-page ${liveClass} {
+  box-sizing: border-box;
+  margin-block: 0 !important;
+  padding-block: ${editorPadding} !important;
 }`;
 }
 
@@ -458,6 +512,10 @@ function calloutRules(style: TemplarNoteStyle, scope: string): string {
   background-color: ${background};
   border-color: ${accent};
   border-radius: ${px(blocks.calloutRadius)};
+  /* Obsidian themes may blend callouts against the workspace background.
+     Templar supplies an isolated paper surface and a complete callout palette,
+     so theme blend modes can erase otherwise valid dark-on-light callouts. */
+  mix-blend-mode: normal;
 }
 
 ${scope} .templar-page :is(.callout, .cm-callout) .callout-content {
@@ -503,17 +561,17 @@ ${scope} .templar-page :is(.callout, .cm-callout) .callout-icon {
 }`,
       );
     }
-    const titleDeclarations: string[] = [];
     if (variant.titleColor !== undefined) {
-      titleDeclarations.push(`color: ${safeValue(variant.titleColor, titleColor)};`);
+      variantRules.push(
+        `${scope} .templar-page :is(.callout, .cm-callout)[data-callout="${type}"] .callout-title {
+  color: ${safeValue(variant.titleColor, titleColor)};
+}`,
+      );
     }
     if (variant.iconColor !== undefined) {
-      titleDeclarations.push(`color: ${safeValue(variant.iconColor, iconColor)};`);
-    }
-    if (titleDeclarations.length > 0) {
       variantRules.push(
-        `${scope} .templar-page :is(.callout, .cm-callout)[data-callout="${type}"] :is(.callout-title, .callout-icon) {
-  ${titleDeclarations.join('\n  ')}
+        `${scope} .templar-page :is(.callout, .cm-callout)[data-callout="${type}"] .callout-icon {
+  color: ${safeValue(variant.iconColor, iconColor)};
 }`,
       );
     }
@@ -522,7 +580,13 @@ ${scope} .templar-page :is(.callout, .cm-callout) .callout-icon {
 }
 
 function escapeCssString(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\0/g, '\\fffd ')
+    .replace(/\r/g, '\\d ')
+    .replace(/\n/g, '\\a ')
+    .replace(/\f/g, '\\c ')
+    .replace(/"/g, '\\"');
 }
 
 export function compilePageStyle(
@@ -538,8 +602,9 @@ export function compilePageStyle(
     : style.typography.bodyLineHeight > 0
       ? style.typography.bodyLineHeight
       : Math.max(style.typography.bodySize * 1.55, 22);
+  const effectiveBaselineMode = gridded ? style.baseline.mode : 'free';
   const blockSpacing = blockSpacingForMode(
-    style.baseline.mode,
+    effectiveBaselineMode,
     unit,
     bodyLineHeight,
   );
@@ -547,7 +612,9 @@ export function compilePageStyle(
   const borderBottom = Math.max(style.images.borderWidth, style.images.bottomBorderWidth);
   const imageBottom = style.images.bottomSpacing;
   const paged = style.page.mode === 'paged';
-  const pageGap = alignedPageGap(style.page.height, style.page.gap, unit);
+  const pageGap = gridded
+    ? alignedPageGap(style.page.height, style.page.gap, unit)
+    : style.page.gap;
   const pageSpan = style.page.height + pageGap;
   const printableHeight = Math.max(
     unit,
@@ -561,14 +628,25 @@ export function compilePageStyle(
   const watermarkText = escapeCssString(style.watermark.text);
   const paddingRight = horizontalPadding(style.layout.paddingRight, 'right', paged);
   const paddingLeft = horizontalPadding(style.layout.paddingLeft, 'left', paged);
-  const pattern = patternDeclarations(style, baselinePosition, paddingLeft);
+  const pattern = patternDeclarations(
+    style,
+    'var(--templar-paper-baseline-position)',
+    paddingLeft,
+  );
   const codePadding = gridded
-    ? headingBaselinePadding(metrics.body.baseline, metrics.code.baseline, unit)
+    ? headingBaselinePadding(
+      metrics.body.baseline,
+      metrics.code.baseline,
+      unit,
+      metrics.code.lineHeight,
+    )
     : { top: unit / 2, bottom: unit / 2 };
 
   const baseCss = `${scope} {
   --templar-grid: ${px(unit)};
   --templar-baseline-position: ${px(baselinePosition)};
+  --templar-editor-baseline-position: ${px(baselinePosition)};
+  --templar-paper-baseline-position: var(--templar-editor-baseline-position);
   --templar-image-border: ${imageBorder};
   --templar-page-width: ${px(style.page.width)};
   --templar-page-height: ${px(style.page.height)};
@@ -680,6 +758,11 @@ ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content {
   width: 100%;
 }
 
+${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line {
+  box-sizing: border-box;
+  margin-block: 0 !important;
+}
+
 ${paged ? `${scope} .templar-page .cm-line,
 ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-line {
   max-width: none;
@@ -706,18 +789,12 @@ ${scope} .templar-page-content li > :is(p, ul, ol) {
   margin-block: 0 !important;
 }
 
-${scope} .templar-page :is(p, ul, ol, blockquote, pre, table) {
+${scope} .markdown-preview-view.templar-page :is(p, ul, ol, blockquote, pre, table) {
   margin-block: 0 ${px(blockSpacing)} !important;
 }
 
-${scope} .templar-page .cm-content > :is(
-  .HyperMD-paragraph:not(.HyperMD-header):not(:has(+ .HyperMD-paragraph:not(.HyperMD-header))),
-  .HyperMD-list-line:not(:has(+ .HyperMD-list-line)),
-  .HyperMD-quote:not(:has(+ .HyperMD-quote)),
-  .HyperMD-codeblock:not(:has(+ .HyperMD-codeblock)),
-  .cm-table-widget
-) {
-  margin-block: 0 ${px(blockSpacing)} !important;
+${scope} .markdown-preview-view.templar-page li > :is(p, ul, ol) {
+  margin-block: 0 !important;
 }
 
 ${headingRule(scope, 'h1', style.headings.h1, metrics.h1, metrics.body.baseline, unit, gridded)}
@@ -732,7 +809,7 @@ ${headingRule(scope, 'h5', style.headings.h5, metrics.h5, metrics.body.baseline,
 
 ${headingRule(scope, 'h6', style.headings.h6, metrics.h6, metrics.body.baseline, unit, gridded)}
 
-${scope} .templar-page a {
+${scope} .templar-page :is(a, .cm-hmd-internal-link, .cm-link, .cm-url) {
   color: ${safeValue(style.blocks.linkColor, '#315f86')};
   text-decoration-thickness: 1px;
   text-underline-offset: 0.16em;
@@ -746,7 +823,7 @@ ${scope} .markdown-source-view.mod-cm6 .templar-page :is(.cm-highlight, .cm-form
   color: ${safeValue(style.blocks.highlightTextColor, '#302e2b')};
 }
 
-${scope} .templar-page blockquote {
+${scope} .templar-page :is(blockquote, .HyperMD-quote) {
   background: ${safeValue(style.blocks.quoteBackground, 'transparent')};
   border-inline-start: 3px solid ${safeValue(style.blocks.quoteAccent, 'currentColor')};
   color: ${safeValue(style.blocks.quoteTextColor, textColor)};
@@ -812,13 +889,19 @@ ${style.blocks.tableStriped ? `${scope} .templar-page tbody tr:nth-child(even) {
   background: ${safeValue(style.blocks.tableStripeColor, 'rgba(48, 46, 43, 0.045)')};
 }
 
-` : ''}${scope} .templar-page :is(hr, .HyperMD-hr) {
+` : ''}${scope} .templar-page hr {
   ${gridded
     ? griddedDividerDeclarations(style, unit)
     : `${dividerDeclarations(style)}
   border-bottom: 0;
   border-inline: 0;
   margin-block: ${px(blockSpacing)} !important;`}
+}
+
+${scope} .templar-page .HyperMD-hr {
+  ${gridded
+    ? griddedDividerDeclarations(style, unit)
+    : 'border: 0 !important; margin-block: 0 !important; padding-block: 0 !important;'}
 }
 
 ${scope} .templar-page .cm-hr {
@@ -884,7 +967,7 @@ ${scope} .templar-page-content .HyperMD-header + .HyperMD-paragraph::first-lette
   margin-inline-end: 0.1em;
 }
 
-` : ''}${scope} .templar-blank-line-spacer {
+` : ''}${scope} .markdown-preview-view.templar-page .templar-blank-line-spacer {
   height: calc(var(--templar-body-line-height) * var(--templar-blank-lines, 1));
   margin: 0 !important;
   min-height: 0 !important;
@@ -892,7 +975,27 @@ ${scope} .templar-page-content .HyperMD-header + .HyperMD-paragraph::first-lette
   pointer-events: none;
 }
 
-${scope} .templar-page input[type="checkbox"] {
+${gridded ? `${scope} .templar-grid-snap-block:not(:is(table, iframe, object, video, audio, canvas)) {
+  /* Keep renderer-owned child margins inside the measured footprint. Without
+     a block formatting context, display-math and other widgets can collapse a
+     top margin outside their snapped owner and permanently shift later text. */
+  display: flow-root;
+}
+
+${scope} .templar-grid-snap-block:not(:is(table, iframe, object, video, audio, canvas))::after {
+  block-size: var(--templar-grid-snap, 0px);
+  clear: both;
+  content: "";
+  display: block;
+  inline-size: 100%;
+  pointer-events: none;
+}
+
+${scope} .templar-grid-snap-block:is(table, iframe, object, video, audio, canvas) {
+  margin-block-end: calc(var(--templar-grid-natural-margin-end, 0px) + var(--templar-grid-snap, 0px)) !important;
+}
+
+` : ''}${scope} .templar-page input[type="checkbox"] {
   accent-color: ${safeValue(style.blocks.checkboxAccent, '#507b5c')};
 }
 
@@ -930,7 +1033,7 @@ ${scope} .templar-page .metadata-container:not(:has([data-property-key]:not([dat
 
 ${attachmentRules(style, scope)}`;
 
-  const custom = compileCustomCss(style.css, scope, scopeId);
+  const custom = compileCustomCss(style.css, scope, scopeId, gridded);
   const fixedCanvasGuard = paged
     ? `${scope} .templar-page-content,
 ${scope} .markdown-preview-view.templar-page .templar-page-content.markdown-preview-sizer,

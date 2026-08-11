@@ -24,7 +24,13 @@ describe('structured style compiler', () => {
       metrics,
     );
     expect(result.css).toContain('--templar-baseline-position: 81px');
-    expect(result.css).toContain('background-position: 0 0, 0 81px');
+    expect(result.css).toContain('--templar-editor-baseline-position: 81px');
+    expect(result.css).toContain(
+      '--templar-paper-baseline-position: var(--templar-editor-baseline-position)',
+    );
+    expect(result.css).toContain(
+      'background-position: 0 0, 0 var(--templar-paper-baseline-position)',
+    );
     expect(result.css).toContain('line-height: 30px');
   });
 
@@ -45,9 +51,11 @@ describe('structured style compiler', () => {
     ).css;
 
     expect(dotCss).toContain(
-      'background-position: calc(min(96px, 18%) - 14px) calc(81px - 14px)',
+      'background-position: calc(min(96px, 18%) - 14px) calc(var(--templar-paper-baseline-position) - 14px)',
     );
-    expect(graphCss).toContain('background-position: min(96px, 18%) 81px');
+    expect(graphCss).toContain(
+      'background-position: min(96px, 18%) var(--templar-paper-baseline-position)',
+    );
     expect(graphCss).toContain(
       '.templar-page :is(p, li, .HyperMD-paragraph, .HyperMD-list-line, .HyperMD-quote)',
     );
@@ -188,6 +196,7 @@ describe('structured style compiler', () => {
     expect(css).toContain('list-style-type: square');
     expect(css).toContain('[data-callout="warning"]');
     expect(css).toContain('--callout-border-color: #c77b3a');
+    expect(css).toContain('mix-blend-mode: normal;');
   });
 
   it('allocates exactly one baseline row to every gridded divider style', () => {
@@ -247,19 +256,98 @@ describe('structured style compiler', () => {
     expect(css).toContain('margin-inline: 0 0 0 1em');
   });
 
-  it('renders every new paper pattern', () => {
-    for (const pattern of ['ledger', 'cross-hatch', 'diagonal', 'hex', 'scallop'] as const) {
+  it('renders every paper pattern in paged and pageless modes with and without a margin', () => {
+    const patterns = [
+      'blank',
+      'ruled',
+      'dot-grid',
+      'graph',
+      'ledger',
+      'cross-hatch',
+      'diagonal',
+      'hex',
+      'scallop',
+    ] as const;
+
+    for (const pattern of patterns) {
+      for (const mode of ['pageless', 'paged'] as const) {
+        for (const marginLine of [false, true]) {
+          const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+          style.page.mode = mode;
+          style.paper.pattern = pattern;
+          style.paper.marginLine = marginLine;
+          const css = compilePageStyle(
+            style,
+            `[data-templar-scope="templar-${pattern}-${mode}-${String(marginLine)}"]`,
+            `${pattern}-${mode}-${String(marginLine)}`,
+            metrics,
+          ).css;
+          expect(css.length, `${pattern}/${mode}/${String(marginLine)}`).toBeGreaterThan(0);
+          expect(css, `${pattern}/${mode}/${String(marginLine)}`).toContain('background-image');
+        }
+      }
+    }
+  });
+
+  it('draws complete diagonal, cross-hatch, hex, and scallop geometry', () => {
+    const compilePattern = (pattern: 'diagonal' | 'cross-hatch' | 'hex' | 'scallop'): string => {
       const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
       style.paper.pattern = pattern;
-      const css = compilePageStyle(
+      style.paper.marginLine = false;
+      return compilePageStyle(
         style,
-        '[data-templar-scope="templar-test"]',
-        'test',
+        `[data-templar-scope="templar-${pattern}"]`,
+        pattern,
         metrics,
       ).css;
-      expect(css.length, pattern).toBeGreaterThan(0);
-      expect(css, pattern).toContain('background-image');
-    }
+    };
+
+    const diagonal = compilePattern('diagonal');
+    expect(diagonal).toContain('linear-gradient(135deg, transparent calc(50% - 0.5px)');
+    expect(diagonal).not.toContain('linear-gradient(to top right');
+
+    const crossHatch = compilePattern('cross-hatch');
+    expect(crossHatch).toContain('linear-gradient(135deg, transparent calc(50% - 0.5px)');
+    expect(crossHatch).toContain('linear-gradient(45deg, transparent calc(50% - 0.5px)');
+    expect(crossHatch).toContain('background-repeat: repeat, repeat;');
+
+    const hex = compilePattern('hex');
+    expect(hex).toContain('linear-gradient(30deg');
+    expect(hex).toContain('linear-gradient(150deg');
+    expect(hex).toContain('linear-gradient(60deg');
+    expect(hex).toContain('background-repeat: repeat, repeat, repeat, repeat, repeat, repeat;');
+
+    const scallop = compilePattern('scallop');
+    expect(scallop).toContain('radial-gradient(circle at 50% 100%, transparent');
+    expect(scallop).toContain('background-repeat: repeat, repeat;');
+  });
+
+  it('keeps every CodeMirror line margin-free for accurate pointer hit-testing', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-editor-geometry"]',
+      'editor-geometry',
+      metrics,
+    ).css;
+
+    expect(css).toContain('.cm-content > .cm-line {\n  box-sizing: border-box;\n  margin-block: 0 !important;');
+    expect(css).not.toContain('.templar-page .cm-content > :is(');
+    expect(css).toContain('.markdown-preview-view.templar-page :is(p, ul, ol, blockquote, pre, table)');
+    expect(css).toContain('.markdown-source-view.mod-cm6 .templar-page :is(.HyperMD-header-1, .inline-title)');
+    expect(css).toContain('margin-block: 0 !important;\n  padding-block:');
+    expect(css).toContain('.templar-grid-snap-block:not(:is(table, iframe, object, video, audio, canvas))::after');
+    expect(css).toContain('display: flow-root;');
+    expect(css).toContain('block-size: var(--templar-grid-snap, 0px);');
+
+    style.baseline.mode = 'free';
+    const freeCss = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-editor-free"]',
+      'editor-free',
+      metrics,
+    ).css;
+    expect(freeCss).not.toContain('.templar-grid-snap-block::after');
   });
 
   it('keeps pageless paper and margin layers above the page background', () => {
@@ -277,5 +365,79 @@ describe('structured style compiler', () => {
     expect(css).toContain('isolation: isolate;');
     expect(css).toContain('.templar-page-content::before {');
     expect(css).toContain('background-image: linear-gradient(to right');
+  });
+
+  it('serializes hostile watermark controls without creating another rule', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.watermark.text = 'draft\n}\nbody { display: none }\n/*';
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-watermark-control"]',
+      'watermark-control',
+      metrics,
+    ).css;
+    expect(css).toContain('--templar-watermark: "draft\\a }\\a body { display: none }\\a /*"');
+    expect(css).not.toContain('\n}\nbody { display: none }');
+  });
+
+  it('keeps callout title and icon variants independent', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.blocks.calloutVariants = {
+      info: { titleColor: '#112233', iconColor: '#aabbcc' },
+    };
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-callout-colors"]',
+      'callout-colors',
+      metrics,
+    ).css;
+    expect(css).toContain('[data-callout="info"] .callout-title {\n  color: #112233;');
+    expect(css).toContain('[data-callout="info"] .callout-icon {\n  color: #aabbcc;');
+    expect(css).not.toContain(':is(.callout-title, .callout-icon)');
+  });
+
+  it('treats a disabled baseline as free regardless of the stored mode', () => {
+    for (const mode of ['strict', 'balanced'] as const) {
+      const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+      style.baseline.enabled = false;
+      style.baseline.mode = mode;
+      style.typography.bodyLineHeight = 32;
+      style.page.gap = 19;
+      const css = compilePageStyle(
+        style,
+        `[data-templar-scope="templar-disabled-${mode}"]`,
+        `disabled-${mode}`,
+        metrics,
+      ).css;
+      expect(css).toContain('margin-block: 0 20.8px !important');
+      expect(css).toContain('--templar-page-gap: 19px');
+      expect(css).not.toContain('.templar-grid-snap-block');
+    }
+  });
+
+  it('draws ledger paper with a mirrored second margin line', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.paper.pattern = 'ledger';
+    style.paper.marginLine = false;
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-ledger"]',
+      'ledger',
+      metrics,
+    ).css;
+    expect(css).toContain('calc(100% - min(72px, 15%) - 0.75px)');
+    expect(css).toContain('calc(100% - min(72px, 15%) + 0.75px)');
+  });
+
+  it('uses matching semantic palettes in Reading and editor modes', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-semantics"]',
+      'semantics',
+      metrics,
+    ).css;
+    expect(css).toContain(':is(a, .cm-hmd-internal-link, .cm-link, .cm-url)');
+    expect(css).toContain(':is(blockquote, .HyperMD-quote)');
   });
 });

@@ -8,16 +8,16 @@ This is the current implementation reference for Templar. It is deliberately mor
 | --- | --- |
 | Product | Templar, an Obsidian plugin that gives each Markdown note a portable visual page style |
 | Repository | [`K0g1/Templar`](https://github.com/K0g1/Templar) |
-| Current release | `1.2.0-alpha.1` (UX expansion prerelease) |
+| Current release | `1.2.0-alpha.2` (renderer and baseline audit prerelease) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
 | Installation channel | Manual release artifacts; not listed in Community Plugins yet |
 | Built-in catalog | 132 styles: 28 hand-tuned core styles plus 104 data-driven pack styles |
 | Themed packs | 13 folders/packs, including Essentials, Color Stories, Seasons, Celebrations & Occasions, Academia, Professional, Journaling & Wellness, Travel, Nature, Vintage & Editorial, Dark & Neon, Fantasy & Whimsy, and Pastels |
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
-| Test status at this snapshot | 76 Vitest tests; `npm run check` and `npm audit` are the required gates |
+| Test status at this snapshot | 108 Vitest tests; `npm run check` and `npm audit` are the required gates |
 
-`1.2.0-alpha.1` adds leaf-scoped live try-on, a note inspector, provenance-aware synchronization, event-driven rules and usage, print preparation, template packs, keyboard-first/density-aware browsing, expanded context-sensitive commands, deterministic one-click apply, and the horizontal-rule baseline correction. The release note is [`releases/1.2.0-alpha.1.md`](releases/1.2.0-alpha.1.md).
+`1.2.0-alpha.2` audits the UX expansion at the renderer boundary: measured cross-view paper origins, margin-contained variable-block snapping, exact Reading whitespace, corrected pattern geometry, leaf-unique scopes, settled print preparation, stricter untrusted-input handling, and catalog-wide render regressions. The release note is [`releases/1.2.0-alpha.2.md`](releases/1.2.0-alpha.2.md).
 
 ### Source-of-truth rules
 
@@ -86,7 +86,7 @@ One-click apply preserves all page options and attachments on a styled note. An 
 - **Advanced mode:** shows the normalized YAML and scoped custom CSS contract. The generated YAML can be copied without saving.
 - **Live preview:** creator and import dialogs use the production compiler in an isolated preview scope and can toggle paged/pageless preview.
 - **Import page style…:** accepts a complete `.templar`/YAML document, validates it, previews it, and saves only after explicit confirmation.
-- **Pack import/export:** `.templar-pack` carries metadata and multiple complete templates. Members are selected and validated independently; custom conflicts offer keep/replace/copy and built-in conflicts can only keep or import a custom copy. Full preview remains on-demand for one member.
+- **Pack import/export:** `.templar-pack` carries metadata and multiple complete templates. Raw input is capped at 8 MB, packs at 256 members, and duplicate incoming IDs are errors. Members are selected and validated independently; custom conflicts offer keep/replace/copy and built-in conflicts can only keep or import a custom copy. Full preview remains on-demand for one member.
 - **Export:** each library card can export a portable `.templar` document into a visible `Templar Templates/` vault folder. The page section is removed because page flow is note-specific.
 - **Raw Page Style editor:** edits only the active note's normalized `templar` mapping; it preserves the Markdown body and all other frontmatter.
 - **LLM authoring kit:** **Copy LLM template authoring skill** copies the versioned schema/safety instructions to the clipboard. Settings can also export it as a Markdown file in the vault. Templar never calls an AI service.
@@ -107,7 +107,7 @@ Every template is structured data first, with optional safe virtual CSS. The sup
 | Images | Nine frames, border/corner/shadow controls, rotation, max width, spacing, opacity, sepia/grayscale/saturation/contrast, left/right float, object-fit, and duotone. |
 | Blocks | Links, paired highlight background/text colors, quote accent/background/text, code palette/font/size, table borders/header/body/stripes/padding, checkbox accent, divider style, callout base palette and per-type variants, and embed palette/radius. |
 | Watermark | Optional text behind content with color, size, rotation, and opacity. It is non-interactive. |
-| Custom CSS | Up to 50 KB, parsed and validated, rooted only at `.page` or `.page-content`, expanded to Reading/Live Preview equivalents, and keyframe-namespaced per note. |
+| Custom CSS | Up to 50 KB, parsed and validated, rooted only at `.page` or `.page-content`, expanded to Reading/Live Preview equivalents, and keyframe-namespaced per leaf. Physical controls/unterminated strings are rejected before PostCSS recovery, and gridded styles cannot override rhythmic geometry. |
 
 In strict/balanced baseline modes, every Markdown horizontal rule occupies exactly one grid unit in Reading and Live Preview. Its centered visible stroke is render-clamped when necessary; all divider styles keep the same vertical footprint and persisted widths remain unchanged.
 
@@ -199,7 +199,7 @@ note metadata
   → FontMetricsService measurements
   → compilePageStyle (structured CSS + validated custom CSS)
   → scoped style element in that Markdown leaf
-  → image compensation and, for paged notes, PageLayoutService
+  → image/variable-block rhythm compensation and, for paged notes, PageLayoutService
 ```
 
 ### Startup and events
@@ -217,21 +217,25 @@ The event responsibilities are:
 | Vault create/rename/delete | Evaluate eligible rules or update/remove/transfer one index/frontmatter path. |
 | Plugin unload/leaf cleanup | Disconnect observers, cancel frames, remove owned style/scale/break properties, and prune Reading-root section state. |
 
-`PageRenderer` owns per-leaf generation tokens, persistent/temporary style selection, style elements, image observers, page-layout services, and Reading-root registries. Generation tokens prevent late font measurements from overwriting a newer render. Preview state belongs to a leaf and owner, never a file, so a second pane remains persistent. Reading sections are recorded during the post-processor, compacted when Obsidian marks them stale, and spacers are inserted synchronously inside their owning section so the virtual scroller retains them.
+`PageRenderer` owns per-leaf generation tokens, persistent/temporary style selection, style elements, image and variable-block observers, page-layout services, and Reading-root registries. Generation tokens prevent late font measurements from overwriting a newer render. Preview state belongs to a leaf and owner, never a file, so a second pane remains persistent. Reading sections are recorded during the post-processor, compacted when Obsidian marks them stale, and spacers are inserted synchronously inside their owning section so the virtual scroller retains them. Variable-height tables, rendered code/Mermaid blocks, callouts, embeds, and media are measured at their outer layout owner and receive only the trailing fraction required to reach the next grid row; blank-line spacers remain independent and follow that correction.
 
 ### CSS and view isolation
 
-Each styled Markdown leaf receives a stable scope attribute and plugin-owned `.templar-page`/`.templar-page-content` classes. The generated style element is owned by that leaf. Structured CSS and imported CSS never target global workspace elements. Live Preview selectors are expanded from the public virtual vocabulary; Obsidian's internal classes are adapters, not a template authoring contract.
+Each styled Markdown leaf receives a collision-free runtime scope token and plugin-owned `.templar-page`/`.templar-page-content` classes. Scope identity belongs to the leaf rather than its file path, so two panes showing one file cannot share preview CSS. The generated style element is owned by that leaf. Structured CSS and imported CSS never target global workspace elements. Live Preview selectors are expanded from the public virtual vocabulary, including selectors nested in functional pseudos; Obsidian's internal classes are adapters, not a template authoring contract.
+
+CodeMirror owns editor line measurement and pointer hit-testing. Templar's adapter keeps every direct `.cm-line` margin-free and places heading space inside a `border-box` with padding. Reading blocks retain their configured margins. Do not consolidate those view-specific rules into a shared selector: vertical margins on editor lines produce a visible caret/click offset because they are outside CodeMirror's measured line box.
 
 Paper and watermark pseudo-elements use negative z-indices inside the isolated content stacking context. This is the key invariant behind the alpha.3 fix: the pattern is below Markdown content but is not hidden behind the page's opaque background.
 
+Paper compilation builds parallel arrays for images, sizes, positions, and repeat modes and serializes them together. Margin lines prepend one complete `no-repeat` layer. This is intentionally explicit because CSS repeats shorter comma-separated value lists, which can otherwise make a later cross-hatch, hex, or scallop layer inherit the margin's repeat behavior.
+
 ### Reading whitespace and baseline
 
-The Reading post-processor derives exact source blank-line runs from current section ranges, ignoring blank lines inside fenced code. It creates owned grid-sized spacer elements synchronously and places them inside the following section. A deferred reconciliation pass handles style changes and cached Reading views. If both adjacent sections remain rendered while source whitespace changes, the new gap converges when either section is rendered again; this is an Obsidian measurement limitation, not a body rewrite.
+The Reading post-processor derives exact source blank-line runs from current section ranges, ignoring blank lines inside fenced code. It creates owned grid-sized spacer elements synchronously and places them inside the following section. For the first section, Obsidian's `frontmatterPosition.end.line` identifies the closing YAML delimiter, so the body origin is `end.line + 1` (or line zero when YAML is absent). This preserves leading body returns without rendering hidden frontmatter or inventing an extra row. A deferred reconciliation pass handles style changes and cached Reading views. Reading-root registries are keyed by both DOM root and current file path because Obsidian reuses roots across note switches; changing files clears the prior context and section ownership. Cached metadata section mappings are sufficient for deferred inter-section reconciliation when Obsidian skips post-processors. If both adjacent sections remain rendered while source whitespace changes, the new gap converges when either section is rendered again; this is an Obsidian measurement limitation, not a body rewrite.
 
-`FontMetricsService` waits for available fonts, measures body/H1–H6/code baselines with browser geometry, and stores a bounded cache. Strict/balanced grid helpers keep block offsets on whole grid rows; code, headings, lists, and images receive complementary corrections. See [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md) for the separate fixed-canvas algorithm.
+`FontMetricsService` waits for available fonts, measures body/H1–H6/code baselines and actual browser-expanded line boxes, and stores a bounded document-specific cache. `PageRenderer` then measures the first real rhythmic text target in each Source, Live Preview, or Reading content root and assigns that target's alphabetic baseline as the repeating paper origin. Properties/frontmatter UI is excluded, and the established origin is retained while Obsidian virtualizes content away from the document start. All three adapters therefore place the alphabetic baseline on the apparent ruling while descenders extend below it without a template-specific phase constant. Strict/balanced grid helpers keep block offsets on whole grid rows; code, headings, lists, images, and measured variable-height renderer outputs receive whole-grid corrections. Image and variable-block measurements include external margins, subtract any previous owned tail, and are animation-frame coalesced; each Reading section wrapper or Live Preview widget owns its correction, never the whole document. See [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md) for the separate fixed-canvas algorithm.
 
-Strict/balanced horizontal rules are compiled as exactly one unit in both view adapters, with zero theme margins and a centered stroke. Print preparation forces the current renderer generation, fonts, image decode, and page fitting to settle before temporary scoped `@media print`/`@page` rules invoke the host print action.
+Strict/balanced horizontal rules are compiled as exactly one unit in both view adapters, with zero theme margins and a centered stroke. Print preparation temporarily switches the exact leaf to Reading View, forces the current renderer generation, waits for fonts, image decode, mutation/resize quiet and page fitting, then invokes the host print action under a busy lock. Cleanup restores the original view state and removes all temporary print ownership on success, cancellation, failure, or service destruction.
 
 ## Source map
 
@@ -241,7 +245,7 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | --- | --- |
 | `src/main.ts` | Plugin lifecycle, registrations, command routing, event coordination, notices, and status bar. Keep orchestration here. |
 | `src/types.ts` | Internal template, note page, settings, validation, metrics, and compiled-style contracts. |
-| `src/constants.ts` | Format/version IDs, runtime class names, custom-CSS byte limit, and public virtual selectors. |
+| `src/constants.ts` | Format/version IDs, runtime class names, custom-CSS/import/pack limits, and public virtual selectors. |
 
 ### Templates and persistence
 
@@ -266,15 +270,16 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | `src/services/synchronization.ts` | Provenance snapshots, status classification, safe replacement, legacy handling, and recursive three-way merge. |
 | `src/services/style-rules.ts` | Pure rule condition matching, priority, metadata readiness, and page-flow presets. |
 | `src/services/note-style-index.ts` | Lazy in-memory usage/folder index with incremental metadata/delete/rename updates. |
-| `src/services/template-pack.ts` | Pack parse/export, member review, and conflict-copy IDs. |
+| `src/services/template-pack.ts` | Bounded pack parse/export, per-member review, duplicate-ID rejection, and conflict-copy IDs. |
 | `src/services/print-layout.ts` | Pure `@page` size selection for pageless/A4/Letter/custom output. |
 | `src/services/print-service.ts` | Renderer/font/image/page settlement, temporary print CSS, host invocation, and restoration. |
 | `src/services/style-compiler.ts` | Structured template → scoped CSS, paper patterns, typography/baseline, blocks, images, watermark, metadata hiding, and page guards. |
 | `src/services/css-validator.ts` | AST validation for custom CSS selectors, at-rules, values, geometry, resources, and performance hazards. |
-| `src/services/css-compiler.ts` | Virtual-selector expansion, per-note scope replacement, and keyframe namespacing. |
-| `src/services/page-renderer.ts` | Leaf discovery, scoped style lifecycle, font-generation guards, Reading sections/spacers, image compensation, and PageLayout ownership. |
+| `src/services/css-compiler.ts` | Virtual-selector expansion, per-leaf scope replacement, and keyframe namespacing. |
+| `src/services/page-renderer.ts` | Leaf discovery, scoped style lifecycle, font-generation guards, Reading sections/spacers, image and variable-block compensation, and PageLayout ownership. |
 | `src/services/page-layout.ts` | Paged scale, geometry detection, rendered-block fitting, observers, and page-break cleanup. |
 | `src/services/font-metrics.ts` | Browser font loading, baseline probes, Canvas diagnostics, and bounded LRU measurements. |
+| `src/services/paper-origin.ts` | Pure Source/Live Preview/Reading rhythm-target selection and measured paper-origin calculation. |
 | `src/services/reading-whitespace.ts` | Pure blank-line parsing and spacer construction helpers. |
 
 ### UI and editor
@@ -292,7 +297,8 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 
 | Path | Responsibility |
 | --- | --- |
-| `src/utils/grid.ts` | Grid fitting, heading/image correction, page-gap alignment, and geometry scale helpers. |
+| `src/utils/grid.ts` | Grid fitting, heading/image/variable-block correction, page-gap alignment, and geometry scale helpers. |
+| `src/utils/scope.ts` | Collision-free runtime leaf scope values for renderer CSS isolation. |
 | `src/utils/value.ts` | Safe unknown-value coercion, enum/array handling, cloning, slugification, CSS attribute escaping, and rounding. |
 | `src/utils/clipboard.ts` | Browser/mobile-safe clipboard write with a selection fallback. |
 | `tests/*.test.ts` | Pure schema/catalog/CSS/compiler/grid/font/whitespace plus synchronization, rules, index, settings, packs, and print regression suites. |
@@ -343,11 +349,11 @@ From the plugin root:
 npm install                 # first setup; npm ci is preferred in CI
 npm audit                   # zero known vulnerabilities is the release expectation
 npm run lint                # Obsidian-aware ESLint
-npm test                    # 76 pure Vitest tests at this snapshot
+npm test                    # 108 pure Vitest tests at this snapshot
 npm run build               # strict tsc, production browser bundle, mobile guard
 npm run check               # lint + test + build
 npm run verify:mobile       # scan the generated main.js directly
-npm run verify:release -- 1.2.0-alpha.1
+npm run verify:release -- 1.2.0-alpha.2
 git diff --check
 ```
 

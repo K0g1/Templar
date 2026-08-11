@@ -183,7 +183,7 @@ function createPackedTemplate(
 
   template.watermark.text = seed.watermark ?? '';
   template.watermark.color = seed.accent;
-  template.watermark.opacity = seed.watermark ? 0.07 : 0;
+  template.watermark.opacity = seed.watermark ? 0.07 : 0.05;
   template.watermark.rotation = seed.mood === 'dramatic' ? -18 : -12;
   template.css = moodCss[seed.mood];
   return ensureReadableTemplate(template);

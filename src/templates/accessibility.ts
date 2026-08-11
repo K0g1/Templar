@@ -176,6 +176,12 @@ export function ensureReadableTemplate(template: TemplarTemplate): TemplarTempla
     template.blocks.quoteBackground,
     paper,
   );
+  template.blocks.quoteAccent = readableColor(
+    template.blocks.quoteAccent,
+    template.blocks.quoteBackground,
+    paper,
+    3,
+  );
   template.blocks.codeTextColor = readableColor(
     template.blocks.codeTextColor,
     template.blocks.codeBackground,
@@ -196,6 +202,12 @@ export function ensureReadableTemplate(template: TemplarTemplate): TemplarTempla
     template.blocks.calloutBackground,
     paper,
   );
+  template.blocks.calloutAccent = readableColor(
+    template.blocks.calloutAccent,
+    template.blocks.calloutBackground,
+    paper,
+    3,
+  );
   template.blocks.checkboxAccent = readableColor(
     template.blocks.checkboxAccent,
     paper,
@@ -213,6 +225,18 @@ export function ensureReadableTemplate(template: TemplarTemplate): TemplarTempla
     template.blocks.tableHeaderTextColor,
     template.blocks.tableHeaderBackground,
     paper,
+  );
+  template.blocks.tableBorder = readableColor(
+    template.blocks.tableBorder,
+    paper,
+    '#ffffff',
+    3,
+  );
+  template.blocks.dividerColor = readableColor(
+    template.blocks.dividerColor,
+    paper,
+    '#ffffff',
+    3,
   );
   template.blocks.embedAccent = readableColor(
     template.blocks.embedAccent,
