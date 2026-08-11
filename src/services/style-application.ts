@@ -5,8 +5,13 @@ import { clone } from '../utils/value';
 import { pageFlowOptions } from './style-rules';
 import type { FrontmatterService } from './frontmatter';
 import type { NoteStyleIndex } from './note-style-index';
+import {
+  summarizeFileOperations,
+  type BatchOperationSummary,
+  type FileOperationResult,
+  type FileOperationWarning,
+} from './operation-result';
 import type { TemplateLibrary } from './template-library';
-import type { FileOperationResult } from './operation-result';
 
 export interface ApplyTemplateRequest {
   file: TFile;
@@ -17,11 +22,12 @@ export interface ApplyTemplateRequest {
   refresh?: 'immediate' | 'deferred';
 }
 
-export interface ApplyTemplateResult {
-  file: TFile;
-  noteWritten: boolean;
-  recentRecorded: boolean;
-  warnings: string[];
+export interface BatchApplyRequest {
+  files: readonly TFile[];
+  template: TemplarTemplate;
+  resolvePageOptions: (file: TFile, current: TemplarNoteStyle | null) => NotePageOptions | null;
+  yieldEvery?: number;
+  yieldToHost?: () => Promise<void>;
 }
 
 export interface StyleApplicationDependencies {
@@ -31,6 +37,7 @@ export interface StyleApplicationDependencies {
   settings: { defaultNewPageFlow: 'pageless' | 'paged-a4' | 'paged-letter' };
   refreshFile: (file: TFile) => Promise<void>;
   refreshDeferred: () => void;
+  getCurrentFile?: (path: string) => TFile | null;
 }
 
 /** One application-level contract for note writes, recents, index, and refresh. */
@@ -41,31 +48,29 @@ export class StyleApplicationService {
     file: TFile,
     style: TemplarNoteStyle,
     refresh: 'immediate' | 'deferred' = 'immediate',
-  ): Promise<void> {
+  ): Promise<FileOperationResult> {
     await this.dependencies.frontmatter.writeStyle(file, style);
-    this.updateIndex(file);
-    await this.refresh(file, refresh);
+    return this.completeWrite(file, refresh);
   }
 
   public async patchPageOptions(
     file: TFile,
     pageOptions: NotePageOptions,
-  ): Promise<void> {
+    refresh: 'immediate' | 'deferred' = 'immediate',
+  ): Promise<FileOperationResult> {
     await this.dependencies.frontmatter.patchPageOptions(file, pageOptions);
-    this.updateIndex(file);
-    await this.dependencies.refreshFile(file);
+    return this.completeWrite(file, refresh);
   }
 
   public async removeStyle(
     file: TFile,
     refresh: 'immediate' | 'deferred' = 'immediate',
-  ): Promise<void> {
+  ): Promise<FileOperationResult> {
     await this.dependencies.frontmatter.removeStyle(file);
-    this.updateIndex(file, null);
-    await this.refresh(file, refresh);
+    return this.completeWrite(file, refresh);
   }
 
-  public async apply(request: ApplyTemplateRequest): Promise<ApplyTemplateResult> {
+  public async apply(request: ApplyTemplateRequest): Promise<FileOperationResult> {
     const existing = this.dependencies.frontmatter.getStyle(request.file);
     const resolvedPageOptions = request.pageOptions
       ? clone(request.pageOptions)
@@ -81,58 +86,117 @@ export class StyleApplicationService {
       request.appliedByRule,
     );
 
-    this.updateIndex(request.file);
-
-    const warnings: string[] = [];
-    let recentRecorded = false;
-    if (request.recordRecent !== false && !request.appliedByRule) {
-      try {
-        await this.dependencies.library.recordRecent(request.template.id);
-        recentRecorded = true;
-      } catch (error) {
-        warnings.push(`The note was styled, but Recent could not be saved: ${errorMessage(error)}`);
+    return this.completeWrite(request.file, request.refresh ?? 'immediate', () => {
+      if (request.recordRecent !== false && !request.appliedByRule) {
+        return this.dependencies.library.recordRecent(request.template.id);
       }
-    }
-
-    if (request.refresh !== 'deferred') await this.dependencies.refreshFile(request.file);
-    else this.dependencies.refreshDeferred();
-    return { file: request.file, noteWritten: true, recentRecorded, warnings };
+      return Promise.resolve();
+    }, 'recent');
   }
 
-  public async applyBatch(
-    files: readonly TFile[],
-    template: TemplarTemplate,
-    pageOptions: (file: TFile, current: TemplarNoteStyle | null) => NotePageOptions,
-  ): Promise<FileOperationResult[]> {
-    const frozenFiles = [...files];
-    const results: FileOperationResult[] = frozenFiles.map((file) => ({
-      path: file.path,
-      status: 'pending',
-    }));
+  public async applyBatch(request: BatchApplyRequest): Promise<BatchOperationSummary> {
+    const frozenFiles = Object.freeze([...request.files]);
+    const results: FileOperationResult[] = [];
+    const yieldEvery = Math.max(1, Math.floor(request.yieldEvery ?? 20));
+    const yieldToHost = request.yieldToHost ?? (() => Promise.resolve());
+
     for (let index = 0; index < frozenFiles.length; index += 1) {
-      const file = frozenFiles[index]!;
-      try {
-        await this.apply({
-          file,
-          template,
-          pageOptions: pageOptions(file, this.dependencies.frontmatter.getStyle(file)),
-          recordRecent: false,
-          refresh: 'deferred',
-        });
-        results[index] = { path: file.path, status: 'succeeded' };
-      } catch (error) {
-        results[index] = {
-          path: file.path,
-          status: 'failed',
-          message: errorMessage(error),
-        };
+      const frozenFile = frozenFiles[index]!;
+      const currentFile = this.dependencies.getCurrentFile
+        ? this.dependencies.getCurrentFile(frozenFile.path)
+        : frozenFile;
+      const isMarkdown = currentFile !== null &&
+        currentFile.path === frozenFile.path &&
+        (currentFile.extension === undefined || currentFile.extension === 'md');
+
+      if (!isMarkdown) {
+        results.push(skippedResult(frozenFile.path, 'The note no longer exists as a Markdown file.'));
+      } else {
+        try {
+          const pageOptions = request.resolvePageOptions(
+            currentFile,
+            this.dependencies.frontmatter.getStyle(currentFile),
+          );
+          if (!pageOptions) {
+            results.push(skippedResult(frozenFile.path, 'The note was skipped by the frozen request.'));
+          } else {
+            results.push(await this.apply({
+              file: currentFile,
+              template: request.template,
+              pageOptions,
+              recordRecent: false,
+              refresh: 'deferred',
+            }));
+          }
+        } catch (error) {
+          results.push({
+            path: frozenFile.path,
+            status: 'failed',
+            noteWritten: false,
+            refreshed: false,
+            warnings: [],
+            message: errorMessage(error),
+          });
+        }
       }
-      if ((index + 1) % 20 === 0) {
-        await Promise.resolve();
+
+      if ((index + 1) % yieldEvery === 0) await yieldToHost();
+    }
+
+    if (results.some((result) => result.noteWritten)) {
+      try {
+        this.dependencies.refreshDeferred();
+      } catch (error) {
+        const warning: FileOperationWarning = {
+          stage: 'refresh',
+          message: `The notes were written, but the final refresh failed: ${errorMessage(error)}`,
+        };
+        for (const result of results) {
+          if (result.noteWritten) result.warnings.push(warning);
+        }
       }
     }
-    this.dependencies.refreshDeferred();
-    return results;
+    return summarizeFileOperations(results);
+  }
+
+  private async completeWrite(
+    file: TFile,
+    refresh: 'immediate' | 'deferred',
+    afterWrite?: () => Promise<void>,
+    afterWriteStage: 'recent' = 'recent',
+  ): Promise<FileOperationResult> {
+    const warnings: FileOperationWarning[] = [];
+    try {
+      this.updateIndex(file);
+    } catch (error) {
+      warnings.push({ stage: 'index', message: `The note was written, but the style index could not be updated: ${errorMessage(error)}` });
+    }
+
+    if (afterWrite) {
+      try {
+        await afterWrite();
+      } catch (error) {
+        warnings.push({ stage: afterWriteStage, message: `The note was written, but Recent could not be saved: ${errorMessage(error)}` });
+      }
+    }
+
+    let refreshed = false;
+    if (refresh === 'immediate') {
+      try {
+        await this.dependencies.refreshFile(file);
+        refreshed = true;
+      } catch (error) {
+        warnings.push({ stage: 'refresh', message: `The note was written, but it could not be refreshed: ${errorMessage(error)}` });
+      }
+    }
+
+    return {
+      path: file.path,
+      status: 'succeeded',
+      noteWritten: true,
+      refreshed,
+      warnings,
+    };
   }
 
   private updateIndex(file: TFile, style = this.dependencies.frontmatter.getStyle(file)): void {
@@ -143,11 +207,17 @@ export class StyleApplicationService {
       style,
     });
   }
+}
 
-  private async refresh(file: TFile, mode: 'immediate' | 'deferred'): Promise<void> {
-    if (mode === 'deferred') this.dependencies.refreshDeferred();
-    else await this.dependencies.refreshFile(file);
-  }
+function skippedResult(path: string, message: string): FileOperationResult {
+  return {
+    path,
+    status: 'skipped',
+    noteWritten: false,
+    refreshed: false,
+    warnings: [],
+    message,
+  };
 }
 
 function errorMessage(error: unknown): string {

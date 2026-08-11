@@ -1,8 +1,11 @@
 import { Modal, Notice, Setting, TFile, getAllTags } from 'obsidian';
 import type TemplarPlugin from '../../main';
 import { DEFAULT_PAGE_OPTIONS } from '../../templates/defaults';
-import type { NotePageOptions } from '../../types';
+import type { NotePageOptions, TemplarNoteStyle } from '../../types';
 import { clone } from '../../utils/value';
+import type { BatchApplyRequest } from '../../services/style-application';
+import type { BatchOperationSummary } from '../../services/operation-result';
+import { renderOperationSummary } from '../operation-results';
 import { ConfirmationModal } from './confirmation-modal';
 
 export class BatchApplyModal extends Modal {
@@ -12,6 +15,7 @@ export class BatchApplyModal extends Modal {
   private pageSize: 'a4' | 'letter' = 'a4';
   private tag = '';
   private summaryEl!: HTMLElement;
+  private resultsEl: HTMLElement | null = null;
 
   public constructor(private readonly plugin: TemplarPlugin) {
     super(plugin.app);
@@ -96,34 +100,74 @@ export class BatchApplyModal extends Modal {
   }
 
   private confirm(): void {
-    const files = this.matchingFiles();
+    const files = Object.freeze([...this.matchingFiles()]);
     const template = this.plugin.library.get(this.templateId);
     if (!template || files.length === 0) {
       new Notice('No matching notes or page style were found.');
       return;
     }
+
+    const frozenTemplate = clone(template);
+    const frozenPageMode = this.pageMode;
+    const frozenPageSize = this.pageSize;
+    const request = Object.freeze({
+      files,
+      template: frozenTemplate,
+      resolvePageOptions: (_file: TFile, current: TemplarNoteStyle | null): NotePageOptions => {
+        const page: NotePageOptions = clone(current?.page ?? { ...DEFAULT_PAGE_OPTIONS, mode: 'pageless' as const });
+        if (frozenPageMode !== 'preserve') page.mode = frozenPageMode;
+        if (frozenPageMode === 'paged') {
+          page.size = frozenPageSize;
+          page.width = frozenPageSize === 'letter' ? 816 : 794;
+          page.height = frozenPageSize === 'letter' ? 1056 : 1123;
+        }
+        return page;
+      },
+      yieldToHost: () => new Promise<void>((resolve) => {
+        const view = this.contentEl.ownerDocument.defaultView;
+        if (view) view.setTimeout(resolve, 0);
+        else resolve();
+      }),
+    }) satisfies BatchApplyRequest;
+
+    const unstyled = files.filter((file) => !this.plugin.frontmatter.hasStyle(file)).length;
+    const styled = files.length - unstyled;
     new ConfirmationModal(
       this.plugin,
-      `Apply “${template.name}” to ${String(files.length)} notes?`,
-      `${String(files.filter((file) => !this.plugin.frontmatter.hasStyle(file)).length)} unstyled notes will receive the style and ${String(files.filter((file) => this.plugin.frontmatter.hasStyle(file)).length)} styled notes will be replaced. Markdown and unrelated frontmatter remain unchanged.`,
-      async () => {
-        const results = await this.plugin.application.applyBatch(files, template, (_file, current) => {
-          const page: NotePageOptions = clone(current?.page ?? { ...DEFAULT_PAGE_OPTIONS, mode: 'pageless' as const });
-          if (this.pageMode !== 'preserve') page.mode = this.pageMode;
-          if (this.pageMode === 'paged') {
-            page.size = this.pageSize;
-            page.width = this.pageSize === 'letter' ? 816 : 794;
-            page.height = this.pageSize === 'letter' ? 1056 : 1123;
-          }
-          return page;
-        });
-        const succeeded = results.filter((result) => result.status === 'succeeded').length;
-        const failed = results.filter((result) => result.status === 'failed');
-        this.plugin.refreshSidebars();
-        const failureText = failed.length > 0 ? ` Failed: ${failed.map((result) => result.path).join(', ')}.` : '';
-        new Notice(`Applied “${template.name}” to ${String(succeeded)} of ${String(files.length)} notes.${failureText}`);
-        this.close();
-      },
+      `Apply “${frozenTemplate.name}” to ${String(files.length)} notes?`,
+      `${String(unstyled)} unstyled notes will receive the style and ${String(styled)} styled notes will be replaced. Markdown and unrelated frontmatter remain unchanged.`,
+      async () => this.execute(request, frozenTemplate.name),
     ).open();
+  }
+
+  private async execute(request: BatchApplyRequest, templateName: string): Promise<void> {
+    const summary = await this.plugin.application.applyBatch(request);
+    this.plugin.refreshSidebars();
+    if (summary.failed === 0 && summary.warnings === 0) {
+      new Notice(`Applied “${templateName}” to ${String(summary.succeeded)} notes.`);
+      this.close();
+      return;
+    }
+    this.renderResults(request, templateName, summary);
+  }
+
+  private renderResults(request: BatchApplyRequest, templateName: string, summary: BatchOperationSummary): void {
+    this.resultsEl?.remove();
+    this.resultsEl = this.contentEl.createDiv({ cls: 'templar-operation-result-panel' });
+    renderOperationSummary(this.resultsEl, summary, { showPaths: true });
+    const actions = this.resultsEl.createDiv({ cls: 'modal-button-container' });
+    if (summary.failed > 0) {
+      const retry = actions.createEl('button', { cls: 'mod-cta', text: 'Retry failed' });
+      retry.addEventListener('click', () => {
+        const failedPaths = new Set(summary.results.filter((result) => result.status === 'failed').map((result) => result.path));
+        const retryRequest: BatchApplyRequest = Object.freeze({
+          ...request,
+          files: Object.freeze(request.files.filter((file) => failedPaths.has(file.path))),
+        });
+        void this.execute(retryRequest, templateName);
+      });
+    }
+    const close = actions.createEl('button', { text: 'Close' });
+    close.addEventListener('click', () => this.close());
   }
 }

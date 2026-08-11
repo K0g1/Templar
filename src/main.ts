@@ -99,6 +99,10 @@ export default class TemplarPlugin extends Plugin {
       settings: this.settings,
       refreshFile: (file) => this.renderer.refreshFile(file),
       refreshDeferred: () => this.renderer.scheduleRefreshAll(),
+      getCurrentFile: (path) => {
+        const candidate = this.app.vault.getAbstractFileByPath(path);
+        return candidate instanceof TFile && candidate.extension === 'md' ? candidate : null;
+      },
     });
     this.printService = new PrintService(this.frontmatter, this.renderer);
 
@@ -234,7 +238,7 @@ export default class TemplarPlugin extends Plugin {
     });
     this.refreshSidebars();
     this.updateStatusBar();
-    for (const warning of result.warnings) new Notice(warning);
+    for (const warning of result.warnings) new Notice(warning.message);
     if (options.notify !== false) new Notice(`Applied “${template.name}” to ${file.basename}.`);
   }
 
