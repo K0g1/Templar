@@ -833,3 +833,38 @@ describe('CSS round 24 bypass regression suite (fail-closed)', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 25 bypass regression suite (fail-closed refinements)', () => {
+  it('rejects hiding the content sizer wrapper', () => {
+    const result = errors('.page > .markdown-preview-sizer { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects hiding the live-preview sizer wrapper', () => {
+    const result = errors('.page > .cm-sizer { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects keyframe freeze on a content wrapper', () => {
+    const result = errors([
+      '@keyframes gone { to { opacity: 0; } }',
+      '.page > .markdown-preview-sizer { animation: gone 1s forwards; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('forwards/both'))).toBe(true);
+  });
+
+  it('rejects -webkit-opacity alias on whole-note selector', () => {
+    const result = errors('.page * { -webkit-opacity: 0; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects geometry blanking: height 0 with overflow hidden', () => {
+    const result = errors('.page * { height: 0; overflow: hidden; }');
+    expect(result.some((m) => m.includes('collapse or clip'))).toBe(true);
+  });
+
+  it('allows height auto reset on whole-note selector', () => {
+    const result = errors('.page * { height: auto; }');
+    expect(result.some((m) => m.includes('collapse or clip'))).toBe(false);
+  });
+});

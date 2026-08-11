@@ -185,6 +185,27 @@ function normalizedPseudoName(node: import('postcss-selector-parser').Node): str
   return decodeCssEscapes(node.value ?? '').replace(/^:+/, '').toLowerCase();
 }
 
+/**
+ * Canonicalizes a property name for security checks: lowercases it and
+ * maps Blink/WebKit aliases (-webkit-opacity, -webkit-transform,
+ * -webkit-filter, -webkit-clip-path, -webkit-backdrop-filter,
+ * -webkit-mask, -webkit-mask-image) to their standard properties so
+ * alias spellings cannot bypass hiding-property checks.
+ */
+function canonicalPropertyName(raw: string): string {
+  const lower = raw.toLowerCase();
+  const aliases: Record<string, string> = {
+    '-webkit-opacity': 'opacity',
+    '-webkit-transform': 'transform',
+    '-webkit-filter': 'filter',
+    '-webkit-clip-path': 'clip-path',
+    '-webkit-backdrop-filter': 'backdrop-filter',
+    '-webkit-mask': 'mask',
+    '-webkit-mask-image': 'mask-image',
+  };
+  return aliases[lower] ?? lower;
+}
+
 
 
 /**
@@ -319,20 +340,67 @@ function selectorNodeIsProvablyNarrow(selector: string): boolean {
 }
 
 /**
+ * Obsidian structural wrapper classes that contain the ENTIRE note content.
+ * A compound whose only positive atoms are these still selects the whole
+ * content container, so they must never count as narrowing.
+ */
+const STRUCTURAL_WRAPPER_CLASSES = new Set([
+  'markdown-preview-sizer',
+  'markdown-preview-view',
+  'markdown-preview-pusher',
+  'markdown-preview-section',
+  'cm-sizer',
+  'cm-content',
+  'cm-editor',
+  'cm-scroller',
+  'cm-line',
+  'markdown-source-view',
+  'view-content',
+  'workspace-leaf-content',
+]);
+
+/**
+ * Properties that can blank the rendered note through geometry alone:
+ * collapsing the content box (height/width/min/max 0) or clipping it
+ * (overflow hidden) on a whole-page-capable selector.
+ */
+const GEOMETRY_HIDING_PROPERTIES = new Set([
+  'height',
+  'width',
+  'min-height',
+  'min-width',
+  'max-height',
+  'max-width',
+  'overflow',
+  'overflow-x',
+  'overflow-y',
+  'clip',
+  'clip-path',
+  'contain',
+  'content-visibility',
+]);
+
+/**
  * True when a compound provably matches only a narrow subset of the note:
  * it contains at least one positive narrowing atom (class, id, tag, or
- * attribute), contains no `:not()` (which can broaden to everything except
- * the argument), no `:has()`, no bare universal that would make it
- * everything, and any `:is()`/`:where()` branches are themselves provably
- * narrow (a union of narrow sets is narrow). Structural and state pseudos
- * narrow the match and are allowed alongside a positive atom.
+ * attribute) that is NOT a structural content wrapper, contains no
+ * `:not()` (which can broaden to everything except the argument), no
+ * `:has()`, no bare universal that would make it everything, and any
+ * `:is()`/`:where()` branches are themselves provably narrow (a union of
+ * narrow sets is narrow). Structural and state pseudos narrow the match
+ * and are allowed alongside a positive atom.
  */
 function compoundIsProvablyNarrow(
   compound: Array<import('postcss-selector-parser').Node>,
 ): boolean {
   let hasPositiveAtom = false;
   for (const part of compound) {
-    if (part.type === 'class' || part.type === 'id' || part.type === 'tag' || part.type === 'attribute') {
+    if (part.type === 'class') {
+      const className = decodeCssEscapes(part.toString()).replace(/^\./, '');
+      if (!STRUCTURAL_WRAPPER_CLASSES.has(className)) {
+        hasPositiveAtom = true;
+      }
+    } else if (part.type === 'id' || part.type === 'tag' || part.type === 'attribute') {
       hasPositiveAtom = true;
     } else if (part.type === 'universal') {
       // Bare universal matches everything; with a positive atom alongside
@@ -526,7 +594,7 @@ export function validateCustomCss(css: string): ValidationResult {
   });
 
   root.walkDecls((declaration) => {
-    const property = decodeCssEscapes(declaration.prop).toLowerCase();
+    const property = canonicalPropertyName(decodeCssEscapes(declaration.prop));
     const value = stripCssComments(decodeCssEscapes(declaration.value).toLowerCase());
     if (declaration.important) {
       issues.push({
@@ -606,6 +674,24 @@ export function validateCustomCss(css: string): ValidationResult {
         path: 'css.z-index',
         message: 'Calculated or variable z-index values cannot be safety-bounded.',
         fix: 'Use auto or a literal z-index between -1 and 20.',
+      });
+    }
+    if (
+      declaration.parent?.type === 'rule' &&
+      selectorCanHideWholePage(declaration.parent) &&
+      // Geometry-blanking combinations: collapsing the box (height/width 0)
+      // with clipping (overflow hidden) can blank the rendered note without
+      // using the enumerated hiding properties. Only zero-collapse values
+      // are dangerous; height: auto resets remain allowed.
+      (GEOMETRY_HIDING_PROPERTIES.has(property) && isZeroCssValue(value) ||
+        (property === 'overflow' || property === 'overflow-x' || property === 'overflow-y') &&
+          /\b(hidden|clip)\b/.test(value))
+    ) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}: ${declaration.value}” can collapse or clip the whole note.`,
+        fix: 'Target a specific Markdown element without blanking the page.',
       });
     }
     if (
