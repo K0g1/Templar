@@ -341,9 +341,17 @@ function pseudoMatchesEverything(
       if (!('nodes' in inner) || !Array.isArray(inner.nodes)) {
         return false;
       }
-      // A selector branch matches everything when it is a single compound
-      // with only universal-capable parts.
-      return compoundMatchesEverything(inner.nodes, structuralPseudos, forgivingPseudos);
+      // A branch matches everything when EVERY compound is universal-
+      // capable. Combinators are allowed because `* > *` (every element
+      // has a parent) matches the full descendant set; a class/attribute/
+      // element anywhere in the branch narrows it.
+      const branchCompounds = compoundSequence(inner);
+      return (
+        branchCompounds.length > 0 &&
+        branchCompounds.every((compound) =>
+          compoundMatchesEverything(compound, structuralPseudos, forgivingPseudos),
+        )
+      );
     }
     if (inner.type === 'pseudo') {
       // Handle nested functional pseudos like :where(*) inside :is().
@@ -673,25 +681,30 @@ export function validateCustomCss(css: string): ValidationResult {
         });
       }
       for (const part of splitTopLevel(value)) {
-        // Durations are identified by their unit (ms|s) and may use CSS
-        // scientific notation (4e1s = 40s).
-        const durations = [...part.matchAll(/(\d+(?:\.\d+)?)(e[+-]?\d+)?(ms|s)\b/gi)];
+        // Durations are identified by their unit (ms|s) and may use the full
+        // CSS number grammar: optional sign, leading or trailing decimal
+        // point, scientific notation (.4e2s = 40s, 4e1s = 40s, +40s).
+        const durations = [...part.matchAll(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(ms|s)\b/gi)];
         // Iteration count: a bare number token (no time unit, not inside a
-        // function). Regex only matches numbers whose next char is
-        // whitespace, comma, or end-of-part.
+        // function). Regex matches the full CSS number grammar with proper
+        // token boundaries (next char whitespace, comma, or end-of-part).
         const bareNumbers: number[] = [];
-        for (const match of part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)) {
-          bareNumbers.push(Number.parseFloat(match[2] ?? '0'));
+        for (const match of part.matchAll(/(^|[\s,])([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)) {
+          const parsed = Number.parseFloat(match[2] ?? '0');
+          if (!Number.isNaN(parsed)) {
+            bareNumbers.push(parsed);
+          }
         }
         let totalSeconds = 0;
         for (const match of durations) {
-          const mantissa = Number.parseFloat(match[1] ?? '0');
-          const exponent = match[2] ? Number.parseFloat(match[2].replace(/^[eE]/, '')) : 0;
-          const amount = mantissa * 10 ** exponent;
-          totalSeconds += match[3] === 'ms' ? amount / 1000 : amount;
+          const amount = Number.parseFloat(match[1] ?? '0');
+          if (Number.isNaN(amount)) {
+            continue;
+          }
+          totalSeconds += match[2] === 'ms' ? Math.abs(amount) / 1000 : Math.abs(amount);
         }
         const iterationCount = bareNumbers.length > 0
-          ? Math.max(...bareNumbers)
+          ? Math.max(...bareNumbers.map((value) => Math.abs(value)))
           : 1;
         if (iterationCount > 1000) {
           issues.push({
@@ -744,14 +757,15 @@ export function validateCustomCss(css: string): ValidationResult {
       if (property === 'animation') {
         for (const part of splitTopLevel(value)) {
           let partSeconds = 0;
-          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(e[+-]?\d+)?(ms|s)\b/gi)) {
-            const mantissa = Number.parseFloat(match[1] ?? '0');
-            const exponent = match[2] ? Number.parseFloat(match[2].replace(/^[eE]/, '')) : 0;
-            partSeconds += (match[3] === 'ms' ? mantissa * 10 ** exponent / 1000 : mantissa * 10 ** exponent);
+          for (const match of part.matchAll(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(ms|s)\b/gi)) {
+            const amount = Number.parseFloat(match[1] ?? '0');
+            partSeconds += Number.isNaN(amount) ? 0 : (match[2] === 'ms' ? Math.abs(amount) / 1000 : Math.abs(amount));
           }
           shorthandDurations.push(partSeconds);
-          const bareNumbers = [...part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)]
-            .map((match) => Number.parseFloat(match[2] ?? '0'));
+          const bareNumbers = [...part.matchAll(/(^|[\s,])([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)]
+            .map((match) => Number.parseFloat(match[2] ?? '0'))
+            .filter((value) => !Number.isNaN(value))
+            .map((value) => Math.abs(value));
           shorthandIterations.push(bareNumbers.length > 0 ? Math.max(...bareNumbers) : 1);
         }
       }
@@ -759,10 +773,9 @@ export function validateCustomCss(css: string): ValidationResult {
         durationOverride = [];
         for (const part of splitTopLevel(value)) {
           let partSeconds = 0;
-          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(e[+-]?\d+)?(ms|s)\b/gi)) {
-            const mantissa = Number.parseFloat(match[1] ?? '0');
-            const exponent = match[2] ? Number.parseFloat(match[2].replace(/^[eE]/, '')) : 0;
-            partSeconds += (match[3] === 'ms' ? mantissa * 10 ** exponent / 1000 : mantissa * 10 ** exponent);
+          for (const match of part.matchAll(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(ms|s)\b/gi)) {
+            const amount = Number.parseFloat(match[1] ?? '0');
+            partSeconds += Number.isNaN(amount) ? 0 : (match[2] === 'ms' ? Math.abs(amount) / 1000 : Math.abs(amount));
           }
           durationOverride.push(partSeconds);
         }
@@ -770,8 +783,9 @@ export function validateCustomCss(css: string): ValidationResult {
       if (property === 'animation-iteration-count') {
         iterationOverride = [];
         for (const part of splitTopLevel(value)) {
-          const match = part.match(/(\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*$/);
-          iterationOverride.push(match ? Number.parseFloat(match[1] ?? '1') : 1);
+          const match = part.match(/([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)\s*$/);
+          const parsed = match ? Number.parseFloat(match[1] ?? '1') : NaN;
+          iterationOverride.push(Number.isNaN(parsed) ? 1 : Math.abs(parsed));
         }
       }
       if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {

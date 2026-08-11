@@ -358,3 +358,32 @@ describe('CSS round 6 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
   });
 });
+
+describe('CSS round 7 bypass regression suite', () => {
+  it('rejects complex :is() branches with combinators', () => {
+    const a = errors('.page :is(* > *) { display: none; }');
+    expect(a.some((m) => m.includes('hide or disable'))).toBe(true);
+    const b = errors('.page :where(* > *) { opacity: 0; }');
+    expect(b.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('allows narrow :is() branches with element compounds', () => {
+    const result = errors('.page :is(p > span) { color: red; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
+  });
+
+  it('rejects leading-decimal scientific notation iteration counts', () => {
+    const result = errors('.page p { animation: spin 1s .4e2; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects signed iteration counts', () => {
+    const result = errors('.page p { animation: spin 1s +40; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects leading-decimal durations', () => {
+    const result = errors('.page p { animation-duration: .4e2s; animation-iteration-count: 1; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+});
