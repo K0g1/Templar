@@ -2,7 +2,7 @@ import type { App, TFile } from 'obsidian';
 import { describe, expect, it } from 'vitest';
 import { FrontmatterService } from '../src/services/frontmatter';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
-import { templateToNoteStyle } from '../src/templates/note-format';
+import { noteStyleToFrontmatter, templateToNoteStyle } from '../src/templates/note-format';
 import type { TemplarNoteStyle } from '../src/types';
 
 interface Deferred<T> {
@@ -157,5 +157,91 @@ describe('FrontmatterService mutation coordination', () => {
     expect(harness.service.getStyle(harness.note)?.id).toBe(next.id);
     harness.writes[0]!.gate.resolve();
     await pending;
+  });
+
+  it('accepts an external cache edit when expected local cache state never appears', async () => {
+    const initial = style(0);
+    const harness = setup(initial);
+    const local = style(1);
+    const external = style(2);
+    const write = harness.service.applyTemplate(harness.note, local);
+    await Promise.resolve();
+    harness.writes[0]!.gate.resolve();
+    await write;
+
+    harness.cache.set(harness.note.path, { frontmatter: { templar: noteStyleToFrontmatter(external) } });
+    harness.service.settle(harness.note);
+    expect(harness.service.getStyle(harness.note)?.id).toBe(external.id);
+  });
+
+  it('ignores a pre-write external candidate until a later cache event repeats it', async () => {
+    const harness = setup(style(0));
+    const local = style(1);
+    const external = style(2);
+    const write = harness.service.applyTemplate(harness.note, local);
+    await Promise.resolve();
+    harness.cache.set(harness.note.path, { frontmatter: { templar: noteStyleToFrontmatter(external) } });
+    harness.service.settle(harness.note);
+    expect(harness.service.getStyle(harness.note)?.id).toBe(local.id);
+
+    harness.writes[0]!.gate.reject(new Error('local write failed'));
+    await expect(write).rejects.toThrow('local write failed');
+    expect(harness.service.getStyle(harness.note)?.id).toBe(style(0).id);
+
+    harness.service.settle(harness.note);
+    expect(harness.service.getStyle(harness.note)?.id).toBe(external.id);
+  });
+
+  it('does not apply an external candidate observed before a later queued write completes', async () => {
+    const harness = setup();
+    const first = style(0);
+    const second = style(1);
+    const external = style(2);
+    const firstWrite = harness.service.applyTemplate(harness.note, first);
+    const secondWrite = harness.service.applyTemplate(harness.note, second);
+    await Promise.resolve();
+    harness.writes[0]!.gate.resolve();
+    await firstWrite;
+    await Promise.resolve();
+    harness.cache.set(harness.note.path, { frontmatter: { templar: noteStyleToFrontmatter(external) } });
+    harness.service.settle(harness.note);
+    expect(harness.service.getStyle(harness.note)?.id).toBe(second.id);
+
+    harness.writes[1]!.gate.resolve();
+    await secondWrite;
+    expect(harness.service.getStyle(harness.note)?.id).toBe(second.id);
+    harness.cache.set(harness.note.path, { frontmatter: { templar: noteStyleToFrontmatter(second) } });
+    harness.service.settle(harness.note);
+    expect(harness.service.getStyle(harness.note)?.id).toBe(second.id);
+  });
+
+  it('accepts an external edit after a local remove', async () => {
+    const harness = setup(style(0));
+    const remove = harness.service.removeStyle(harness.note);
+    await Promise.resolve();
+    harness.writes[0]!.gate.resolve();
+    await remove;
+
+    const external = style(1);
+    harness.cache.set(harness.note.path, { frontmatter: { templar: noteStyleToFrontmatter(external) } });
+    harness.service.settle(harness.note);
+    expect(harness.service.getStyle(harness.note)?.id).toBe(external.id);
+  });
+
+  it('moves mutation state on rename without merging independent queues', async () => {
+    const harness = setup();
+    const destination = file('Notes/destination.md');
+    const sourceWrite = harness.service.applyTemplate(harness.note, style(0));
+    const destinationWrite = harness.service.applyTemplate(destination, style(1));
+    await Promise.resolve();
+
+    harness.service.rename(harness.note.path, destination.path);
+    expect(harness.service.getStyle(destination)?.id).toBe(style(0).id);
+
+    harness.writes[0]!.gate.resolve();
+    harness.writes[1]!.gate.resolve();
+    await expect(sourceWrite).resolves.toBeUndefined();
+    await expect(destinationWrite).resolves.toBeUndefined();
+    expect(harness.service.getStyle(destination)?.id).toBe(style(0).id);
   });
 });

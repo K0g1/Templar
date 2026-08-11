@@ -54,4 +54,15 @@ describe('FrontmatterService integration contract', () => {
     expect(harness.storage.value.templar).toBeUndefined();
     expect(harness.service.getStyle(harness.note)).toBeNull();
   });
+
+  it('accepts an external cache value after a successful local write without local cache settlement', async () => {
+    const harness = fixture();
+    const local = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    const external = templateToNoteStyle(BUILT_IN_TEMPLATES[3]!);
+    await harness.service.applyTemplate(harness.note, local);
+
+    harness.cache.set(harness.note.path, { frontmatter: { templar: noteStyleToFrontmatter(external) } });
+    harness.service.settle(harness.note);
+    expect(harness.service.getStyle(harness.note)?.id).toBe(external.id);
+  });
 });

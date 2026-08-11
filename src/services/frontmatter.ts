@@ -10,13 +10,28 @@ interface OptimisticEntry {
   style: TemplarNoteStyle | null;
 }
 
+interface KnownLocalSnapshot {
+  generation: number;
+  style: TemplarNoteStyle | null;
+}
+
+interface ExternalCacheCandidate {
+  observedSequence: number;
+  style: TemplarNoteStyle | null;
+}
+
 interface FileMutationState {
   tail: Promise<void>;
   pending: number;
   optimistic: OptimisticEntry | null;
   lastCommitted: TemplarNoteStyle | null;
-  awaitingSettlement: boolean;
+  cacheObservationSequence: number;
+  latestSuccessfulWriteObservationSequence: number;
+  knownLocalSnapshots: KnownLocalSnapshot[];
+  externalCandidate: ExternalCacheCandidate | null;
 }
+
+const MAX_KNOWN_LOCAL_SNAPSHOTS = 8;
 
 /**
  * Serializes Templar's writes per file while keeping the newest requested
@@ -98,26 +113,48 @@ export class FrontmatterService {
     });
   }
 
-  /**
-   * Settle optimistic ownership only when MetadataCache reflects the newest
-   * requested value. A late cache event for an older queued write is ignored.
-   */
+  /** Reconcile one MetadataCache observation with local and external ownership. */
   public settle(file: TFile): void {
     const state = this.states.get(file.path);
     if (!state) return;
+    state.cacheObservationSequence += 1;
+    const observedSequence = state.cacheObservationSequence;
     const cached = this.cachedStyle(file);
-    if (state.optimistic) {
-      if (deepEqual(cached, state.optimistic.style)) {
-        state.lastCommitted = clone(cached);
-        state.optimistic = null;
-        state.awaitingSettlement = false;
-      }
-    } else if (state.awaitingSettlement) {
-      if (deepEqual(cached, state.lastCommitted)) {
-        state.awaitingSettlement = false;
-      }
-    } else {
+
+    if (state.optimistic && deepEqual(cached, state.optimistic.style)) {
       state.lastCommitted = clone(cached);
+      state.optimistic = null;
+      state.externalCandidate = null;
+      state.knownLocalSnapshots = [{ generation: 0, style: clone(cached) }];
+      this.prune(file.path, state);
+      return;
+    }
+
+    if (state.knownLocalSnapshots.some((snapshot) => deepEqual(cached, snapshot.style))) {
+      if (
+        !state.optimistic &&
+        state.pending === 0 &&
+        deepEqual(cached, state.lastCommitted)
+      ) {
+        state.knownLocalSnapshots = [{ generation: 0, style: clone(cached) }];
+        this.prune(file.path, state);
+      }
+      return;
+    }
+
+    if (state.pending > 0) {
+      state.externalCandidate = {
+        observedSequence,
+        style: clone(cached),
+      };
+      return;
+    }
+
+    if (observedSequence > state.latestSuccessfulWriteObservationSequence) {
+      state.lastCommitted = clone(cached);
+      state.optimistic = null;
+      state.externalCandidate = null;
+      state.knownLocalSnapshots = [{ generation: 0, style: clone(cached) }];
     }
     this.prune(file.path, state);
   }
@@ -127,25 +164,11 @@ export class FrontmatterService {
     const state = this.states.get(oldPath);
     if (!state) return;
     this.states.delete(oldPath);
-    const destination = this.states.get(newPath);
-    if (!destination) {
-      this.states.set(newPath, state);
-      return;
-    }
-    // A destination mutation is unusual for a vault rename, but retaining the
-    // newest optimistic generation is safer than allowing the old path to
-    // resurrect an obsolete style.
-    if (
-      !destination.optimistic ||
-      (state.optimistic && state.optimistic.generation > destination.optimistic.generation)
-    ) {
-      destination.optimistic = state.optimistic;
-      destination.lastCommitted = state.lastCommitted;
-      destination.awaitingSettlement = state.awaitingSettlement;
-    }
-    destination.pending += state.pending;
-    destination.tail = destination.tail.then(() => state.tail);
-    this.states.set(newPath, destination);
+    // A successful vault rename cannot target an existing file path. If a
+    // stale destination state exists, discard it rather than merging two
+    // independent mutation queues with different filesystem identities.
+    this.states.delete(newPath);
+    this.states.set(newPath, state);
   }
 
   public forget(path: string): void {
@@ -160,12 +183,16 @@ export class FrontmatterService {
   private stateFor(file: TFile): FileMutationState {
     const existing = this.states.get(file.path);
     if (existing) return existing;
+    const initial = this.cachedStyle(file);
     const state: FileMutationState = {
       tail: Promise.resolve(),
       pending: 0,
       optimistic: null,
-      lastCommitted: this.cachedStyle(file),
-      awaitingSettlement: false,
+      lastCommitted: clone(initial),
+      cacheObservationSequence: 0,
+      latestSuccessfulWriteObservationSequence: 0,
+      knownLocalSnapshots: [{ generation: 0, style: clone(initial) }],
+      externalCandidate: null,
     };
     this.states.set(file.path, state);
     return state;
@@ -186,7 +213,17 @@ export class FrontmatterService {
       try {
         await performWrite();
         state.lastCommitted = clone(desiredStyle);
-        state.awaitingSettlement = true;
+        state.knownLocalSnapshots.push({ generation, style: clone(desiredStyle) });
+        if (state.knownLocalSnapshots.length > MAX_KNOWN_LOCAL_SNAPSHOTS) {
+          state.knownLocalSnapshots.splice(0, state.knownLocalSnapshots.length - MAX_KNOWN_LOCAL_SNAPSHOTS);
+        }
+        state.latestSuccessfulWriteObservationSequence = state.cacheObservationSequence;
+        if (
+          state.externalCandidate &&
+          state.externalCandidate.observedSequence <= state.latestSuccessfulWriteObservationSequence
+        ) {
+          state.externalCandidate = null;
+        }
       } catch (error) {
         // Only the generation that is still visible may roll itself back. A
         // stale failure must never erase a newer apply/remove request.
@@ -209,7 +246,7 @@ export class FrontmatterService {
     if (
       state.pending === 0 &&
       !state.optimistic &&
-      !state.awaitingSettlement &&
+      !state.externalCandidate &&
       this.states.get(path) === state
     ) {
       this.states.delete(path);
