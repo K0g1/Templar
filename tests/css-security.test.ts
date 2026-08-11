@@ -523,3 +523,20 @@ describe('CSS round 12 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 13 bypass regression suite', () => {
+  it('rejects :not(.x:not(*)) contradictory compound', () => {
+    const result = errors('.page :not(.x:not(*)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :not(.x:is(:not(*))) nested empty pseudo', () => {
+    const result = errors('.page :not(.x:is(:not(*))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :not(:not(*) > *) complex branch with empty compound', () => {
+    const result = errors('.page :not(:not(*) > *) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});

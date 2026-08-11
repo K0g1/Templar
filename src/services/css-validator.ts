@@ -411,9 +411,9 @@ function pseudoArgumentBranches(
 
 /**
  * True when a selector branch matches nothing: it must be exactly one
- * pseudo that itself matches nothing, or a single compound that is
- * self-contradictory (`.x:not(.x)`, `*:not(*)` - the negation excludes
- * everything the compound selects).
+ * pseudo that itself matches nothing, or at least one compound in the
+ * branch is definitely empty (`:not(*) > *` has an empty first compound,
+ * so the whole branch matches nothing).
  */
 function branchMatchesNothing(
   branch: import('postcss-selector-parser').Node,
@@ -424,12 +424,35 @@ function branchMatchesNothing(
   if (children.length === 1 && children[0]?.type === 'pseudo') {
     return pseudoMatchesNothing(children[0], structuralPseudos, forgivingPseudos);
   }
-  // A single compound with no combinators: check for self-contradiction.
   const compounds = compoundSequence(branch);
-  if (compounds.length === 1) {
-    return compoundIsContradiction(compounds[0]!);
+  return compounds.length > 0 && compounds.some((compound) =>
+    compoundMatchesNothing(compound, structuralPseudos, forgivingPseudos),
+  );
+}
+
+/**
+ * True when a compound definitely cannot match any element:
+ * - any contained pseudo matches nothing (`.x:not(*)` - the `:not(*)`
+ *   pseudo matches nothing, so the compound is empty); or
+ * - a `:not(...)` argument excludes every simple selector the compound
+ *   selects (`.x:not(.x)`, `*:not(*)`).
+ */
+function compoundMatchesNothing(
+  compound: Array<import('postcss-selector-parser').Node>,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  for (const part of compound) {
+    if (part.type === 'pseudo') {
+      const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+      if (pseudoName === 'not' || forgivingPseudos.has(pseudoName)) {
+        if (pseudoMatchesNothing(part, structuralPseudos, forgivingPseudos)) {
+          return true;
+        }
+      }
+    }
   }
-  return false;
+  return compoundIsContradiction(compound);
 }
 
 /**
