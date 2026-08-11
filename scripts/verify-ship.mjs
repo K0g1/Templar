@@ -20,9 +20,6 @@ run('npm', ['run', 'verify:mobile']);
 run('npm', ['run', 'verify:privacy']);
 run('npm', ['audit', '--audit-level=moderate']);
 run('npm', ['audit', '--omit=dev', '--audit-level=moderate']);
-run('npm', ['run', 'verify:release', '--', tag]);
-run('npm', ['run', 'verify:brat', '--', tag]);
-run('git', ['diff', '--check']);
 
 const artifactNames = ['main.js', 'manifest.json', 'styles.css'];
 for (const name of artifactNames) {
@@ -34,4 +31,8 @@ const checksums = artifactNames.map((name) => {
   return `${hash}  ${name}`;
 });
 writeFileSync('SHA256SUMS.txt', `${checksums.join('\n')}\n`);
+
+run('npm', ['run', 'verify:release', '--', tag]);
+run('npm', ['run', 'verify:brat', '--', tag]);
+run('git', ['diff', '--check']);
 console.log('Ship gate verified and SHA256SUMS.txt generated.');

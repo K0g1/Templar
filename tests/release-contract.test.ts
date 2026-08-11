@@ -1,14 +1,16 @@
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const script = resolve(process.cwd(), 'scripts/verify-brat-release.mjs');
+const stageScript = resolve(process.cwd(), 'scripts/stage-release.mjs');
+const releaseWorkflow = readFileSync(resolve(process.cwd(), '.github/workflows/release.yml'), 'utf8');
 
 function fixture(version = '1.3.0-alpha.1'): string {
   const directory = mkdtempSync(join(tmpdir(), 'templar-brat-'));
-  writeFileSync(join(directory, 'package.json'), JSON.stringify({ name: 'templar', version }));
   writeFileSync(join(directory, 'manifest.json'), JSON.stringify({
     id: 'templar',
     name: 'Templar',
@@ -20,6 +22,18 @@ function fixture(version = '1.3.0-alpha.1'): string {
   }));
   writeFileSync(join(directory, 'main.js'), 'x'.repeat(10_001));
   writeFileSync(join(directory, 'styles.css'), '.templar {}');
+  const assets = ['main.js', 'manifest.json', 'styles.css'];
+  writeFileSync(join(directory, 'SHA256SUMS.txt'), `${assets.map((name) => {
+    const hash = createHash('sha256').update(readFileSync(join(directory, name))).digest('hex');
+    return `${hash}  ${name}`;
+  }).join('\n')}\n`);
+  writeFileSync(join(directory, 'release-notes.md'), `# Templar ${version}\n`);
+  writeFileSync(join(directory, 'release-metadata.json'), JSON.stringify({
+    tag: version,
+    title: `Templar ${version}`,
+    prerelease: version.includes('-'),
+    assets: [...assets, 'SHA256SUMS.txt'],
+  }));
   return directory;
 }
 
@@ -76,6 +90,11 @@ describe('BRAT release contract verifier', () => {
     unlinkSync(join(missingStyles, 'styles.css'));
     failure(missingStyles, 'missing styles.css');
     rmSync(missingStyles, { recursive: true, force: true });
+
+    const missingChecksums = fixture();
+    unlinkSync(join(missingChecksums, 'SHA256SUMS.txt'));
+    failure(missingChecksums, 'missing SHA256SUMS.txt');
+    rmSync(missingChecksums, { recursive: true, force: true });
   });
 
   it('rejects manifest identity, version, type, and casing violations', () => {
@@ -113,5 +132,48 @@ describe('BRAT release contract verifier', () => {
     writeFileSync(join(stringDesktop, 'manifest.json'), JSON.stringify(stringManifest));
     failure(stringDesktop, 'isDesktopOnly must be boolean');
     rmSync(stringDesktop, { recursive: true, force: true });
+
+    const unexpected = fixture();
+    writeFileSync(join(unexpected, 'package.json'), '{}');
+    failure(unexpected, 'unexpected release asset: package.json');
+    rmSync(unexpected, { recursive: true, force: true });
+  });
+
+  it('enforces the release workflow trust boundary', () => {
+    const publish = releaseWorkflow.slice(releaseWorkflow.indexOf('\n  publish:'), releaseWorkflow.length);
+    expect(publish).toContain('contents: write');
+    expect(publish).not.toContain('actions/checkout');
+    expect(publish).not.toContain('actions/setup-node');
+    expect(publish).not.toContain('npm ci');
+    expect(publish).not.toMatch(/npm run/);
+    expect(releaseWorkflow).toContain('contents: read');
+    expect(releaseWorkflow).toContain('node scripts/stage-release.mjs');
+    expect(releaseWorkflow).toContain('path: .release/');
+    expect(releaseWorkflow).toContain('Refusing to modify an already-published release');
+    expect(releaseWorkflow.indexOf('Verify remote draft before publication')).toBeLessThan(
+      releaseWorkflow.indexOf('gh release edit "${RELEASE_TAG}" --draft=false'),
+    );
+    expect(releaseWorkflow).toContain('cmp .release/SHA256SUMS.txt .release-remote/SHA256SUMS.txt');
+    expect(releaseWorkflow).toContain('release-metadata.json');
+    for (const match of releaseWorkflow.matchAll(/uses:\s+[^@\s]+@([0-9a-f]+)/g)) {
+      expect(match[1]).toHaveLength(40);
+    }
+  });
+
+  it('stages exactly the verified release transport bundle', () => {
+    const output = mkdtempSync(join(tmpdir(), 'templar-release-stage-'));
+    try {
+      execFileSync(process.execPath, [stageScript, '1.2.0-alpha.2', output], { stdio: 'pipe' });
+      expect([...readdirSync(output)].sort()).toEqual([
+        'SHA256SUMS.txt',
+        'main.js',
+        'manifest.json',
+        'release-metadata.json',
+        'release-notes.md',
+        'styles.css',
+      ]);
+    } finally {
+      rmSync(output, { recursive: true, force: true });
+    }
   });
 });

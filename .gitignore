@@ -8,6 +8,8 @@ coverage/
 main.js
 main.js.meta.json
 SHA256SUMS.txt
+.release/
+.release-remote/
 
 # Per-vault plugin settings and local user data.
 data.json
