@@ -506,3 +506,20 @@ describe('CSS round 11 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
   });
 });
+
+describe('CSS round 12 bypass regression suite', () => {
+  it('rejects contradictory compound negation :not(.x:not(.x))', () => {
+    const result = errors('.page :not(.x:not(.x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects contradictory universal negation :not(*:not(*))', () => {
+    const result = errors('.page :not(*:not(*)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects contradictory compound inside :is()', () => {
+    const result = errors('.page :not(:is(*:not(*))) { visibility: hidden; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
