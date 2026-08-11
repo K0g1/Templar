@@ -782,8 +782,54 @@ describe('CSS round 23 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 
-  it('allows nested negation with sibling constraints (no false positive)', () => {
+  it('fail-closed: nested negation with sibling constraints is rejected (sound, conservative)', () => {
+    // The :not() inside the descendant compound cannot be proven narrow,
+    // so under fail-closed policy the selector is treated as whole-page
+    // capable. This is a false positive, but soundness beats precision.
     const result = errors('.page :is(.x, .y:is(:not(.x))) { display: none; }');
-    expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
+
+describe('CSS round 24 bypass regression suite (fail-closed)', () => {
+  it('rejects :not(#a#b) - unsatisfiable compound makes negation universal', () => {
+    const result = errors('.page :not(#a#b) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :not(:enabled:disabled) - mutually exclusive state pseudos', () => {
+    const result = errors('.page :not(:enabled:disabled) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :is([data-x="A" i], :not([data-x="a" i])) case-folding complement', () => {
+    const result = errors('.page :is([data-x="A" i], :not([data-x="a" i])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :is([class~="x"], :not(.x)) class-token complement', () => {
+    const result = errors('.page :is([class~="x"], :not(.x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :is([id="x"], :not(#x)) id complement', () => {
+    const result = errors('.page :is([id="x"], :not(#x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :is([x^="a"], :not([x="a"])) prefix complement', () => {
+    const result = errors('.page :is([x^="a"], :not([x="a"])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :not([x="a"]:not([x="b"])) shared-attribute compound (fail-closed)', () => {
+    // Not provably narrow: the :not() can broaden to nearly the whole note.
+    const result = errors('.page :not([x="a"]:not([x="b"])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :is([x], :not([xy="a"])) attribute-name prefix (fail-closed)', () => {
+    const result = errors('.page :is([x], :not([xy="a"])) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
