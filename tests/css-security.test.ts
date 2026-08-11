@@ -321,3 +321,40 @@ describe('CSS round 5 bypass regression suite', () => {
     expect(result.valid).toBe(true); // durations up to 30s x 1 iteration
   });
 });
+
+describe('CSS round 6 bypass regression suite', () => {
+  it('rejects direct-root pseudo selectors', () => {
+    const a = errors('.page:is(*) { opacity: 0; }');
+    expect(a.some((m) => m.includes('hide or disable'))).toBe(true);
+    const b = errors('.page:nth-child(n) { visibility: hidden; }');
+    expect(b.some((m) => m.includes('hide or disable'))).toBe(true);
+    const c = errors('.page-content:where(*) { pointer-events: none; }');
+    expect(c.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :is() with mixed universal and non-universal branches', () => {
+    const result = errors('.page :is(*, p) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects nested forgiving pseudos', () => {
+    const result = errors('.page :is(:where(*)) { visibility: hidden; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects math functions in animation iteration count', () => {
+    const result = errors('.page p { animation-duration: 1s; animation-iteration-count: max(31, 31); }');
+    expect(result.some((m) => m.toLowerCase().includes('math functions'))).toBe(true);
+  });
+
+  it('rejects scientific notation durations over the runtime cap', () => {
+    const result = errors('.page p { animation-duration: 4e1s; animation-iteration-count: 1; }');
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('allows non-hiding descendant selectors on the root', () => {
+    // .page p applies to descendants, not the root: not whole-note hiding.
+    const result = errors('.page p { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
+  });
+});

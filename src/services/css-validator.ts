@@ -243,15 +243,19 @@ function selectorCanHideWholePage(rule: Rule): boolean {
       'nth-last-child',
       'nth-last-of-type',
     ]);
-    const forgivingPseudos = new Set(['is', 'where', 'not']);
+    const forgivingPseudos = new Set(['is', 'where']);
     for (const node of ast.nodes) {
       if (!isPageRooted(node)) {
         continue;
       }
       const compounds = compoundSequence(node);
-      // Direct root (`.page`, `.page-content`): the property denylist
-      // covers hiding declarations on the root itself.
-      if (compounds.length === 1 && compounds[0]!.every((part) => part.type === 'class' || part.type === 'comment')) {
+      // A single-compound selector directly targets the page root itself:
+      // `.page`, `.page:is(*)`, `.page:nth-child(n)`,
+      // `.page-content:where(*)`. Hiding declarations on the root hide the
+      // whole note, so classify these as root-capable regardless of pseudo
+      // suffixes. Multi-compound selectors (.page p) apply to descendants,
+      // not the root, and are handled by the universal-compound loop below.
+      if (compounds.length === 1) {
         return true;
       }
       for (let index = 1; index < compounds.length; index += 1) {
@@ -268,8 +272,13 @@ function selectorCanHideWholePage(rule: Rule): boolean {
 /**
  * A compound matches every element when it contains only universal
  * selectors, comments, structural pseudos (`*:nth-child(n)`,
- * `*:first-child`), or a forgiving list pseudo whose argument is a
- * universal (`.page :is(*)`, `.page :where(*)`).
+ * `*:first-child`), or a forgiving list pseudo that CAN match a universal
+ * (`.page :is(*)`, `.page :is(*, p)`, `.page :where(*):where(*)`).
+ *
+ * `:is()` and `:where()` are alternatives: a single universal branch makes
+ * the whole pseudo match everything, so capability is `some(branch)`.
+ * `:not()` is handled separately and is never universal-capable on its own
+ * (`:not(*)` matches nothing).
  */
 function compoundMatchesEverything(
   compound: Array<import('postcss-selector-parser').Node>,
@@ -296,22 +305,15 @@ function compoundMatchesEverything(
         sawMeaningful = true;
         continue;
       }
-      // `:is(*)`, `:where(*)`, `:not(*)` with a universal-only argument.
-      if (
-        forgivingPseudos.has(pseudoName) &&
-        'nodes' in part &&
-        Array.isArray(part.nodes) &&
-        part.nodes.length > 0 &&
-        part.nodes.every((inner) => {
-          if (inner.type === 'selector') {
-            return 'nodes' in inner && Array.isArray(inner.nodes) &&
-              inner.nodes.every((leaf) => leaf.type === 'universal' || leaf.type === 'comment');
-          }
-          return inner.type === 'universal' || inner.type === 'comment';
-        })
-      ) {
-        sawMeaningful = true;
-        continue;
+      // `:is(...)` / `:where(...)`: any single branch that matches
+      // everything makes the pseudo match everything. `:not(...)` matches
+      // the complement, so it is never universal-capable by itself.
+      if (forgivingPseudos.has(pseudoName)) {
+        if (pseudoMatchesEverything(part, structuralPseudos, forgivingPseudos)) {
+          sawMeaningful = true;
+          continue;
+        }
+        return false;
       }
     }
     // Any other selector part (class, attribute, element, non-universal
@@ -319,6 +321,43 @@ function compoundMatchesEverything(
     return false;
   }
   return sawMeaningful;
+}
+
+/**
+ * True when a functional `:is()`/`:where()` pseudo can match every element:
+ * at least one of its selector branches is universal-capable, evaluated
+ * recursively so nested `:is(:where(*))` is recognized.
+ */
+function pseudoMatchesEverything(
+  part: import('postcss-selector-parser').Node,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  if (!('nodes' in part) || !Array.isArray(part.nodes) || part.nodes.length === 0) {
+    return false;
+  }
+  return part.nodes.some((inner) => {
+    if (inner.type === 'selector') {
+      if (!('nodes' in inner) || !Array.isArray(inner.nodes)) {
+        return false;
+      }
+      // A selector branch matches everything when it is a single compound
+      // with only universal-capable parts.
+      return compoundMatchesEverything(inner.nodes, structuralPseudos, forgivingPseudos);
+    }
+    if (inner.type === 'pseudo') {
+      // Handle nested functional pseudos like :where(*) inside :is().
+      const pseudoName = inner.value.replace(/^:/, '').toLowerCase();
+      if (forgivingPseudos.has(pseudoName)) {
+        return pseudoMatchesEverything(inner, structuralPseudos, forgivingPseudos);
+      }
+      if (structuralPseudos.has(pseudoName)) {
+        return true;
+      }
+      return false;
+    }
+    return inner.type === 'universal' || inner.type === 'comment';
+  });
 }
 
 /** True when a selector list node starts with .page or .page-content. */
@@ -621,9 +660,11 @@ export function validateCustomCss(css: string): ValidationResult {
         });
       }
       // Bound total runtime for every comma-separated animation: duration x
-      // iterations. Iteration counts must be literal numbers (var()/attr()/
-      // calc() rejected because they can represent unbounded values).
-      if (/var\s*\(|attr\s*\(|calc\s*\(/.test(value)) {
+      // iterations. Iteration counts must be literal numbers. Reject all
+      // math functions (calc, min, max, clamp, round, mod, rem, abs, sign,
+      // pow, sqrt, hypot, log, exp, trig) and var()/attr() because they can
+      // represent unbounded values that regex extraction cannot bound.
+      if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {
         issues.push({
           severity: 'error',
           path: `css.${property}`,
@@ -632,21 +673,22 @@ export function validateCustomCss(css: string): ValidationResult {
         });
       }
       for (const part of splitTopLevel(value)) {
-        // Durations are identified by their unit (ms|s), NOT by numeric
-        // comparison, so `spin 6s 6 linear` keeps 6 as the iteration count.
-        const durations = [...part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)];
-        // Iteration count: a bare number token (not carrying a time unit and
-        // not part of a function's parameters). The regex only matches
-        // numbers whose next char is whitespace, a comma, or end-of-part,
-        // so unit-carrying durations never appear here.
+        // Durations are identified by their unit (ms|s) and may use CSS
+        // scientific notation (4e1s = 40s).
+        const durations = [...part.matchAll(/(\d+(?:\.\d+)?)(e[+-]?\d+)?(ms|s)\b/gi)];
+        // Iteration count: a bare number token (no time unit, not inside a
+        // function). Regex only matches numbers whose next char is
+        // whitespace, comma, or end-of-part.
         const bareNumbers: number[] = [];
-        for (const match of part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?)(?=[\s,]|$)/g)) {
+        for (const match of part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)) {
           bareNumbers.push(Number.parseFloat(match[2] ?? '0'));
         }
         let totalSeconds = 0;
         for (const match of durations) {
-          const amount = Number.parseFloat(match[1] ?? '0');
-          totalSeconds += match[2] === 'ms' ? amount / 1000 : amount;
+          const mantissa = Number.parseFloat(match[1] ?? '0');
+          const exponent = match[2] ? Number.parseFloat(match[2].replace(/^[eE]/, '')) : 0;
+          const amount = mantissa * 10 ** exponent;
+          totalSeconds += match[3] === 'ms' ? amount / 1000 : amount;
         }
         const iterationCount = bareNumbers.length > 0
           ? Math.max(...bareNumbers)
@@ -702,12 +744,13 @@ export function validateCustomCss(css: string): ValidationResult {
       if (property === 'animation') {
         for (const part of splitTopLevel(value)) {
           let partSeconds = 0;
-          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)) {
-            const amount = Number.parseFloat(match[1] ?? '0');
-            partSeconds += match[2] === 'ms' ? amount / 1000 : amount;
+          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(e[+-]?\d+)?(ms|s)\b/gi)) {
+            const mantissa = Number.parseFloat(match[1] ?? '0');
+            const exponent = match[2] ? Number.parseFloat(match[2].replace(/^[eE]/, '')) : 0;
+            partSeconds += (match[3] === 'ms' ? mantissa * 10 ** exponent / 1000 : mantissa * 10 ** exponent);
           }
           shorthandDurations.push(partSeconds);
-          const bareNumbers = [...part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?)(?=[\s,]|$)/g)]
+          const bareNumbers = [...part.matchAll(/(^|[\s,])(\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?=[\s,]|$)/gi)]
             .map((match) => Number.parseFloat(match[2] ?? '0'));
           shorthandIterations.push(bareNumbers.length > 0 ? Math.max(...bareNumbers) : 1);
         }
@@ -716,9 +759,10 @@ export function validateCustomCss(css: string): ValidationResult {
         durationOverride = [];
         for (const part of splitTopLevel(value)) {
           let partSeconds = 0;
-          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(ms|s)\b/g)) {
-            const amount = Number.parseFloat(match[1] ?? '0');
-            partSeconds += match[2] === 'ms' ? amount / 1000 : amount;
+          for (const match of part.matchAll(/(\d+(?:\.\d+)?)(e[+-]?\d+)?(ms|s)\b/gi)) {
+            const mantissa = Number.parseFloat(match[1] ?? '0');
+            const exponent = match[2] ? Number.parseFloat(match[2].replace(/^[eE]/, '')) : 0;
+            partSeconds += (match[3] === 'ms' ? mantissa * 10 ** exponent / 1000 : mantissa * 10 ** exponent);
           }
           durationOverride.push(partSeconds);
         }
@@ -726,16 +770,16 @@ export function validateCustomCss(css: string): ValidationResult {
       if (property === 'animation-iteration-count') {
         iterationOverride = [];
         for (const part of splitTopLevel(value)) {
-          const match = part.match(/(\d+(?:\.\d+)?)\s*$/);
+          const match = part.match(/(\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*$/);
           iterationOverride.push(match ? Number.parseFloat(match[1] ?? '1') : 1);
         }
       }
-      if (/var\s*\(|attr\s*\(|calc\s*\(/.test(value)) {
+      if (/var\s*\(|attr\s*\(|(?:calc|min|max|clamp|round|mod|rem|abs|sign|pow|sqrt|hypot|log|exp|sin|cos|tan|asin|acos|atan|atan2)\s*\(/i.test(value)) {
         unsafeVar = true;
       }
     });
     if (unsafeVar) {
-      return; // var()/calc() case already reported by the declaration-level check.
+      return; // var()/math function case already reported at declaration level.
     }
     // CSS cascade: the `animation` shorthand resets unspecified longhands to
     // their initial values, and longhands declared after override the
