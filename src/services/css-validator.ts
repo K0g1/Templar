@@ -127,6 +127,17 @@ function splitTopLevel(value: string): string[] {
   parts.push(current);
   return parts;
 }
+/**
+ * Replaces CSS comments with spaces so token-boundary regexes see the same
+ * tokens a CSS tokenizer would (`1000000000/**\/spin` becomes
+ * `1000000000 spin`). Comments carry no numeric meaning but PostCSS retains
+ * them in declaration values when both neighboring tokens are non-space.
+ */
+function stripCssComments(value: string): string {
+  return value.replace(/\/\*[\s\S]*?\*\//g, ' ');
+}
+
+
 
 function selectorStartsWithVirtualRoot(selector: string): boolean {
   return /^\.page(?:-content)?(?=$|[\s.:#[])/.test(selector.trim());
@@ -273,12 +284,13 @@ function compoundMatchesEverything(
         }
         return false;
       }
-      // `:not(...)`: logical negation. `:not(:not(X))` is equivalent to X,
-      // so a double negation of a universal resolves back to universal
-      // (e.g. `:not(:not(*))` matches every element). A single `:not(*`
-      // matches nothing and is never universal-capable.
+      // `:not(...)`: logical negation over a selector list. `:not(L)`
+      // matches everything when EVERY selector in L matches nothing
+      // (e.g. `:not(:not(*), :not(*))` - each branch matches nothing, so
+      // the negation matches everything). Handled recursively, not as a
+      // syntactic double-negation special case.
       if (pseudoName === 'not') {
-        if (pseudoIsDoubleNegationOfUniversal(part, structuralPseudos, forgivingPseudos)) {
+        if (notPseudoMatchesEverything(part, structuralPseudos, forgivingPseudos)) {
           sawMeaningful = true;
           continue;
         }
@@ -329,7 +341,7 @@ function pseudoMatchesEverything(
         return pseudoMatchesEverything(inner, structuralPseudos, forgivingPseudos);
       }
       if (pseudoName === 'not') {
-        return pseudoIsDoubleNegationOfUniversal(inner, structuralPseudos, forgivingPseudos);
+        return notPseudoMatchesEverything(inner, structuralPseudos, forgivingPseudos);
       }
       if (structuralPseudos.has(pseudoName)) {
         return true;
@@ -341,86 +353,105 @@ function pseudoMatchesEverything(
 }
 
 /**
- * True when a `:not(...)` pseudo is the double negation of a universal-
- * capable selector (`:not(:not(*))`, `:not(:not(:where(*)))`), which by
- * logical equivalence matches every element. A plain `:not(universal)`
- * matches nothing and is never universal-capable; triple negation
- * `:not(:not(:not(*)))` is equivalent to `:not(*)` (matches nothing) and
- * is also not universal-capable.
+ * True when a `:not(...)` pseudo matches every element: every selector in
+ * its argument list must match nothing (`:not(:not(*))` because the branch
+ * `:not(*)` matches nothing, and lists like `:not(:not(*), :not(*))`).
+ * Modeled recursively so complex and list arguments work.
  */
-function pseudoIsDoubleNegationOfUniversal(
+function notPseudoMatchesEverything(
   part: import('postcss-selector-parser').Node,
   structuralPseudos: Set<string>,
   forgivingPseudos: Set<string>,
 ): boolean {
-  // part is `:not(...)`; extract its single argument node.
-  const inner = singlePseudoArgument(part);
-  if (!inner || inner.type !== 'pseudo') {
-    return false;
-  }
-  const innerName = inner.value.replace(/^:/, '').toLowerCase();
-  if (innerName !== 'not') {
-    // `:not(:is(*))` matches nothing (complement of universal), so it is
-    // not universal-capable. Only a double negation resolves to universal.
-    return false;
-  }
-  // inner is `:not(Y)`; Y must itself match everything.
-  const innermost = singlePseudoArgument(inner);
-  if (!innermost) {
-    return false;
-  }
-  return pseudoArgumentMatchesEverything(innermost, structuralPseudos, forgivingPseudos);
-}
-
-/** Returns the single argument node of a functional pseudo, if any. */
-function singlePseudoArgument(
-  part: import('postcss-selector-parser').Node,
-): import('postcss-selector-parser').Node | null {
-  if (!('nodes' in part) || !Array.isArray(part.nodes) || part.nodes.length !== 1) {
-    return null;
-  }
-  const inner = part.nodes[0];
-  if (!inner) {
-    return null;
-  }
-  if (inner.type === 'selector') {
-    if (!('nodes' in inner) || !Array.isArray(inner.nodes) || inner.nodes.length !== 1) {
-      return null;
-    }
-    const leaf = inner.nodes[0];
-    return leaf ?? null;
-  }
-  return inner;
+  const branches = pseudoArgumentBranches(part);
+  return branches.length > 0 && branches.every((branch) =>
+    branchMatchesNothing(branch, structuralPseudos, forgivingPseudos),
+  );
 }
 
 /**
- * True when a selector node inside a negation chain matches every element:
- * a universal, a structural pseudo, a forgiving list pseudo with a
- * universal branch, or another double negation (e.g. `:not(:not(*))` as
- * the argument of `:not(...)`).
+ * True when a single pseudo matches nothing.
+ * - `:not(L)` matches nothing when SOME branch of L matches everything
+ *   (`:not(*)`, `:not(*, .foo)` because the universal branch covers all).
+ * - `:is(L)`/`:where(L)` matches nothing when EVERY branch matches
+ *   nothing.
  */
-function pseudoArgumentMatchesEverything(
+function pseudoMatchesNothing(
   part: import('postcss-selector-parser').Node,
   structuralPseudos: Set<string>,
   forgivingPseudos: Set<string>,
 ): boolean {
-  if (part.type === 'universal' || part.type === 'comment') {
-    return true;
-  }
   if (part.type !== 'pseudo') {
     return false;
   }
   const pseudoName = part.value.replace(/^:/, '').toLowerCase();
-  if (structuralPseudos.has(pseudoName)) {
-    return true;
+  const branches = pseudoArgumentBranches(part);
+  if (pseudoName === 'not') {
+    return branches.some((branch) =>
+      branchMatchesEverything(branch, structuralPseudos, forgivingPseudos),
+    );
   }
   if (forgivingPseudos.has(pseudoName)) {
-    return pseudoMatchesEverything(part, structuralPseudos, forgivingPseudos);
-  }
-  if (pseudoName === 'not') {
-    return pseudoIsDoubleNegationOfUniversal(part, structuralPseudos, forgivingPseudos);
+    return branches.length > 0 && branches.every((branch) =>
+      branchMatchesNothing(branch, structuralPseudos, forgivingPseudos),
+    );
   }
   return false;
+}
+
+/** Returns the selector branches inside a functional pseudo. */
+function pseudoArgumentBranches(
+  part: import('postcss-selector-parser').Node,
+): Array<import('postcss-selector-parser').Node> {
+  if (!('nodes' in part) || !Array.isArray(part.nodes)) {
+    return [];
+  }
+  return part.nodes;
+}
+
+/**
+ * True when a selector branch matches nothing: it must be exactly one
+ * pseudo that itself matches nothing (a class or element compound always
+ * matches some elements).
+ */
+function branchMatchesNothing(
+  branch: import('postcss-selector-parser').Node,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  const children = branchChildren(branch);
+  if (children.length !== 1 || children[0]?.type !== 'pseudo') {
+    return false;
+  }
+  return pseudoMatchesNothing(children[0], structuralPseudos, forgivingPseudos);
+}
+
+/**
+ * True when a selector branch matches every element: every compound in the
+ * branch is universal-capable (`*`, `* > *`, `*:nth-child(n)`, `:is(*)`).
+ */
+function branchMatchesEverything(
+  branch: import('postcss-selector-parser').Node,
+  structuralPseudos: Set<string>,
+  forgivingPseudos: Set<string>,
+): boolean {
+  const compounds = compoundSequence(branch);
+  return (
+    compounds.length > 0 &&
+    compounds.every((compound) =>
+      compoundMatchesEverything(compound, structuralPseudos, forgivingPseudos),
+    )
+  );
+}
+
+/** Returns the leaf nodes of a selector branch (or the branch itself). */
+function branchChildren(
+  branch: import('postcss-selector-parser').Node,
+): Array<import('postcss-selector-parser').Node> {
+  if ('nodes' in branch && Array.isArray(branch.nodes)) {
+    return branch.nodes;
+  }
+  return [branch];
 }
 
 /** True when a selector list node starts with .page or .page-content. */
@@ -575,7 +606,7 @@ export function validateCustomCss(css: string): ValidationResult {
 
   root.walkDecls((declaration) => {
     const property = decodeCssEscapes(declaration.prop).toLowerCase();
-    const value = decodeCssEscapes(declaration.value).toLowerCase();
+    const value = stripCssComments(decodeCssEscapes(declaration.value).toLowerCase());
     if (declaration.important) {
       issues.push({
         severity: 'error',
@@ -808,7 +839,7 @@ export function validateCustomCss(css: string): ValidationResult {
   let maxIterationCount = 1;
   root.walkDecls((declaration) => {
     const property = decodeCssEscapes(declaration.prop).toLowerCase();
-    const value = decodeCssEscapes(declaration.value);
+    const value = stripCssComments(decodeCssEscapes(declaration.value));
     const isAnimationShorthand = property === 'animation';
     const isDuration = property === 'animation' || property === 'animation-duration';
     const isIteration = property === 'animation' || property === 'animation-iteration-count';

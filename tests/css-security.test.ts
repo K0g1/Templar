@@ -473,3 +473,36 @@ describe('CSS round 10 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 11 bypass regression suite', () => {
+  it('rejects :not() with selector list double negation', () => {
+    const result = errors('.page :not(:not(*), :not(*)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects :not() with complex universal branch', () => {
+    const result = errors('.page :not(:not(* > *)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects comment-hidden iteration counts', () => {
+    const result = errors([
+      '@keyframes spin { from { opacity: .9; } to { opacity: 1; } }',
+      '.page p { animation: 1s 1000000000/**/spin; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('rejects comment-hidden count before timing function', () => {
+    const result = errors([
+      '@keyframes spin { from { opacity: .9; } to { opacity: 1; } }',
+      '.page p { animation: 1s 1000000000/**/linear; }',
+    ].join('\n'));
+    expect(result.some((m) => m.toLowerCase().includes('runtime'))).toBe(true);
+  });
+
+  it('still allows :not(*) which matches nothing', () => {
+    const result = errors('.page :not(*) { color: red; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(false);
+  });
+});
