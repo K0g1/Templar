@@ -276,9 +276,11 @@ function compoundMatchesEverything(
         continue;
       }
       // `:is(...)` / `:where(...)`: any single branch that matches
-      // everything makes the pseudo match everything.
+      // everything makes the pseudo match everything, and complementary
+      // branches (`:is(.x, :not(.x))`) jointly cover every element.
       if (forgivingPseudos.has(pseudoName)) {
-        if (pseudoMatchesEverything(part, structuralPseudos, forgivingPseudos)) {
+        if (pseudoMatchesEverything(part, structuralPseudos, forgivingPseudos) ||
+            forgivingListCoversEverything(part)) {
           sawMeaningful = true;
           continue;
         }
@@ -435,24 +437,88 @@ function branchMatchesNothing(
  * - any contained pseudo matches nothing (`.x:not(*)` - the `:not(*)`
  *   pseudo matches nothing, so the compound is empty); or
  * - a `:not(...)` argument excludes every simple selector the compound
- *   selects (`.x:not(.x)`, `*:not(*)`).
+ *   selects (`.x:not(.x)`, `*:not(*)`); or
+ * - two sibling pseudos are exact negations of each other
+ *   (`:not(.x):not(:not(.x))` requires both `not .x` and `.x`).
  */
 function compoundMatchesNothing(
   compound: Array<import('postcss-selector-parser').Node>,
   structuralPseudos: Set<string>,
   forgivingPseudos: Set<string>,
 ): boolean {
-  for (const part of compound) {
-    if (part.type === 'pseudo') {
-      const pseudoName = part.value.replace(/^:/, '').toLowerCase();
-      if (pseudoName === 'not' || forgivingPseudos.has(pseudoName)) {
-        if (pseudoMatchesNothing(part, structuralPseudos, forgivingPseudos)) {
-          return true;
-        }
+  const pseudos = compound.filter((part) => part.type === 'pseudo');
+  for (const part of pseudos) {
+    const pseudoName = part.value.replace(/^:/, '').toLowerCase();
+    if (pseudoName === 'not' || forgivingPseudos.has(pseudoName)) {
+      if (pseudoMatchesNothing(part, structuralPseudos, forgivingPseudos)) {
+        return true;
+      }
+    }
+  }
+  // Sibling negation contradiction: `:not(X)` and `:not(:not(X))` (which
+  // equals X) in the same compound exclude each other's sets.
+  for (let left = 0; left < pseudos.length; left += 1) {
+    for (let right = left + 1; right < pseudos.length; right += 1) {
+      const a = pseudos[left]!;
+      const b = pseudos[right]!;
+      if (pseudoIsExactNegationOf(a, b) || pseudoIsExactNegationOf(b, a)) {
+        return true;
       }
     }
   }
   return compoundIsContradiction(compound);
+}
+
+/** True when pseudo `a` is exactly `:not(b)` (single argument). */
+function pseudoIsExactNegationOf(
+  a: import('postcss-selector-parser').Node,
+  b: import('postcss-selector-parser').Node,
+): boolean {
+  if (a.type !== 'pseudo') {
+    return false;
+  }
+  if (a.value.replace(/^:/, '').toLowerCase() !== 'not') {
+    return false;
+  }
+  const branches = pseudoArgumentBranches(a);
+  if (branches.length !== 1) {
+    return false;
+  }
+  return branches[0]!.toString().trim() === b.toString().trim();
+}
+
+/**
+ * True when a `:is(...)`/`:where(...)` list covers every element through
+ * complementary branches: one branch is the exact negation of another
+ * (`:is(.x, :not(.x))` matches everything because every element either
+ * has `.x` or does not).
+ */
+function forgivingListCoversEverything(
+  part: import('postcss-selector-parser').Node,
+): boolean {
+  const branches = pseudoArgumentBranches(part);
+  for (let left = 0; left < branches.length; left += 1) {
+    for (let right = left + 1; right < branches.length; right += 1) {
+      const a = branches[left]!;
+      const b = branches[right]!;
+      if (branchIsExactNegationOf(a, b) || branchIsExactNegationOf(b, a)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** True when selector branch `a` is exactly `:not(b)` (single argument). */
+function branchIsExactNegationOf(
+  a: import('postcss-selector-parser').Node,
+  b: import('postcss-selector-parser').Node,
+): boolean {
+  const aChildren = branchChildren(a);
+  if (aChildren.length !== 1 || aChildren[0]?.type !== 'pseudo') {
+    return false;
+  }
+  return pseudoIsExactNegationOf(aChildren[0], b);
 }
 
 /**
@@ -763,10 +829,10 @@ export function validateCustomCss(css: string): ValidationResult {
       declaration.parent?.type === 'rule' &&
       selectorCanHideWholePage(declaration.parent) &&
       ((property === 'display' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
-        (property === 'visibility' && (value.trim() === 'hidden' || /var\s*\(/.test(value))) ||
+        (property === 'visibility' && (value.trim() === 'hidden' || value.trim() === 'collapse' || /var\s*\(/.test(value))) ||
         (property === 'content-visibility' && (value.trim() === 'hidden' || /var\s*\(/.test(value))) ||
         (property === 'opacity' &&
-          (Number.parseFloat(value) === 0 || /var\s*\(|calc\s*\(/.test(value))) ||
+          (Number.parseFloat(value) <= 0 || /var\s*\(|calc\s*\(/.test(value))) ||
         (property === 'pointer-events' && (value.trim() === 'none' || /var\s*\(/.test(value))) ||
         (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())) ||
         // Transform/filter/clip/mask can visually erase the note through

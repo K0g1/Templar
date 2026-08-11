@@ -540,3 +540,25 @@ describe('CSS round 13 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 14 bypass regression suite', () => {
+  it('rejects complementary :is() branches covering everything', () => {
+    const result = errors('.page :is(.x, :not(.x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects sibling pseudo negation contradiction', () => {
+    const result = errors('.page :not(:not(.x):not(:not(.x))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects visibility collapse on whole-note selector', () => {
+    const result = errors('.page * { visibility: collapse; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects negative opacity (clamped to 0) on whole-note selector', () => {
+    const result = errors('.page * { opacity: -1; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
