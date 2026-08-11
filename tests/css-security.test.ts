@@ -648,3 +648,30 @@ describe('CSS round 17 bypass regression suite', () => {
     expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
   });
 });
+
+describe('CSS round 18 bypass regression suite', () => {
+  it('rejects deep :is(:where()) contradiction', () => {
+    const result = errors('.page :not(.x:not(:is(:where(.x)))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects attribute contradiction through :is()', () => {
+    const result = errors('.page :not([x]:not(:is([x]))) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects escaped-class contradiction', () => {
+    const result = errors('.page :not(.x:not(.\\78)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects complementary branches wrapped in :where()', () => {
+    const result = errors('.page :is(:where(.x), :not(.x)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+
+  it('rejects case-insensitive tag complement', () => {
+    const result = errors('.page :is(P, :not(p)) { display: none; }');
+    expect(result.some((m) => m.includes('hide or disable'))).toBe(true);
+  });
+});
