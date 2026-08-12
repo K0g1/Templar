@@ -109,6 +109,8 @@ const reservedRhythmProperties = new Set([
   'padding-top',
 ]);
 const reservedRootAvailabilityProperties = new Set([
+  'display',
+  'content-visibility',
   'visibility',
   'opacity',
   'pointer-events',
@@ -120,6 +122,9 @@ const reservedRootAvailabilityProperties = new Set([
   'mask-image',
   '-webkit-mask',
   '-webkit-mask-image',
+  'transform',
+  'scale',
+  'zoom',
 ]);
 const unstableLengthUnit =
   /[-+]?(?:\d+|\d*\.\d+)\s*(?:cqb|cqh|cqi|cqmax|cqmin|cqw|dvh|dvw|lvh|lvw|svh|svw|vb|vh|vi|vmax|vmin|vw)\b/i;
@@ -352,7 +357,7 @@ export function validateCustomCss(
     if (
       parentRule &&
       reservedRootAvailabilityProperties.has(property) &&
-      targetsRoot
+      (targetsRoot || targetsWholePage)
     ) {
       issues.push({
         severity: 'error',

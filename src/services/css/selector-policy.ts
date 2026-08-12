@@ -25,11 +25,17 @@ export interface SelectorAnalysis {
   startsWithVirtualRoot: boolean;
   targetsVirtualRoot: boolean;
   targetsWholePage: boolean;
+  coverage: SelectorCoverage;
   targetsRhythmElement: boolean;
   globalToken: string | null;
   usesPrivateRuntimeClass: boolean;
   usesGlobalEscape: boolean;
 }
+
+export type SelectorCoverage =
+  | 'virtual-root'
+  | 'all-descendants'
+  | 'specific-descendant';
 
 export function parseSelector(selector: string): Selector[] {
   const ast = selectorParser().astSync(selector);
@@ -91,15 +97,29 @@ function analyzeRoot(root: Selector): SelectorAnalysis {
   const text = root.toString().trim();
   const startsWithVirtualRoot = rootClassName(root) !== null;
   let targetsVirtualRoot = startsWithVirtualRoot;
+  let coverage: SelectorCoverage = 'specific-descendant';
   if (startsWithVirtualRoot) {
     // A combinator changes the subject from the page root to a descendant.
     const firstCombinator = root.nodes.findIndex((node) => node.type === 'combinator');
     targetsVirtualRoot = firstCombinator < 0;
+    if (targetsVirtualRoot) {
+      coverage = 'virtual-root';
+    } else {
+      const lastCombinator = root.nodes.map((node) => node.type).lastIndexOf('combinator');
+      const combinator = lastCombinator >= 0 ? root.nodes[lastCombinator] : null;
+      const subject = lastCombinator >= 0
+        ? root.nodes.slice(lastCombinator + 1).filter((node) => node.type !== 'combinator')
+        : [];
+      if (
+        combinator?.type === 'combinator' &&
+        (combinator.value === ' ' || combinator.value === '>') &&
+        isUniversalSubjectCompound(subject)
+      ) {
+        coverage = 'all-descendants';
+      }
+    }
   }
-  const trailingNodes = root.nodes.slice(1).filter((node) => node.type !== 'combinator');
-  const targetsWholePage = startsWithVirtualRoot && (targetsVirtualRoot || (
-    trailingNodes.length === 1 && trailingNodes[0]?.type === 'universal'
-  ));
+  const targetsWholePage = coverage === 'virtual-root' || coverage === 'all-descendants';
   let targetsRhythmElement = false;
   let globalToken: string | null = null;
   let usesPrivateRuntimeClass = false;
@@ -124,11 +144,31 @@ function analyzeRoot(root: Selector): SelectorAnalysis {
     startsWithVirtualRoot,
     targetsVirtualRoot,
     targetsWholePage,
+    coverage,
     targetsRhythmElement,
     globalToken,
     usesPrivateRuntimeClass,
     usesGlobalEscape,
   };
+}
+
+/** Return true only when a compound can match every descendant element. */
+export function isUniversalSubjectCompound(nodes: readonly Node[]): boolean {
+  let universal = false;
+  for (const node of nodes) {
+    if (node.type === 'universal') {
+      universal = true;
+      continue;
+    }
+    if (node.type !== 'pseudo') return false;
+    const value = decodeCssEscapes(node.value).toLowerCase();
+    if (value !== ':is' && value !== ':where') return false;
+    const nested = (node as Node & { nodes?: Node[] }).nodes ?? [];
+    const branches = nested.filter(isSelectorNode);
+    if (!branches.some((branch) => isUniversalSubjectCompound(branch.nodes))) return false;
+    universal = true;
+  }
+  return universal;
 }
 
 export function decodeCssEscapes(value: string): string {

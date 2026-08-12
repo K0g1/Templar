@@ -362,6 +362,14 @@ Every selector must start with `.page` or `.page-content`. Descendants and pseud
 .page blockquote::before { ... }
 ```
 
+Selectors whose subject is the virtual root itself, or whose final subject is
+the universal descendant (`.page *`, `.page > :is(*)`, and equivalent
+`:where(*)` forms), are treated as whole-page coverage. Availability-affecting
+properties such as `display`, `visibility`, `content-visibility`, `opacity`,
+`pointer-events`, filters, masks, clipping, transforms, `scale`, and `zoom`
+are rejected for that coverage. Narrow selectors such as `.page img` remain
+available for decorative effects.
+
 Invalid examples:
 
 ```css

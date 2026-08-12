@@ -160,4 +160,35 @@ describe('safe CSS compiler', () => {
     expect(validateCustomCss('.page h1 { z-index: calc(1 + 1); }').valid).toBe(false);
     expect(validateCustomCss('.page h1 { z-index: var(--layer); }').valid).toBe(false);
   });
+
+  it('blocks availability-affecting declarations on all descendant coverage', () => {
+    for (const css of [
+      '.page * { filter: opacity(0); }',
+      '.page > * { clip-path: inset(100%); }',
+      '.page * { opacity: calc(0); }',
+      '.page :is(*) { pointer-events: none; }',
+      '.page :where(*) { visibility: hidden; }',
+      '.page * { mask-image: linear-gradient(transparent, transparent); }',
+      '.page * { transform: scale(0); }',
+      '.page * { scale: 0; }',
+      '.page * { zoom: 0; }',
+      String.raw`.\70 age :is(*) { opacity: 0; }`,
+      '.page > :where(*) { filter: blur(100px); }',
+    ]) {
+      const result = validateCustomCss(css);
+      expect(result.valid, css).toBe(false);
+      expect(result.issues.some((issue) => issue.path.startsWith('css.')), css).toBe(true);
+    }
+  });
+
+  it('allows availability properties on narrower descendants', () => {
+    for (const css of [
+      '.page img { filter: grayscale(1); }',
+      '.page .callout { opacity: 0.8; }',
+      '.page p:hover { transform: translateX(1px); }',
+      '.page *:not(img) { opacity: 0.9; }',
+    ]) {
+      expect(validateCustomCss(css).valid, css).toBe(true);
+    }
+  });
 });
