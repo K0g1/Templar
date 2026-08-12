@@ -11,7 +11,7 @@ This is the current implementation reference for Templar. It is deliberately mor
 | Current release | `1.2.0-alpha.2` (renderer and baseline audit prerelease) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
-| Installation channel | BRAT recommended for alpha testing; manual release artifacts remain the fallback; not listed in Community Plugins yet |
+| Installation channel | BRAT supported for alpha testing under final clean-vault validation; manual release artifacts remain supported; not listed in Community Plugins yet |
 | Built-in catalog | 132 styles: 28 hand-tuned core styles plus 104 data-driven pack styles |
 | Themed packs | 13 folders/packs, including Essentials, Color Stories, Seasons, Celebrations & Occasions, Academia, Professional, Journaling & Wellness, Travel, Nature, Vintage & Editorial, Dark & Neon, Fantasy & Whimsy, and Pastels |
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
@@ -291,7 +291,7 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | `src/ui/styles-view.ts` | Current Note states/actions, four library sections, search/folder/usage/density, lightweight cards, live preview, and roving keyboard navigation. |
 | `src/ui/settings-tab.ts` | Rendering toggles, default style/page flow, rules, library/creator/import, diagnostics, authoring kit, selector reference, issues, and reset. |
 | `src/ui/modals.ts` | Compatibility barrel for the workflow modules under `src/ui/modals/`. |
-| `src/ui/modals/legacy.ts` | Behavior-preserving modal implementation during the staged extraction; shared controls live in `src/ui/modals/shared.ts`. |
+| `src/ui/modals/*.ts` | Focused modal workflows; shared controls live in `src/ui/modals/shared.ts`, with composition-root coordination in `src/services/plugin-ui-controller.ts`. |
 | `src/ui/template-preview.ts` | Isolated sample content using the production compiler. |
 | `src/ui/issues.ts` | Human-readable validation issue rendering. |
 | `src/editor/hide-metadata.ts` | CodeMirror 6 line decorations for the root `templar:` YAML block; never mutates document text. |
@@ -402,7 +402,7 @@ Never repoint an existing release tag. If a released artifact is wrong, incremen
 
 ## Known limitations and intentional behavior
 
-- Templar is alpha software and is not searchable in Obsidian's Community Plugins browser. BRAT is the recommended alpha install/update channel; manual assets remain supported.
+- Templar is alpha software and is not searchable in Obsidian's Community Plugins browser. BRAT is a supported alpha install/update channel under final clean-vault validation; it remains unlabelled as recommended until the release E2E matrix is recorded. Manual assets remain supported.
 - Physical iOS and Android release smoke testing is still a maintainer gate. The bundle guard and responsive CSS are automated checks, not proof of every device behavior.
 - A style is a self-contained snapshot copied into each note. Changing a source never changes notes automatically; provenance makes explicit review/merge/replace possible. Older notes without provenance receive conservative legacy choices.
 - Folder organization is one display level. It does not create or infer vault folders, and folder separators are flattened.

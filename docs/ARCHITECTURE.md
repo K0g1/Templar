@@ -219,7 +219,7 @@ The Page Styles view takes one catalog snapshot per render and uses CSS-only pap
 
 - `styles-view.ts`: Current Note state/actions; Recent/Favorites/Built-in/My Styles; search, folder/usage filters and density; lightweight cards; live preview; and roving keyboard navigation.
 - `settings-tab.ts`: rendering/default-page behavior, Style Rules management, library/creator entry points, diagnostics, authoring kit, selector reference, and reset.
-- `modals/`: compatibility-barrelled modal workflows, shared page controls, and staged extraction modules. `legacy.ts` currently retains behavior-preserving ownership while individual workflows move without changing imports.
+- `modals/`: focused modal workflows, shared page controls, and composition-root adapters. Each workflow has its own implementation file; shared controls remain in `shared.ts`.
 - `template-preview.ts`: isolated sample document that uses the production compiler.
 - `issues.ts`: consistent human-readable validation output.
 

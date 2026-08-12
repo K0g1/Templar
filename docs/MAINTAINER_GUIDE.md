@@ -2,7 +2,7 @@
 
 The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). It records the alpha version, command/settings surface, source map, persistence and lifecycle contracts, release artifacts, and known limitations. This guide is the executable smoke-test and release checklist.
 
-At `1.2.0-alpha.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT is the recommended alpha distribution/update path. Manual installation of the three release artifacts remains the compatibility fallback; see [`INSTALLATION.md`](INSTALLATION.md).
+At `1.2.0-alpha.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT is a supported alpha distribution/update path under final clean-vault validation. Do not call it recommended until the release E2E matrix is recorded. Manual installation of the three release artifacts remains the compatibility fallback; see [`INSTALLATION.md`](INSTALLATION.md).
 
 ## Local workflow
 
@@ -55,6 +55,8 @@ Pure tests deliberately avoid importing Obsidian's Electron runtime. The integra
 Use `npm run test:coverage` for a V8 report of lines, statements, functions, and branches. Coverage is diagnostic and does not replace desktop Obsidian or physical-device evidence.
 
 The generated bundle is intentionally ignored by source control. A local live test must run `npm run build`, then copy `main.js`, `manifest.json`, and `styles.css` into the test vault's `.obsidian/plugins/templar/` directory before reloading the plugin. If the UI appears stale, compare artifact hashes and confirm the plugin folder is the one Obsidian has enabled.
+
+The current alpha's structured BRAT E2E matrix and physical-device smoke results are pending maintainer execution. The alpha policy permits those checks to remain pending only when release notes say so; automated build, mobile-bundle, privacy, and test gates do not substitute for BRAT or physical-device evidence.
 
 ## Manual smoke test
 

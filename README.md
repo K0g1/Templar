@@ -8,7 +8,7 @@ Templar turns ordinary Obsidian notes into polished journals, study sheets, proj
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 > [!IMPORTANT]
-> Templar is alpha software. BRAT is the recommended installer and update path on Obsidian versions that support the current BRAT release; manual installation remains available. Back up important vaults before testing prerelease software.
+> Templar is alpha software. BRAT is a supported alpha installation path under final clean-vault validation; this project does not call it recommended until the release E2E matrix is recorded. Manual installation remains available. Back up important vaults before testing prerelease software.
 
 ## See what your notes can become
 

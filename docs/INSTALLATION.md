@@ -2,9 +2,9 @@
 
 Templar is alpha software. Back up important vaults before testing it, and report the Obsidian version, operating system, Templar version, and installation path with any bug report.
 
-## Recommended: BRAT
+## BRAT alpha installation
 
-BRAT is the recommended alpha installer/update path on Obsidian versions that support the current BRAT release. At this documentation update, BRAT 2.2.0 requires Obsidian 1.11.4 or newer; Templar's own minimum is 1.8.0. Use manual installation for older supported Obsidian versions.
+BRAT is a supported alpha installation path under final clean-vault validation. This project does not call BRAT recommended until the release E2E matrix is recorded. At this documentation update, BRAT 2.2.0 requires Obsidian 1.11.4 or newer; Templar's own minimum is 1.8.0. Use manual installation for older supported Obsidian versions.
 
 1. Install **Obsidian42 - BRAT** from Obsidian's Community Plugins and enable it.
 2. Run **BRAT: Add a beta plugin for testing** from the command palette.
