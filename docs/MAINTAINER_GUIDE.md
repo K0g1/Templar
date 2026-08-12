@@ -58,6 +58,8 @@ The generated bundle is intentionally ignored by source control. A local live te
 
 The current alpha's structured BRAT E2E matrix and physical-device smoke results are pending maintainer execution. The alpha policy permits those checks to remain pending only when release notes say so; automated build, mobile-bundle, privacy, and test gates do not substitute for BRAT or physical-device evidence.
 
+Repository-level GitHub controls are recorded in [`REPOSITORY_GOVERNANCE.md`](REPOSITORY_GOVERNANCE.md). The active `main` ruleset and classic protection both require the observed `check` CI job, pull requests, and conversation resolution while blocking force pushes and deletion. Dependabot alerts/security updates and future-release immutability are enabled; do not mutate the existing alpha release to retrofit immutability.
+
 ## Manual smoke test
 
 Create a note containing:
