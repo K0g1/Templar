@@ -6,7 +6,11 @@ import {
   synchronizationStatus,
   type SynchronizationStatus,
 } from '../../services/synchronization';
+import type { FileOperationResult } from '../../services/operation-result';
+import { summarizeFileOperations } from '../../services/operation-result';
+import { validateCompleteTemplate } from '../../templates/validation';
 import type { TemplarNoteStyle, TemplarTemplate } from '../../types';
+import { renderOperationSummary } from '../operation-results';
 import { ConfirmationModal } from './confirmation-modal';
 
 interface SyncReviewItem {
@@ -20,6 +24,8 @@ interface SyncReviewItem {
 export class SynchronizationReviewModal extends Modal {
   private items: SyncReviewItem[] = [];
   private overview = { total: 0, upToDate: 0, localOnly: 0, safe: 0, modified: 0, legacy: 0, missing: 0 };
+  private resultEl: HTMLElement | null = null;
+  private retryableFailedPaths = new Set<string>();
 
   public constructor(
     private readonly plugin: TemplarPlugin,
@@ -58,6 +64,7 @@ export class SynchronizationReviewModal extends Modal {
 
   private render(): void {
     this.contentEl.empty();
+    this.resultEl = null;
     if (this.templateId) {
       this.contentEl.createEl('h3', { text: `Template: ${this.plugin.library.get(this.templateId)?.name ?? this.templateId}` });
     }
@@ -98,24 +105,127 @@ export class SynchronizationReviewModal extends Modal {
       replace: this.items.filter((item) => item.action === 'replace').length,
       skip: this.items.filter((item) => item.action === 'skip').length,
     };
-    new ConfirmationModal(this.plugin, 'Apply reviewed template updates?', `${String(counts.safe)} will update safely, ${String(counts.merge)} will merge local changes, ${String(counts.replace)} will be replaced, and ${String(counts.skip)} will be skipped.`, async () => this.execute(), 'Apply updates').open();
+    const selected = this.items.map((item) => ({ ...item }));
+    new ConfirmationModal(this.plugin, 'Apply reviewed template updates?', `${String(counts.safe)} will update safely, ${String(counts.merge)} will merge local changes, ${String(counts.replace)} will be replaced, and ${String(counts.skip)} will be skipped.`, async () => this.execute(selected), 'Apply updates').open();
   }
 
-  private async execute(): Promise<void> {
-    let completed = 0;
-    for (const item of this.items) {
-      if (item.action === 'skip' || !item.source) continue;
-      const style = item.action === 'merge'
+  private async execute(selected: readonly SyncReviewItem[]): Promise<void> {
+    this.retryableFailedPaths = new Set();
+    const planned: Array<{ item: SyncReviewItem; style: TemplarNoteStyle }> = [];
+    const planningResults: FileOperationResult[] = [];
+    let validationBlocked = false;
+
+    for (const item of selected) {
+      if (item.action === 'skip') {
+        planningResults.push(skipped(item.file.path, 'Skipped by the selected action.'));
+        continue;
+      }
+      if (!item.source) {
+        planningResults.push(skipped(item.file.path, 'The source template is no longer available.'));
+        continue;
+      }
+      const candidate = item.action === 'merge'
         ? mergeTemplateUpdate(item.style, item.source)
         : { ok: true as const, style: replaceWithLatestTemplate(item.style, item.source) };
-      if (!style.ok) throw new Error(style.issues.map((issue) => issue.message).join(' ') || 'The update could not be merged.');
-      await this.plugin.application.writeStyle(item.file, style.style, 'deferred');
-      completed += 1;
-      if (completed % 20 === 0) await new Promise<void>((resolve) => this.contentEl.ownerDocument.defaultView?.setTimeout(resolve, 0));
+      if (!candidate.ok) {
+        validationBlocked = true;
+        planningResults.push(failed(item.file.path, candidate.issues.map((issue) => issue.message).join(' ') || 'The update could not be merged.'));
+        continue;
+      }
+      const issues = validateCompleteTemplate(candidate.style as TemplarTemplate);
+      const errors = issues.filter((issue) => issue.severity === 'error');
+      if (errors.length > 0) {
+        validationBlocked = true;
+        planningResults.push(failed(item.file.path, errors.map((issue) => `${issue.path}: ${issue.message}`).join(' ')));
+        continue;
+      }
+      planned.push({ item, style: candidate.style });
     }
-    this.plugin.renderer.scheduleRefreshAll();
-    this.plugin.refreshSidebars();
-    new Notice(`Updated ${String(completed)} ${completed === 1 ? 'note' : 'notes'}.`);
-    this.close();
+
+    if (validationBlocked) {
+      for (const operation of planned) {
+        planningResults.push(skipped(operation.item.file.path, 'Not written because another selected candidate failed validation.'));
+      }
+      this.renderResults(summarizeFileOperations(planningResults), selected);
+      return;
+    }
+
+    const results = [...planningResults];
+    let processed = 0;
+    for (const operation of planned) {
+      try {
+        results.push(await this.plugin.application.writeStyle(operation.item.file, operation.style, 'deferred'));
+      } catch (error) {
+        this.retryableFailedPaths.add(operation.item.file.path);
+        results.push(failed(operation.item.file.path, errorMessage(error)));
+      }
+      processed += 1;
+      if (processed % 20 === 0) {
+        await new Promise<void>((resolve) => {
+          const view = this.contentEl.ownerDocument.defaultView;
+          if (view) view.setTimeout(resolve, 0);
+          else resolve();
+        });
+      }
+    }
+
+    if (results.some((result) => result.noteWritten)) {
+      try {
+        this.plugin.renderer.scheduleRefreshAll();
+      } catch (error) {
+        addWarning(results, 'refresh', `The notes were written, but the final refresh failed: ${errorMessage(error)}`);
+      }
+      try {
+        this.plugin.refreshSidebars();
+      } catch (error) {
+        addWarning(results, 'ui', `The notes were written, but the sidebar could not be refreshed: ${errorMessage(error)}`);
+      }
+    }
+
+    const summary = summarizeFileOperations(results);
+    if (summary.failed === 0 && summary.warnings === 0) {
+      new Notice(`Updated ${String(summary.succeeded)} ${summary.succeeded === 1 ? 'note' : 'notes'}.`);
+      this.close();
+      return;
+    }
+    this.renderResults(summary, selected);
   }
+
+  private renderResults(summary: ReturnType<typeof summarizeFileOperations>, selected: readonly SyncReviewItem[]): void {
+    this.resultEl?.remove();
+    this.resultEl = this.contentEl.createDiv({ cls: 'templar-operation-result-panel' });
+    renderOperationSummary(this.resultEl, summary, { showPaths: true });
+    const actions = this.resultEl.createDiv({ cls: 'modal-button-container' });
+    if (this.retryableFailedPaths.size > 0) {
+      const retry = actions.createEl('button', { cls: 'mod-cta', text: 'Retry failed' });
+      retry.addEventListener('click', () => {
+        const retryItems = selected.filter((item) => this.retryableFailedPaths.has(item.file.path));
+        void this.execute(retryItems);
+      });
+    }
+    const close = actions.createEl('button', { text: 'Close' });
+    close.addEventListener('click', () => this.close());
+  }
+}
+
+function skipped(path: string, message: string): FileOperationResult {
+  return { path, status: 'skipped', noteWritten: false, refreshed: false, warnings: [], message };
+}
+
+function failed(path: string, message: string): FileOperationResult {
+  return { path, status: 'failed', noteWritten: false, refreshed: false, warnings: [], message };
+}
+
+function addWarning(
+  results: FileOperationResult[],
+  stage: 'refresh' | 'ui',
+  message: string,
+): void {
+  for (const result of results) {
+    if (result.noteWritten) result.warnings.push({ stage, message });
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

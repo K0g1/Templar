@@ -67,4 +67,17 @@ describe('template synchronization', () => {
     };
     expect(synchronizationStatus(note, source).state).toBe('up-to-date');
   });
+
+  it('rejects a cross-field invalid merge after complete candidate validation', () => {
+    const source = clone(BUILT_IN_TEMPLATES[0]!);
+    const note = templateToNoteStyle(source);
+    note.layout.paddingLeft = 150;
+    const latest = clone(source);
+    latest.layout.paddingRight = 100;
+
+    const mergedResult = mergeTemplateUpdate(note, latest);
+    expect(mergedResult.ok).toBe(false);
+    if (mergedResult.ok) return;
+    expect(mergedResult.issues.some((issue) => issue.path === 'layout')).toBe(true);
+  });
 });
