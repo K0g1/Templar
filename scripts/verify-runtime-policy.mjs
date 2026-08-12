@@ -11,7 +11,7 @@ const policyRules = [
   { label: 'network beacon', pattern: /navigator\s*\.\s*sendBeacon\b/g },
   { label: 'requestUrl', pattern: /\brequestUrl\b/g },
   { label: 'Node runtime global', pattern: /\b(?:Buffer|process)\s*(?:\.|\[)/g },
-  { label: 'regex lookbehind', pattern: /\(\?<=[=!]?/g },
+  { label: 'regex lookbehind', pattern: /\(\?<(?=[=!])/g },
   { label: 'FileSystemAdapter', pattern: /\bFileSystemAdapter\b/g },
 ];
 

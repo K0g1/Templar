@@ -30,26 +30,50 @@ export function registerCommands(plugin: TemplarPlugin): void {
       return available;
     },
   });
-  registerCommand(plugin, { id: 'focus-style-search', name: 'Focus style search', callback: () => void plugin.focusStyleSearch() });
   registerCommand(plugin, {
-    id: 'customize-current-note', name: 'Customize current note',
+    id: 'focus-style-search',
+    name: 'Focus style search',
+    callback: () => void plugin.focusStyleSearch(),
+  });
+  registerCommand(plugin, {
+    id: 'customize-current-note',
+    name: 'Customize current note',
     checkCallback: (checking) => {
-      const file = plugin.activeFile(); const available = file !== null && plugin.frontmatter.hasStyle(file);
-      if (available && !checking) plugin.showCurrentNoteInspector(file);
+      const file = plugin.activeFile();
+      const available = file !== null && plugin.frontmatter.hasStyle(file);
+      if (available && !checking && file) plugin.showCurrentNoteInspector(file);
       return available;
     },
   });
   registerCommand(plugin, {
-    id: 'apply-last-used-style', name: 'Apply last used style',
+    id: 'apply-last-used-style',
+    name: 'Apply last used style',
     checkCallback: (checking) => {
-      const file = plugin.activeFile(); const template = plugin.library.get(plugin.settings.recentTemplateIds[0] ?? '');
+      const file = plugin.activeFile();
+      const template = plugin.library.get(plugin.settings.recentTemplateIds[0] ?? '');
       const available = file !== null && template !== null;
-      if (available && !checking) void plugin.applyTemplate(template, file);
+      if (available && !checking && file && template) void plugin.applyTemplate(template, file);
       return available;
     },
   });
-  registerCommand(plugin, { id: 'next-favorite-style', name: 'Next favorite style', checkCallback: (checking) => { const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0; if (available && !checking) void plugin.cycleFavouritePreview(1); return available; } });
-  registerCommand(plugin, { id: 'previous-favorite-style', name: 'Previous favorite style', checkCallback: (checking) => { const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0; if (available && !checking) void plugin.cycleFavouritePreview(-1); return available; } });
+  registerCommand(plugin, {
+    id: 'next-favorite-style',
+    name: 'Next favorite style',
+    checkCallback: (checking) => {
+      const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0;
+      if (available && !checking) void plugin.cycleFavouritePreview(1);
+      return available;
+    },
+  });
+  registerCommand(plugin, {
+    id: 'previous-favorite-style',
+    name: 'Previous favorite style',
+    checkCallback: (checking) => {
+      const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0;
+      if (available && !checking) void plugin.cycleFavouritePreview(-1);
+      return available;
+    },
+  });
   registerCommand(plugin, {
     id: 'apply-previewed-style',
     name: 'Apply previewed style',
@@ -66,7 +90,9 @@ export function registerCommands(plugin: TemplarPlugin): void {
     checkCallback: (checking) => {
       const leaf = plugin.activeMarkdownLeaf();
       const session = leaf ? plugin.preview.currentForLeaf(leaf) : null;
-      if (session && !checking) void plugin.preview.cancel(session.owner).then(() => plugin.refreshSidebars());
+      if (session && !checking) {
+        void plugin.preview.cancel(session.owner).then(() => plugin.refreshSidebars());
+      }
       return session !== null;
     },
   });
@@ -136,27 +162,54 @@ export function registerCommands(plugin: TemplarPlugin): void {
     },
   });
   registerCommand(plugin, {
-    id: 'toggle-paged-pageless', name: 'Toggle paged / pageless',
+    id: 'toggle-paged-pageless',
+    name: 'Toggle paged / pageless',
     checkCallback: (checking) => {
-      const file = plugin.activeFile(); const style = file ? plugin.frontmatter.getStyle(file) : null;
-      if (file && style && !checking) { style.page.mode = style.page.mode === 'paged' ? 'pageless' : 'paged'; void plugin.writeAndRefresh(file, style); }
+      const file = plugin.activeFile();
+      const style = file ? plugin.frontmatter.getStyle(file) : null;
+      if (file && style && !checking) {
+        style.page.mode = style.page.mode === 'paged' ? 'pageless' : 'paged';
+        void plugin.writeAndRefresh(file, style);
+      }
       return Boolean(file && style);
     },
   });
   registerCommand(plugin, {
-    id: 'toggle-fit-narrow-screens', name: 'Toggle fit narrow screens',
+    id: 'toggle-fit-narrow-screens',
+    name: 'Toggle fit narrow screens',
     checkCallback: (checking) => {
-      const file = plugin.activeFile(); const style = file ? plugin.frontmatter.getStyle(file) : null;
+      const file = plugin.activeFile();
+      const style = file ? plugin.frontmatter.getStyle(file) : null;
       const available = Boolean(file && style?.page.mode === 'paged');
-      if (available && !checking && file && style) { style.page.scaleToFit = !style.page.scaleToFit; void plugin.writeAndRefresh(file, style); }
+      if (available && !checking && file && style) {
+        style.page.scaleToFit = !style.page.scaleToFit;
+        void plugin.writeAndRefresh(file, style);
+      }
       return available;
     },
   });
-  registerCommand(plugin, { id: 'review-template-updates', name: 'Review template updates', callback: () => plugin.showSynchronizationReview() });
-  registerCommand(plugin, { id: 'manage-style-rules', name: 'Manage style rules', callback: () => plugin.showStyleRules() });
   registerCommand(plugin, {
-    id: 'print-export-styled-note', name: 'Print / export styled note',
-    checkCallback: (checking) => { const file = plugin.activeFile(); const leaf = plugin.activeMarkdownLeaf(); const available = Boolean(file && leaf && plugin.frontmatter.hasStyle(file) && plugin.printService.available(leaf)); if (available && !checking) void plugin.printStyledNote(file); return available; },
+    id: 'review-template-updates',
+    name: 'Review template updates',
+    callback: () => plugin.showSynchronizationReview(),
+  });
+  registerCommand(plugin, {
+    id: 'manage-style-rules',
+    name: 'Manage style rules',
+    callback: () => plugin.showStyleRules(),
+  });
+  registerCommand(plugin, {
+    id: 'print-export-styled-note',
+    name: 'Print / export styled note',
+    checkCallback: (checking) => {
+      const file = plugin.activeFile();
+      const leaf = plugin.activeMarkdownLeaf();
+      const available = Boolean(
+        file && leaf && plugin.frontmatter.hasStyle(file) && plugin.printService.available(leaf),
+      );
+      if (available && !checking && file) void plugin.printStyledNote(file);
+      return available;
+    },
   });
   registerCommand(plugin, {
     id: 'import-page-style',
