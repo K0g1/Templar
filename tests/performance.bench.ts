@@ -51,7 +51,7 @@ const rule: StyleRule = {
   pageFlow: 'default',
 };
 
-describe('Templar performance fixtures', () => {
+describe('Templar pure performance fixtures', () => {
   for (const blocks of [100, 1_000, 5_000, 10_000]) {
     bench(`reading whitespace scan: ${String(blocks)} blocks`, () => {
       internalBlankLineRuns(sourceBySize.get(blocks)!);

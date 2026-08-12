@@ -8,6 +8,9 @@ export default defineConfig({
     },
   },
   test: {
+    benchmark: {
+      includeSamples: true,
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
