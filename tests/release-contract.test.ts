@@ -162,8 +162,9 @@ describe('BRAT release contract verifier', () => {
 
   it('stages exactly the verified release transport bundle', () => {
     const output = mkdtempSync(join(tmpdir(), 'templar-release-stage-'));
+    const source = fixture('1.2.0-alpha.2');
     try {
-      execFileSync(process.execPath, [stageScript, '1.2.0-alpha.2', output], { stdio: 'pipe' });
+      execFileSync(process.execPath, [stageScript, '1.2.0-alpha.2', output, source], { stdio: 'pipe' });
       expect([...readdirSync(output)].sort()).toEqual([
         'SHA256SUMS.txt',
         'main.js',
@@ -174,6 +175,7 @@ describe('BRAT release contract verifier', () => {
       ]);
     } finally {
       rmSync(output, { recursive: true, force: true });
+      rmSync(source, { recursive: true, force: true });
     }
   });
 });

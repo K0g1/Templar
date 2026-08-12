@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const tag = process.argv[2];
 const outputDirectory = resolve(process.argv[3] ?? '.release');
 const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const artifactSourceDirectory = resolve(process.argv[4] ?? repositoryRoot);
 
 if (!tag || !isSemver(tag)) {
   throw new Error('Pass a SemVer release tag without a v prefix.');
@@ -18,7 +19,7 @@ if (!existsSync(releaseNotesPath)) {
 
 const publicAssets = ['main.js', 'manifest.json', 'styles.css'];
 for (const name of publicAssets) {
-  const source = resolve(repositoryRoot, name);
+  const source = resolve(artifactSourceDirectory, name);
   if (!existsSync(source)) throw new Error(`Missing release artifact: ${name}`);
 }
 
@@ -26,7 +27,7 @@ rmSync(outputDirectory, { recursive: true, force: true });
 mkdirSync(outputDirectory, { recursive: true });
 
 for (const name of publicAssets) {
-  cpSync(resolve(repositoryRoot, name), resolve(outputDirectory, name));
+  cpSync(resolve(artifactSourceDirectory, name), resolve(outputDirectory, name));
 }
 
 const checksums = publicAssets.map((name) => {
