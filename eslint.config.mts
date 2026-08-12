@@ -93,6 +93,7 @@ export default defineConfig(
       'tests/page-renderer.integration.test.ts',
       'tests/print-service.lifecycle.integration.test.ts',
       'tests/style-application.test.ts',
+      'tests/style-rule-engine.test.ts',
     ],
     rules: {
       // These tests intentionally use minimal TFile-shaped fixtures instead

@@ -5,7 +5,6 @@ import {
   Plugin,
   TFile,
   TFolder,
-  getAllTags,
   normalizePath,
   stringifyYaml,
   type WorkspaceLeaf,
@@ -26,31 +25,17 @@ import { NoteStyleIndex } from './services/note-style-index';
 import { PrintService } from './services/print-service';
 import { SettingsStore } from './services/settings-store';
 import { StyleApplicationService } from './services/style-application';
-import { firstMatchingRule, pageFlowOptions } from './services/style-rules';
+import { StyleRuleEngine } from './services/style-rule-engine';
+import { AuthoringKitService } from './services/authoring-kit-service';
 import { noteTemplateSnapshot } from './services/synchronization';
 import { TemplateLibrary } from './services/template-library';
-import { DEFAULT_PAGE_OPTIONS, DEFAULT_SETTINGS } from './templates/defaults';
-import { TEMPLAR_LLM_AUTHORING_KIT } from './templates/llm-kit';
+import { DEFAULT_SETTINGS } from './templates/defaults';
 import { normalizeSettingsWithIssues, type QuarantinedTemplate } from './templates/settings';
 import { templateToExportObject } from './templates/note-format';
 import { templatePackToExportObject } from './services/template-pack';
 import type { NotePageOptions, TemplarNoteStyle, TemplarSettings, TemplarTemplate } from './types';
-import { writeTextToClipboard } from './utils/clipboard';
 import { clone, slugify } from './utils/value';
-import {
-  BatchApplyModal,
-  ApplyStyleModal,
-  CreateStyledNoteModal,
-  CurrentNoteInspectorModal,
-  PageModeModal,
-  RawStyleModal,
-  StylePickerModal,
-  TemplateCreatorModal,
-  TemplateImportModal,
-  TemplatePackExportModal,
-  SynchronizationReviewModal,
-  StyleRulesModal,
-} from './ui/modals';
+import { PluginUiController } from './ui/plugin-ui-controller';
 import { TemplarSettingTab } from './ui/settings-tab';
 import { TemplarStylesView } from './ui/styles-view';
 
@@ -65,12 +50,15 @@ export default class TemplarPlugin extends Plugin {
   public usageIndex = new NoteStyleIndex();
   public printService!: PrintService;
   public application!: StyleApplicationService;
+  public ui!: PluginUiController;
   public quarantinedTemplates: QuarantinedTemplate[] = [];
 
   private statusBarEl: HTMLElement | null = null;
   public lastMarkdownLeaf: WorkspaceLeaf | null = null;
   private rulesReady = false;
   private settingsLoadIssueCount = 0;
+  private authoringKit!: AuthoringKitService;
+  private ruleEngine!: StyleRuleEngine;
   private readonly keyboardCleanups = new Map<Document, () => void>();
 
   public async onload(): Promise<void> {
@@ -106,6 +94,21 @@ export default class TemplarPlugin extends Plugin {
       },
     });
     this.printService = new PrintService(this.frontmatter, this.renderer);
+    this.ui = new PluginUiController(this);
+    this.authoringKit = new AuthoringKitService(this.app);
+    this.ruleEngine = new StyleRuleEngine({
+      app: this.app,
+      settings: this.settings,
+      library: this.library,
+      frontmatter: this.frontmatter,
+      isReady: () => this.rulesReady,
+      apply: (template, file, pageOptions, appliedByRule) => this.applyTemplate(
+        template,
+        file,
+        pageOptions,
+        { recordRecent: false, appliedByRule },
+      ),
+    });
 
     this.registerView(
       TEMPLAR_VIEW_TYPE,
@@ -276,83 +279,55 @@ export default class TemplarPlugin extends Plugin {
   }
 
   public showStylePicker(file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before choosing a page style.');
-      return;
-    }
-    new StylePickerModal(this, file, 'apply').open();
+    this.ui.showStylePicker(file);
   }
 
   public showApplyTemplate(template: TemplarTemplate, file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before applying a page style.');
-      return;
-    }
-    void this.applyTemplate(template, file);
+    this.ui.showApplyTemplate(template, file);
   }
 
   public showApplyWithOptions(template: TemplarTemplate, file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before applying a page style.');
-      return;
-    }
-    new ApplyStyleModal(this, file, template).open();
+    this.ui.showApplyWithOptions(template, file);
   }
 
   public showNewNoteStylePicker(): void {
-    new StylePickerModal(this, null, 'create').open();
+    this.ui.showNewNoteStylePicker();
   }
 
   public showCreateStyledNote(template: TemplarTemplate): void {
-    new CreateStyledNoteModal(this, template).open();
+    this.ui.showCreateStyledNote(template);
   }
 
   public showPageMode(file = this.activeFile()): void {
-    const style = file ? this.frontmatter.getStyle(file) : null;
-    if (!file || !style) {
-      new Notice('Apply a page style before changing page mode.');
-      return;
-    }
-    new PageModeModal(this, file, style).open();
+    this.ui.showPageMode(file);
   }
 
   public showTemplateCreator(template?: TemplarTemplate): void {
-    new TemplateCreatorModal(this, template).open();
+    this.ui.showTemplateCreator(template);
   }
 
   public showTemplateImporter(): void {
-    new TemplateImportModal(this).open();
+    this.ui.showTemplateImporter();
   }
 
   public showPackExporter(templates?: TemplarTemplate[]): void {
-    new TemplatePackExportModal(this, templates).open();
+    this.ui.showPackExporter(templates);
   }
 
   public showSynchronizationReview(templateId?: string): void {
-    new SynchronizationReviewModal(this, templateId).open();
+    this.ui.showSynchronizationReview(templateId);
   }
 
   public showStyleRules(): void {
-    new StyleRulesModal(this).open();
+    this.ui.showStyleRules();
   }
 
   public showRawStyleEditor(file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before editing its raw style.');
-      return;
-    }
-    const style = this.frontmatter.getStyle(file);
-    if (!style) {
-      new Notice('Apply a page style to this note first.');
-      return;
-    }
-    void this.preview.cancelAll().then(() => new RawStyleModal(this, file, style).open());
+    this.ui.showRawStyleEditor(file);
   }
 
   public showCurrentNoteInspector(file = this.activeFile()): void {
-    const style = file ? this.frontmatter.getStyle(file) : null;
-    if (!file || !style) return;
-    new CurrentNoteInspectorModal(this, file, style).open();
+    this.ui.showCurrentNoteInspector(file);
   }
 
   public async printStyledNote(file = this.activeFile()): Promise<void> {
@@ -369,31 +344,19 @@ export default class TemplarPlugin extends Plugin {
   }
 
   public showBatchApply(): void {
-    new BatchApplyModal(this).open();
+    this.ui.showBatchApply();
   }
 
   public async openStylesView(): Promise<void> {
-    let leaf: WorkspaceLeaf | null = this.app.workspace.getLeavesOfType(TEMPLAR_VIEW_TYPE)[0] ?? null;
-    if (!leaf) {
-      leaf = this.app.workspace.getRightLeaf(false);
-      if (!leaf) {
-        return;
-      }
-      await leaf.setViewState({ type: TEMPLAR_VIEW_TYPE, active: true });
-    }
-    await this.app.workspace.revealLeaf(leaf);
+    await this.ui.openStylesView();
   }
 
   public async focusStyleSearch(): Promise<void> {
-    await this.openStylesView();
-    const leaf = this.app.workspace.getLeavesOfType(TEMPLAR_VIEW_TYPE)[0];
-    if (leaf?.view instanceof TemplarStylesView) leaf.view.focusSearch();
+    await this.ui.focusStyleSearch();
   }
 
   public async cycleFavouritePreview(direction: 1 | -1): Promise<void> {
-    await this.openStylesView();
-    const leaf = this.app.workspace.getLeavesOfType(TEMPLAR_VIEW_TYPE)[0];
-    if (leaf?.view instanceof TemplarStylesView) leaf.view.previewNextFavourite(direction);
+    await this.ui.cycleFavouritePreview(direction);
   }
 
   public async applyCurrentPreview(leaf = this.activeMarkdownLeaf()): Promise<void> {
@@ -404,24 +367,11 @@ export default class TemplarPlugin extends Plugin {
   }
 
   public async copyAuthoringKit(): Promise<void> {
-    try {
-      await writeTextToClipboard(TEMPLAR_LLM_AUTHORING_KIT);
-      new Notice('Template authoring skill copied.');
-    } catch (error) {
-      new Notice(error instanceof Error ? error.message : String(error));
-    }
+    await this.authoringKit.copy();
   }
 
   public async exportAuthoringKit(): Promise<void> {
-    const base = 'Templar Template Authoring Skill';
-    let path = normalizePath(`${base}.md`);
-    let suffix = 2;
-    while (this.app.vault.getAbstractFileByPath(path)) {
-      path = normalizePath(`${base} ${String(suffix)}.md`);
-      suffix += 1;
-    }
-    await this.app.vault.create(path, TEMPLAR_LLM_AUTHORING_KIT);
-    new Notice(`Exported ${path}.`);
+    await this.authoringKit.export();
   }
 
   public async exportTemplate(template: TemplarTemplate): Promise<void> {
@@ -484,24 +434,7 @@ export default class TemplarPlugin extends Plugin {
   }
 
   public async evaluateStyleRules(file: TFile, metadataReady: boolean): Promise<void> {
-    if (!this.rulesReady || this.frontmatter.hasStyle(file)) return;
-    const cache = this.app.metadataCache.getFileCache(file);
-    const rule = firstMatchingRule(this.settings.styleRules, {
-      path: file.path,
-      basename: file.basename,
-      folder: file.parent?.path ?? '',
-      tags: cache ? getAllTags(cache) ?? [] : [],
-      frontmatter: cache?.frontmatter ?? {},
-      metadataReady: metadataReady && cache !== null,
-    });
-    if (!rule) return;
-    const template = this.library.get(rule.templateId);
-    if (!template) return;
-    const flow = pageFlowOptions(rule.pageFlow === 'default' ? this.settings.defaultNewPageFlow : rule.pageFlow);
-    await this.applyTemplate(template, file, { ...clone(DEFAULT_PAGE_OPTIONS), ...flow }, {
-      recordRecent: false,
-      appliedByRule: { id: rule.id, name: rule.name },
-    });
+    await this.ruleEngine.evaluate(file, metadataReady);
   }
   public updateStatusBar(): void {
     if (!this.statusBarEl) {
