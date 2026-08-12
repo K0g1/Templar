@@ -6,6 +6,7 @@ export default defineConfig(
   globalIgnores([
     'node_modules',
     'main.js',
+    '.release',
     'coverage',
     'esbuild.config.mjs',
     'version-bump.mjs',
@@ -17,6 +18,7 @@ export default defineConfig(
       globals: { ...globals.browser },
       parserOptions: {
         projectService: {
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20,
           allowDefaultProject: [
             'eslint.config.mts',
             'manifest.json',
@@ -26,6 +28,7 @@ export default defineConfig(
             'scripts/verify-runtime-policy.mjs',
             'scripts/verify-brat-release.mjs',
             'scripts/verify-ship.mjs',
+            'scripts/stage-release.mjs',
             'vitest.config.ts',
           ],
         },
@@ -80,6 +83,26 @@ export default defineConfig(
     },
     rules: {
       // Test-only tooling never ships in the mobile runtime bundle.
+      'obsidianmd/no-nodejs-modules': 'off',
+    },
+  },
+  {
+    files: [
+      'tests/frontmatter.test.ts',
+      'tests/frontmatter.integration.test.ts',
+      'tests/page-renderer.integration.test.ts',
+      'tests/print-service.lifecycle.integration.test.ts',
+      'tests/style-application.test.ts',
+    ],
+    rules: {
+      // These tests intentionally use minimal TFile-shaped fixtures instead
+      // of requiring a live Obsidian vault and file manager.
+      'obsidianmd/no-tfile-tfolder-cast': 'off',
+    },
+  },
+  {
+    files: ['vitest.config.ts'],
+    rules: {
       'obsidianmd/no-nodejs-modules': 'off',
     },
   },

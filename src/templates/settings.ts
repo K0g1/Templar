@@ -14,11 +14,15 @@ import { DEFAULT_SETTINGS } from './defaults';
 import { normalizeTemplate, validateTemplateSource } from './schema';
 import { validateCompleteTemplate } from './validation';
 
-export interface SettingsLoadIssue {
+export interface QuarantinedTemplate {
   index: number;
   templateId?: string;
   message: string;
+  raw: unknown;
+  futureVersion: boolean;
 }
+
+export type SettingsLoadIssue = QuarantinedTemplate;
 
 export interface SettingsNormalizationResult {
   settings: TemplarSettings;
@@ -139,6 +143,8 @@ function normalizeUserTemplates(value: unknown): {
         index,
         ...(templateIdIfRecoverable(item) ? { templateId: templateIdIfRecoverable(item) } : {}),
         message: error instanceof Error ? error.message : String(error),
+        raw: item,
+        futureVersion: record(item).version !== undefined && Number(record(item).version) > 1,
       });
     }
   });

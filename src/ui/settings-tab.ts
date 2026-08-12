@@ -6,6 +6,7 @@ import { clone } from '../utils/value';
 import { ConfirmationModal } from './modals';
 import { renderIssues } from './issues';
 import { renderTemplatePreview } from './template-preview';
+import { writeTextToClipboard } from '../utils/clipboard';
 
 export class TemplarSettingTab extends PluginSettingTab {
   public constructor(
@@ -28,27 +29,24 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setName('Style reading view')
       .setDesc('Render styled notes in reading view.')
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.enableReadingView).onChange(async (value) => {
-          await this.plugin.updateSettings((draft) => { draft.enableReadingView = value; });
-          this.plugin.refreshEverything();
+        toggle.setValue(this.plugin.settings.enableReadingView).onChange((value) => {
+          void this.commitSetting('reading view setting', (draft) => { draft.enableReadingView = value; }, { refresh: true });
         }),
       );
     new Setting(containerEl)
       .setName('Style live preview')
       .setDesc('Render the same page style while editing Markdown.')
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.enableLivePreview).onChange(async (value) => {
-          await this.plugin.updateSettings((draft) => { draft.enableLivePreview = value; });
-          this.plugin.refreshEverything();
+        toggle.setValue(this.plugin.settings.enableLivePreview).onChange((value) => {
+          void this.commitSetting('Live Preview setting', (draft) => { draft.enableLivePreview = value; }, { refresh: true });
         }),
       );
     new Setting(containerEl)
       .setName('Hide templar metadata')
       .setDesc('Collapse the templar YAML block during ordinary editing. Use “edit raw style” to inspect it.')
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.hideStyleMetadata).onChange(async (value) => {
-          await this.plugin.updateSettings((draft) => { draft.hideStyleMetadata = value; });
-          this.plugin.refreshEverything();
+        toggle.setValue(this.plugin.settings.hideStyleMetadata).onChange((value) => {
+          void this.commitSetting('metadata visibility setting', (draft) => { draft.hideStyleMetadata = value; }, { refresh: true });
         }),
       );
 
@@ -64,8 +62,8 @@ export class TemplarSettingTab extends PluginSettingTab {
         dropdown
           .addOptions(options)
           .setValue(this.plugin.settings.defaultTemplateId)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings((draft) => { draft.defaultTemplateId = value; });
+          .onChange((value) => {
+            void this.commitSetting('default page style', (draft) => { draft.defaultTemplateId = value; });
           }),
       );
     new Setting(containerEl)
@@ -74,8 +72,8 @@ export class TemplarSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => dropdown
         .addOptions({ pageless: 'Pageless', 'paged-a4': 'Paged A4', 'paged-letter': 'Paged Letter' })
         .setValue(this.plugin.settings.defaultNewPageFlow)
-        .onChange(async (value) => {
-          await this.plugin.updateSettings((draft) => {
+        .onChange((value) => {
+          void this.commitSetting('default page flow', (draft) => {
             draft.defaultNewPageFlow = value as typeof draft.defaultNewPageFlow;
           });
         }));
@@ -120,8 +118,8 @@ export class TemplarSettingTab extends PluginSettingTab {
         slider
           .setLimits(16, 60, 1)
           .setValue(this.plugin.settings.defaultGridUnit)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings((draft) => { draft.defaultGridUnit = value; });
+          .onChange((value) => {
+            void this.commitSetting('default vertical rhythm', (draft) => { draft.defaultGridUnit = value; });
           }),
       );
     new Setting(containerEl)
@@ -131,8 +129,8 @@ export class TemplarSettingTab extends PluginSettingTab {
         slider
           .setLimits(16, 256, 8)
           .setValue(this.plugin.settings.fontCacheSize)
-          .onChange(async (value) => {
-            await this.plugin.updateSettings((draft) => { draft.fontCacheSize = value; });
+          .onChange((value) => {
+            void this.commitSetting('font calibration cache size', (draft) => { draft.fontCacheSize = value; });
           }),
       )
       .addButton((button) =>
@@ -185,6 +183,45 @@ export class TemplarSettingTab extends PluginSettingTab {
       const issueContainer = containerEl.createDiv();
       renderIssues(issueContainer, issues);
     }
+    if (this.plugin.quarantinedTemplates.length > 0) {
+      new Setting(containerEl).setName('Invalid saved styles').setHeading();
+      containerEl.createEl('p', {
+        text: `${String(this.plugin.quarantinedTemplates.length)} saved style entr${this.plugin.quarantinedTemplates.length === 1 ? 'y was' : 'ies were'} quarantined and will not be loaded until you explicitly remove them.`,
+      });
+      for (const entry of this.plugin.quarantinedTemplates) {
+        const raw = JSON.stringify(entry.raw, null, 2) ?? String(entry.raw);
+        const warning = entry.futureVersion
+          ? 'This appears to come from a newer Templar version; removing it may discard data that this version cannot understand.'
+          : entry.message;
+        new Setting(containerEl)
+          .setName(entry.templateId ? `Entry ${entry.templateId}` : `Entry ${String(entry.index + 1)}`)
+          .setDesc(`${warning} Raw data is retained until you choose an action.`)
+          .addButton((button) => button.setButtonText('Copy raw data').onClick(() => {
+            void writeTextToClipboard(raw)
+              .then(() => new Notice('Copied quarantined style data.'))
+              .catch((error) => new Notice(error instanceof Error ? error.message : String(error)));
+          }))
+          .addButton((button) => button.setButtonText('Remove invalid saved entry').onClick(() => {
+            new ConfirmationModal(
+              this.plugin,
+              'Remove invalid saved style entry?',
+              entry.futureVersion
+                ? 'This entry may have been written by a newer Templar version. Removing it can discard data that cannot be recovered here.'
+                : 'This removes the invalid saved entry from Templar settings. The raw data will no longer be retained.',
+              async () => {
+                try {
+                  await this.plugin.removeQuarantinedTemplate(entry.index);
+                  this.render();
+                  new Notice('Removed invalid saved style entry.');
+                } catch (error) {
+                  new Notice(`Templar could not remove the saved entry: ${error instanceof Error ? error.message : String(error)}`);
+                }
+              },
+              'Remove invalid saved entry',
+            ).open();
+          }));
+      }
+    }
     const selectorDetails = containerEl.createEl('details');
     selectorDetails.createEl('summary', { text: 'Templar selector reference' });
     const selectorList = selectorDetails.createEl('ul');
@@ -215,15 +252,29 @@ export class TemplarSettingTab extends PluginSettingTab {
       'Every option returns to its default value. Custom page styles are kept; favorites, recents, and style rules are cleared.',
       async () => {
         const defaults = clone(DEFAULT_SETTINGS);
-        await this.plugin.updateSettings((draft) => {
+        const committed = await this.commitSetting('settings reset', (draft) => {
           defaults.userTemplates = clone(draft.userTemplates);
           Object.assign(draft, defaults);
-        });
-        this.plugin.refreshEverything();
-        this.render();
-        new Notice('Templar settings restored to defaults.');
+        }, { refresh: true });
+        if (committed) new Notice('Templar settings restored to defaults.');
       },
       'Reset settings',
     ).open();
+  }
+
+  private async commitSetting(
+    description: string,
+    mutate: (draft: TemplarPlugin['settings']) => void,
+    options: { refresh?: boolean } = {},
+  ): Promise<boolean> {
+    try {
+      await this.plugin.updateSettings(mutate);
+      if (options.refresh) this.plugin.refreshEverything();
+      return true;
+    } catch (error) {
+      new Notice(`Templar could not save ${description}: ${error instanceof Error ? error.message : String(error)}`);
+      this.render();
+      return false;
+    }
   }
 }

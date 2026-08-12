@@ -3,14 +3,19 @@ import { TemplateLibrary } from '../src/services/template-library';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
 import { DEFAULT_SETTINGS } from '../src/templates/defaults';
 import { clone } from '../src/utils/value';
+import { SettingsStore } from '../src/services/settings-store';
 import type { TemplarSettings, TemplarTemplate } from '../src/types';
 
 function createLibrary(
   overrides: Partial<TemplarSettings> = {},
 ): { library: TemplateLibrary; settings: TemplarSettings; persist: ReturnType<typeof vi.fn> } {
   const settings = { ...clone(DEFAULT_SETTINGS), ...overrides };
-  const persist = vi.fn(async () => undefined);
-  return { library: new TemplateLibrary(settings, persist), settings, persist };
+  const persisted: TemplarSettings[] = [];
+  const persist = vi.fn(async (candidate: TemplarSettings) => {
+    persisted.push(clone(candidate));
+  });
+  const store = new SettingsStore(settings, persist);
+  return { library: new TemplateLibrary(settings, store), settings, persist };
 }
 
 describe('TemplateLibrary favorites', () => {
@@ -32,9 +37,17 @@ describe('TemplateLibrary favorites', () => {
 
   it('keeps stored favourites across new library instances', async () => {
     const { settings } = createLibrary();
-    await new TemplateLibrary(settings, async () => undefined).toggleFavourite('classic-ruled');
-    const reloaded = new TemplateLibrary(settings, async () => undefined);
+    const store = new SettingsStore(settings, async () => undefined);
+    await new TemplateLibrary(settings, store).toggleFavourite('classic-ruled');
+    const reloaded = new TemplateLibrary(settings, new SettingsStore(settings, async () => undefined));
     expect(reloaded.isFavourite('classic-ruled')).toBe(true);
+  });
+
+  it('persists a candidate snapshot that already contains the requested mutation', async () => {
+    const { library, persist } = createLibrary();
+    await library.toggleFavourite('classic-ruled');
+    const candidate = persist.mock.calls[0]?.[0] as TemplarSettings;
+    expect(candidate.favouriteTemplateIds).toContain('classic-ruled');
   });
 
   it('removes a deleted custom template from favourites', async () => {

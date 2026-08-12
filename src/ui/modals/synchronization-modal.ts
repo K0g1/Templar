@@ -132,7 +132,7 @@ export class SynchronizationReviewModal extends Modal {
         planningResults.push(failed(item.file.path, candidate.issues.map((issue) => issue.message).join(' ') || 'The update could not be merged.'));
         continue;
       }
-      const issues = validateCompleteTemplate(candidate.style as TemplarTemplate);
+      const issues = validateCompleteTemplate(candidate.style);
       const errors = issues.filter((issue) => issue.severity === 'error');
       if (errors.length > 0) {
         validationBlocked = true;

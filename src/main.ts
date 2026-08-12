@@ -31,7 +31,7 @@ import { noteTemplateSnapshot } from './services/synchronization';
 import { TemplateLibrary } from './services/template-library';
 import { DEFAULT_PAGE_OPTIONS, DEFAULT_SETTINGS } from './templates/defaults';
 import { TEMPLAR_LLM_AUTHORING_KIT } from './templates/llm-kit';
-import { normalizeSettingsWithIssues } from './templates/settings';
+import { normalizeSettingsWithIssues, type QuarantinedTemplate } from './templates/settings';
 import { templateToExportObject } from './templates/note-format';
 import { templatePackToExportObject } from './services/template-pack';
 import type { NotePageOptions, TemplarNoteStyle, TemplarSettings, TemplarTemplate } from './types';
@@ -65,6 +65,7 @@ export default class TemplarPlugin extends Plugin {
   public usageIndex = new NoteStyleIndex();
   public printService!: PrintService;
   public application!: StyleApplicationService;
+  public quarantinedTemplates: QuarantinedTemplate[] = [];
 
   private statusBarEl: HTMLElement | null = null;
   public lastMarkdownLeaf: WorkspaceLeaf | null = null;
@@ -74,7 +75,7 @@ export default class TemplarPlugin extends Plugin {
 
   public async onload(): Promise<void> {
     await this.loadSettings();
-    this.settingsStore = new SettingsStore(this.settings, async (value) => this.saveData(value));
+    this.settingsStore = new SettingsStore(this.settings, async (value) => this.persistSettingsCandidate(value));
     if (this.settingsLoadIssueCount > 0) {
       new Notice(`${String(this.settingsLoadIssueCount)} saved Templar style entr${this.settingsLoadIssueCount === 1 ? 'y was' : 'ies were'} quarantined because it was invalid.`);
     }
@@ -163,6 +164,7 @@ export default class TemplarPlugin extends Plugin {
   public async loadSettings(): Promise<void> {
     const result = normalizeSettingsWithIssues(await this.loadData());
     this.settings = result.settings;
+    this.quarantinedTemplates = result.issues;
     this.settingsLoadIssueCount = result.issues.length;
   }
 
@@ -179,6 +181,26 @@ export default class TemplarPlugin extends Plugin {
       throw new Error('Templar settings are not ready yet.');
     }
     return this.settingsStore.transaction(mutate);
+  }
+
+  public async removeQuarantinedTemplate(index: number): Promise<void> {
+    const previous = this.quarantinedTemplates;
+    this.quarantinedTemplates = previous.filter((entry) => entry.index !== index);
+    try {
+      await this.settingsStore.persistCurrent();
+    } catch (error) {
+      this.quarantinedTemplates = previous;
+      throw error;
+    }
+  }
+
+  private async persistSettingsCandidate(value: TemplarSettings): Promise<void> {
+    const candidate = clone(value);
+    candidate.userTemplates = [
+      ...candidate.userTemplates,
+      ...this.quarantinedTemplates.map((entry) => clone(entry.raw) as TemplarTemplate),
+    ];
+    await this.saveData(candidate);
   }
 
   private bindKeyboardDocument(ownerDocument: Document): void {

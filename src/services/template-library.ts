@@ -9,19 +9,11 @@ import {
 import { validateCompleteTemplate } from '../templates/validation';
 import { SettingsStore } from './settings-store';
 
-type PersistSettings = (() => Promise<void>) | SettingsStore;
-
 export class TemplateLibrary {
-  private readonly store: SettingsStore;
-
   public constructor(
     private readonly settings: TemplarSettings,
-    persist: PersistSettings,
-  ) {
-    this.store = persist instanceof SettingsStore
-      ? persist
-      : new SettingsStore(settings, async () => persist());
-  }
+    private readonly store: SettingsStore,
+  ) {}
 
   public all(): TemplarTemplate[] {
     return [
