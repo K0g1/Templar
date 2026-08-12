@@ -50,8 +50,26 @@ export function registerCommands(plugin: TemplarPlugin): void {
   });
   registerCommand(plugin, { id: 'next-favorite-style', name: 'Next favorite style', checkCallback: (checking) => { const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0; if (available && !checking) void plugin.cycleFavouritePreview(1); return available; } });
   registerCommand(plugin, { id: 'previous-favorite-style', name: 'Previous favorite style', checkCallback: (checking) => { const available = plugin.activeFile() !== null && plugin.settings.favouriteTemplateIds.length > 0; if (available && !checking) void plugin.cycleFavouritePreview(-1); return available; } });
-  registerCommand(plugin, { id: 'apply-previewed-style', name: 'Apply previewed style', checkCallback: (checking) => { const available = plugin.preview.current() !== null; if (available && !checking) void plugin.applyCurrentPreview(); return available; } });
-  registerCommand(plugin, { id: 'cancel-style-preview', name: 'Cancel style preview', checkCallback: (checking) => { const available = plugin.preview.current() !== null; if (available && !checking) void plugin.preview.cancelAll().then(() => plugin.refreshSidebars()); return available; } });
+  registerCommand(plugin, {
+    id: 'apply-previewed-style',
+    name: 'Apply previewed style',
+    checkCallback: (checking) => {
+      const leaf = plugin.activeMarkdownLeaf();
+      const available = leaf !== null && plugin.preview.currentForLeaf(leaf) !== null;
+      if (available && !checking) void plugin.applyCurrentPreview(leaf);
+      return available;
+    },
+  });
+  registerCommand(plugin, {
+    id: 'cancel-style-preview',
+    name: 'Cancel style preview',
+    checkCallback: (checking) => {
+      const leaf = plugin.activeMarkdownLeaf();
+      const session = leaf ? plugin.preview.currentForLeaf(leaf) : null;
+      if (session && !checking) void plugin.preview.cancel(session.owner).then(() => plugin.refreshSidebars());
+      return session !== null;
+    },
+  });
   registerCommand(plugin, {
     id: 'apply-default-page-style',
     name: 'Apply default page style',
@@ -156,4 +174,3 @@ export function registerCommands(plugin: TemplarPlugin): void {
     callback: () => void plugin.copyAuthoringKit(),
   });
 }
-

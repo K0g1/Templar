@@ -55,6 +55,11 @@ interface ReadingRootState {
   sections: HTMLElement[];
 }
 
+interface LeafIssueState {
+  filePath: string;
+  issues: ValidationIssue[];
+}
+
 interface ReadingSectionInfo {
   lineStart: number;
   lineEnd: number;
@@ -123,7 +128,7 @@ export class PageRenderer {
   private readonly imageObservers = new Map<WorkspaceLeaf, ImageObservationState>();
   private readonly rhythmObservers = new Map<WorkspaceLeaf, RhythmObservationState>();
   private readonly paperOriginObservers = new Map<WorkspaceLeaf, PaperOriginObservationState>();
-  private readonly issuesByFile = new Map<string, ValidationIssue[]>();
+  private readonly issuesByLeaf = new Map<WorkspaceLeaf, LeafIssueState>();
   private readonly fontDocumentCleanups = new Map<Document, () => void>();
   private readonly pageLayout = new PageLayoutService();
   private readonly readingSections = new WeakMap<HTMLElement, ReadingSectionInfo>();
@@ -199,7 +204,18 @@ export class PageRenderer {
   }
 
   public issuesFor(file: TFile): ValidationIssue[] {
-    return [...(this.issuesByFile.get(file.path) ?? [])];
+    const unique = new Map<string, ValidationIssue>();
+    for (const state of this.issuesByLeaf.values()) {
+      if (state.filePath !== file.path) continue;
+      for (const issue of state.issues) {
+        const key = `${issue.severity}|${issue.path}|${issue.message}|${issue.fix ?? ''}`;
+        unique.set(key, clone(issue));
+      }
+    }
+    return [...unique.values()].sort((left, right) => {
+      const severity = (issue: ValidationIssue): number => issue.severity === 'error' ? 0 : 1;
+      return severity(left) - severity(right) || left.path.localeCompare(right.path) || left.message.localeCompare(right.message);
+    });
   }
 
   public async setPreview(
@@ -303,7 +319,7 @@ export class PageRenderer {
     for (const cleanup of this.fontDocumentCleanups.values()) cleanup();
     this.fontDocumentCleanups.clear();
     this.fontMetrics.clear();
-    this.issuesByFile.clear();
+    this.issuesByLeaf.clear();
   }
 
   private async refreshLeaf(leaf: WorkspaceLeaf): Promise<void> {
@@ -355,10 +371,9 @@ export class PageRenderer {
     view.contentEl.dataset.templarFile = file.path;
     const scope = `[data-templar-scope="${escapeCssAttribute(scopeValue)}"]`;
     const compiled = compilePageStyle(style, scope, scopeValue, metrics);
-    this.issuesByFile.set(file.path, compiled.issues);
+    this.issuesByLeaf.set(leaf, { filePath: file.path, issues: clone(compiled.issues) });
     if (compiled.issues.some((issue) => issue.path === 'css.generated')) {
-      this.clearLeaf(leaf);
-      this.issuesByFile.set(file.path, compiled.issues);
+      this.clearLeaf(leaf, true);
       return;
     }
 
@@ -874,7 +889,7 @@ export class PageRenderer {
     }
   }
 
-  private clearLeaf(leaf: WorkspaceLeaf): void {
+  private clearLeaf(leaf: WorkspaceLeaf, preserveIssue = false): void {
     this.leafGenerations.set(leaf, (this.leafGenerations.get(leaf) ?? 0) + 1);
     this.pageLayout.clear(leaf);
     if (!(leaf.view instanceof MarkdownView) || !leaf.view.file) {
@@ -913,9 +928,7 @@ export class PageRenderer {
     this.imageObservers.delete(leaf);
     this.disconnectVariableBlockSnapping(leaf);
     this.pruneDisconnectedReadingRoots();
-    if (styled) {
-      this.issuesByFile.delete(styled.filePath);
-    }
+    if (!preserveIssue) this.issuesByLeaf.delete(leaf);
     this.styledViews.delete(leaf);
   }
 

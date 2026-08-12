@@ -104,11 +104,14 @@ export class PreviewSessionService {
     return owner ? this.current(owner) : null;
   }
 
+  public sessionsForDocument(document: Document): PreviewSession[] {
+    return [...this.sessions.values()]
+      .filter((session) => session.leaf.view.containerEl.ownerDocument === document)
+      .map((session) => ({ ...session, style: clone(session.style) }));
+  }
+
   public currentForDocument(document: Document): PreviewSession | null {
-    const owner = [...this.sessions.values()]
-      .find((session) => session.leaf.view.containerEl.ownerDocument === document)
-      ?.owner;
-    return owner ? this.current(owner) : null;
+    return this.sessionsForDocument(document)[0] ?? null;
   }
 
   public async cancel(owner: string): Promise<void> {

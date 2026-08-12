@@ -125,4 +125,40 @@ describe('PageRenderer integration lifecycle', () => {
     expect(firstContent.dataset.templarScope).toBeUndefined();
     expect(secondContent.dataset.templarScope).toBeUndefined();
   });
+
+  it('keeps validation issues owned by the leaf that produced them', async () => {
+    const first = createObserverHarness();
+    const second = createObserverHarness();
+    const note = file('Notes/shared.md');
+    const firstLeaf = leafFor(first.window, note);
+    const secondLeaf = leafFor(second.window, note);
+    const leaves = [firstLeaf, secondLeaf];
+    const persistent = styleAt(0);
+    const invalidPreview = styleAt(1);
+    invalidPreview.css = 'body { color: red; }';
+    const app = {
+      workspace: { getLeavesOfType: () => leaves },
+      vault: { getAbstractFileByPath: () => note },
+      metadataCache: { getFileCache: () => null },
+    };
+    const renderer = new PageRenderer(
+      app as never,
+      { ...DEFAULT_SETTINGS, enableReadingView: true, enableLivePreview: false },
+      { getStyle: vi.fn(() => persistent), hasStyle: vi.fn(() => true) } as never,
+      { measurePage: vi.fn(async () => metrics()), clear: vi.fn() } as never,
+    );
+
+    await renderer.refreshAll();
+    await renderer.setPreview(firstLeaf, 'invalid-preview', note.path, invalidPreview);
+    expect(renderer.issuesFor(note).some((issue) => issue.path === 'css.selector')).toBe(true);
+
+    leaves.splice(1, 1);
+    await renderer.refreshAll();
+    expect(renderer.issuesFor(note).some((issue) => issue.path === 'css.selector')).toBe(true);
+
+    leaves.splice(0, 1);
+    await renderer.refreshAll();
+    expect(renderer.issuesFor(note)).toEqual([]);
+    renderer.destroy();
+  });
 });

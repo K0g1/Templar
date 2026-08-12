@@ -111,4 +111,29 @@ describe('preview sessions', () => {
     expect(service.current()).toBeNull();
     expect(cancelPreview).toHaveBeenCalledWith(leaf, 'sidebar');
   });
+
+  it('keeps two previews in one document independently addressable', () => {
+    const ownerDocument = {} as Document;
+    const view = { containerEl: { ownerDocument }, requestAnimationFrame: vi.fn(() => 1), cancelAnimationFrame: vi.fn() };
+    const firstLeaf = { view } as unknown as WorkspaceLeaf;
+    const secondLeaf = { view: { ...view } } as unknown as WorkspaceLeaf;
+    const firstFile = fixture<TFile>({ path: 'first.md' });
+    const secondFile = fixture<TFile>({ path: 'second.md' });
+    const renderer = {
+      setPreview: vi.fn(async () => undefined),
+      cancelPreview: vi.fn(async () => undefined),
+      cancelPreviewsByOwner: vi.fn(),
+    } as unknown as PageRenderer;
+    const service = new PreviewSessionService(
+      clone(DEFAULT_SETTINGS),
+      { getStyle: vi.fn(() => null) } as unknown as FrontmatterService,
+      renderer,
+    );
+
+    service.preview('first', firstLeaf, firstFile, BUILT_IN_TEMPLATES[0]!);
+    service.preview('second', secondLeaf, secondFile, BUILT_IN_TEMPLATES[1]!);
+    expect(service.sessionsForDocument(ownerDocument).map((session) => session.owner)).toEqual(['first', 'second']);
+    expect(service.currentForLeaf(firstLeaf)?.owner).toBe('first');
+    expect(service.currentForLeaf(secondLeaf)?.owner).toBe('second');
+  });
 });

@@ -183,7 +183,7 @@ export default class TemplarPlugin extends Plugin {
 
   private bindKeyboardDocument(ownerDocument: Document): void {
     if (this.keyboardCleanups.has(ownerDocument)) return;
-    const unbind = bindPreviewEscape(ownerDocument, this.preview, () => this.refreshSidebars());
+    const unbind = bindPreviewEscape(ownerDocument, this.preview, () => this.activeMarkdownLeaf(), () => this.refreshSidebars());
     const cleanup = (): void => {
       unbind();
       if (this.keyboardCleanups.get(ownerDocument) === cleanup) {
@@ -374,8 +374,8 @@ export default class TemplarPlugin extends Plugin {
     if (leaf?.view instanceof TemplarStylesView) leaf.view.previewNextFavourite(direction);
   }
 
-  public async applyCurrentPreview(): Promise<void> {
-    const session = this.preview.current();
+  public async applyCurrentPreview(leaf = this.activeMarkdownLeaf()): Promise<void> {
+    const session = leaf ? this.preview.currentForLeaf(leaf) : null;
     if (!session) return;
     await this.preview.cancel(session.owner);
     await this.applyTemplate(noteTemplateSnapshot(session.style), session.file, session.style.page);
