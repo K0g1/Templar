@@ -9,7 +9,7 @@ tags:
 
 **Route 04** · North basin to Mirror Lake · *Blue-hour departure*
 
-![[Assets/alpine-blue-hour.png]]
+![[Assets/alpine-blue-hour.webp]]
 
 ## The lake before sunrise
 

@@ -9,7 +9,7 @@ tags:
 
 **Project:** Afterimage · **Edition:** 01 · **Status:** ==IN MOTION==
 
-![[Assets/neon-night.png]]
+![[Assets/neon-night.webp]]
 
 ## Visual direction
 

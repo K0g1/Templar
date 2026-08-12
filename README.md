@@ -14,7 +14,7 @@ Templar turns ordinary Obsidian notes into polished journals, study sheets, proj
 
 | Botanical field notes | Alpine travel log | Neon creative brief |
 | :---: | :---: | :---: |
-| [![A botanical journal note in Obsidian with fern photography, warm paper, a heading, highlighted text, a table, and checklist](docs/assets/gallery/botanical-field-notes.png)](docs/assets/gallery/botanical-field-notes.png) | [![An alpine travel note in Obsidian with mountain photography, cool paper styling, highlighted route notes, a numbered list, and a table](docs/assets/gallery/alpine-field-log.png)](docs/assets/gallery/alpine-field-log.png) | [![A dark neon creative brief in Obsidian with cyberpunk photography, magenta and cyan accents, code, a palette table, checklist, and callouts](docs/assets/gallery/neon-night-brief.png)](docs/assets/gallery/neon-night-brief.png) |
+| [![A botanical journal note in Obsidian with fern photography, warm paper, a heading, highlighted text, a table, and checklist](docs/assets/gallery/botanical-field-notes.webp)](docs/assets/gallery/botanical-field-notes.webp) | [![An alpine travel note in Obsidian with mountain photography, cool paper styling, highlighted route notes, a numbered list, and a table](docs/assets/gallery/alpine-field-log.webp)](docs/assets/gallery/alpine-field-log.webp) | [![A dark neon creative brief in Obsidian with cyberpunk photography, magenta and cyan accents, code, a palette table, checklist, and callouts](docs/assets/gallery/neon-night-brief.webp)](docs/assets/gallery/neon-night-brief.webp) |
 
 These are real Markdown notes rendered by Templar inside Obsidian—not mockups. The example notes and original artwork are included in [`examples/`](examples/).
 

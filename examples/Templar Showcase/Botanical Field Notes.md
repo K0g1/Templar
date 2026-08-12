@@ -10,7 +10,7 @@ aliases:
 
 *A slow study of woodland forms, collected at first light.*
 
-![[Assets/botanical-journal.png]]
+![[Assets/botanical-journal.webp]]
 
 ## Specimen 07 · Western Sword Fern
 
