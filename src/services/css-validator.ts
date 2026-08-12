@@ -126,6 +126,37 @@ const reservedRootAvailabilityProperties = new Set([
   'scale',
   'zoom',
 ]);
+const broadAvailabilityProperties = new Set([
+  'display',
+  'visibility',
+  'content-visibility',
+  'opacity',
+  'pointer-events',
+  'filter',
+  'backdrop-filter',
+  'clip',
+  'clip-path',
+  'mask',
+  'mask-image',
+  '-webkit-mask',
+  '-webkit-mask-image',
+  'transform',
+  'scale',
+  'zoom',
+]);
+const broadCollapseProperties = new Set([
+  'height',
+  'block-size',
+  'max-height',
+  'max-block-size',
+  'font-size',
+  'line-height',
+]);
+const broadClippingProperties = new Set([
+  'overflow',
+  'overflow-x',
+  'overflow-y',
+]);
 const unstableLengthUnit =
   /[-+]?(?:\d+|\d*\.\d+)\s*(?:cqb|cqh|cqi|cqmax|cqmin|cqw|dvh|dvw|lvh|lvw|svh|svw|vb|vh|vi|vmax|vmin|vw)\b/i;
 
@@ -243,6 +274,75 @@ function validateSelector(selector: string, issues: ValidationIssue[]): Selector
   }
 }
 
+function isCssZero(value: string): boolean {
+  const normalized = decodeCssEscapes(value)
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '');
+  if (/^(?:0+(?:\.0+)?|\.0+)(?:[a-z%]+)?$/.test(normalized)) return true;
+  return /^calc\(0+(?:\.0+)?(?:[a-z%]+)?\)$/.test(normalized);
+}
+
+function isClippingOverflow(value: string): boolean {
+  return /^(?:hidden|clip)(?:\s+hidden|\s+clip){0,1}$/.test(value.trim().toLowerCase());
+}
+
+function validateBroadAvailabilityRule(
+  rule: Rule,
+  analyses: readonly SelectorAnalysis[],
+  issues: ValidationIssue[],
+): void {
+  if (!analyses.some((analysis) => analysis.availabilityCoverage === 'potentially-all-descendants')) {
+    return;
+  }
+  const declarations = rule.nodes.filter((node) => node.type === 'decl');
+  const collapse = declarations.some((node) =>
+    node.type === 'decl' &&
+    broadCollapseProperties.has(decodeCssEscapes(node.prop).toLowerCase()) &&
+    isCssZero(node.value),
+  );
+  const clipping = declarations.some((node) =>
+    node.type === 'decl' &&
+    broadClippingProperties.has(decodeCssEscapes(node.prop).toLowerCase()) &&
+    isClippingOverflow(node.value),
+  );
+  for (const node of declarations) {
+    if (node.type !== 'decl') continue;
+    const property = decodeCssEscapes(node.prop).toLowerCase();
+    const value = decodeCssEscapes(node.value).toLowerCase();
+    if (broadAvailabilityProperties.has(property)) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” is not allowed on a selector that may cover every page descendant.`,
+        fix: 'Add a positive tag, class, attribute, or ID subject so the effect cannot remove the whole note.',
+      });
+    }
+    if (collapse && clipping && (broadCollapseProperties.has(property) || broadClippingProperties.has(property))) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” combines descendant-wide collapse with clipping and could make note content disappear.`,
+        fix: 'Use a specific Markdown descendant and avoid zero geometry with hidden or clipped overflow.',
+      });
+    }
+    if (
+      property === 'position' &&
+      /^(?:absolute|relative|fixed|sticky)$/.test(value) &&
+      declarations.some((candidate) => candidate.type === 'decl' &&
+        /^(?:inset|top|right|bottom|left|translate|transform)$/.test(decodeCssEscapes(candidate.prop).toLowerCase()) &&
+        /(?:-999|-100%|100%|999)/.test(decodeCssEscapes(candidate.value)))
+    ) {
+      issues.push({
+        severity: 'error',
+        path: 'css.position',
+        message: 'Positioning every page descendant with an extreme displacement is not allowed.',
+        fix: 'Use a positively narrowed Markdown descendant and ordinary page-relative positioning.',
+      });
+    }
+  }
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -313,6 +413,7 @@ export function validateCustomCss(
         analyses.push(...validateSelector(selector, issues));
       }
       ruleAnalyses.set(rule, analyses);
+      validateBroadAvailabilityRule(rule, analyses, issues);
     }
   });
 
@@ -341,7 +442,6 @@ export function validateCustomCss(
     const analyses = parentRule ? ruleAnalyses.get(parentRule) ?? [] : [];
     const targetsRoot = analyses.some((analysis) => analysis.targetsVirtualRoot);
     const targetsRhythm = analyses.some((analysis) => analysis.targetsRhythmElement);
-    const targetsWholePage = analyses.some((analysis) => analysis.targetsWholePage);
     if (
       parentRule &&
       reservedRootGeometryProperties.has(property) &&
@@ -357,7 +457,7 @@ export function validateCustomCss(
     if (
       parentRule &&
       reservedRootAvailabilityProperties.has(property) &&
-      (targetsRoot || targetsWholePage)
+      targetsRoot
     ) {
       issues.push({
         severity: 'error',
@@ -423,23 +523,6 @@ export function validateCustomCss(
         path: 'css.z-index',
         message: 'Calculated or variable z-index values cannot be safety-bounded.',
         fix: 'Use auto or a literal z-index between -1 and 20.',
-      });
-    }
-    if (
-      declaration.parent?.type === 'rule' &&
-      targetsWholePage &&
-      ((property === 'display' && value.trim() === 'none') ||
-        (property === 'visibility' && value.trim() === 'hidden') ||
-        (property === 'content-visibility' && value.trim() === 'hidden') ||
-        (property === 'opacity' && Number.parseFloat(value) === 0) ||
-        (property === 'pointer-events' && value.trim() === 'none') ||
-        (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())))
-    ) {
-      issues.push({
-        severity: 'error',
-        path: `css.${property}`,
-        message: `“${property}: ${declaration.value}” would hide or disable the whole note.`,
-        fix: 'Target a specific Markdown element without making the page inaccessible.',
       });
     }
     if (property.includes('animation') && /\binfinite\b/.test(value)) {

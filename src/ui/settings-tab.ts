@@ -7,6 +7,7 @@ import { ConfirmationModal } from './modals';
 import { renderIssues } from './issues';
 import { renderTemplatePreview } from './template-preview';
 import { writeTextToClipboard } from '../utils/clipboard';
+import { runBackgroundTask, runUserAction } from './async-actions';
 
 export class TemplarSettingTab extends PluginSettingTab {
   public constructor(
@@ -86,7 +87,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setName('Open page styles')
       .setDesc('Preview, apply, customize, duplicate, export, and delete styles.')
       .addButton((button) =>
-        button.setButtonText('Open library').onClick(() => void this.plugin.openStylesView()),
+        button.setButtonText('Open library').onClick(() => runUserAction(() => this.plugin.openStylesView(), 'Could not open Page Styles')),
       );
     new Setting(containerEl)
       .setName('Create a page style')
@@ -147,7 +148,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       this.plugin.library.get(this.plugin.settings.defaultTemplateId) ??
       this.plugin.library.get(DEFAULT_TEMPLATE_ID);
     if (selected) {
-      void renderTemplatePreview(preview, selected, this.plugin.fontMetrics);
+      runBackgroundTask(() => renderTemplatePreview(preview, selected, this.plugin.fontMetrics), 'Could not render the settings preview');
     }
 
     new Setting(containerEl).setName('AI / LLM template builder').setHeading();
@@ -158,10 +159,10 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setName('Template authoring skill')
       .setDesc('Includes the v1 schema, selectors, safety rules, performance guidance, and a complete example.')
       .addButton((button) =>
-        button.setButtonText('Copy instructions').setCta().onClick(() => void this.plugin.copyAuthoringKit()),
+        button.setButtonText('Copy instructions').setCta().onClick(() => runUserAction(() => this.plugin.copyAuthoringKit(), 'Could not copy the authoring instructions')),
       )
       .addButton((button) =>
-        button.setButtonText('Export to vault').onClick(() => void this.plugin.exportAuthoringKit()),
+        button.setButtonText('Export to vault').onClick(() => runUserAction(() => this.plugin.exportAuthoringKit(), 'Could not export the authoring instructions')),
       );
     new Setting(containerEl)
       .setName('Import AI-generated template')
@@ -197,7 +198,7 @@ export class TemplarSettingTab extends PluginSettingTab {
           .setName(entry.templateId ? `Entry ${entry.templateId}` : `Entry ${String(entry.index + 1)}`)
           .setDesc(`${warning} Raw data is retained until you choose an action.`)
           .addButton((button) => button.setButtonText('Copy raw data').onClick(() => {
-            void writeTextToClipboard(raw)
+            writeTextToClipboard(raw)
               .then(() => new Notice('Copied quarantined style data.'))
               .catch((error) => new Notice(error instanceof Error ? error.message : String(error)));
           }))

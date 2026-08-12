@@ -6,6 +6,8 @@ The current runtime/source map and release status are summarized in [`DEVELOPER_
 
 Templar processes four user-controlled inputs:
 
+Unsupported future-version Templar data is protected and blocks automatic styling, replacement, and removal. Invalid and unsupported legacy data use the same fail-closed path. A recovery copy is required before an explicit destructive action, and raw fingerprints are checked inside the frontmatter mutation callback.
+
 1. note frontmatter;
 2. pasted/imported template YAML;
 3. advanced template CSS.

@@ -11,3 +11,4 @@ export * from './pack-export-modal';
 export * from './raw-style-modal';
 export * from './batch-apply-modal';
 export * from './synchronization-modal';
+export * from './recovery-modal';

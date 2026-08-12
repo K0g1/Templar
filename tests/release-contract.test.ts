@@ -31,10 +31,14 @@ function fixture(version = '1.3.0-alpha.1'): string {
   writeFileSync(join(directory, 'release-metadata.json'), JSON.stringify({
     tag: version,
     title: `Templar ${version}`,
-    prerelease: version.includes('-'),
+    prerelease: semverPrerelease(version),
     assets: [...assets, 'SHA256SUMS.txt'],
   }));
   return directory;
+}
+
+function semverPrerelease(version: string): boolean {
+  return version.includes('-') && !version.includes('+') || version.includes('-') && version.indexOf('-') < version.indexOf('+');
 }
 
 function verify(version: string, directory: string): void {
@@ -51,7 +55,7 @@ function failure(directory: string, expected: string, version = '1.3.0-alpha.1')
 }
 
 describe('BRAT release contract verifier', () => {
-  it.each(['1.3.0', '1.3.0-alpha.1', '1.3.0-beta.2', '1.3.0-rc.1', '1.3.0-alpha.10'])('accepts %s', (version) => {
+  it.each(['1.3.0', '1.3.0+build-5', '1.3.0-alpha.1', '1.3.0-alpha.1+build-5', '1.3.0-beta.2', '1.3.0-rc.1', '1.3.0-alpha.10'])('accepts %s', (version) => {
       const directory = fixture(version);
       try {
         expect(() => verify(version, directory)).not.toThrow();

@@ -123,9 +123,9 @@ describe('renderer controller performance fixtures', () => {
               image.configure(leaf, testFixture.content, styles[mode]);
               paper.configure(leaf, testFixture.content, styles[mode], metrics);
               rhythm.configure(leaf, testFixture.content, styles[mode]);
-              image.clear(leaf, testFixture.content);
-              paper.clear(leaf, testFixture.content);
-              rhythm.clear(leaf, testFixture.content);
+              image.clear(leaf);
+              paper.clear(leaf);
+              rhythm.clear(leaf);
             }
           }, rendererBenchOptions);
         }
@@ -139,7 +139,7 @@ describe('renderer controller performance fixtures', () => {
       const controller = new ImageSnapController();
       const leaf = imageFixture.leaves[0]!;
       controller.configure(leaf, imageFixture.content, styles.pageless);
-      controller.clear(leaf, imageFixture.content);
+      controller.clear(leaf);
     }, rendererBenchOptions);
   });
 });

@@ -16,10 +16,15 @@ export interface PreviewSession {
   style: TemplarNoteStyle;
 }
 
+interface PendingPreviewFrame {
+  id: number;
+  window: Window;
+}
+
 export class PreviewSessionService {
   private readonly sessions = new Map<string, PreviewSession>();
   private readonly leafOwners = new Map<WorkspaceLeaf, string>();
-  private readonly pendingFrames = new Map<string, number>();
+  private readonly pendingFrames = new Map<string, PendingPreviewFrame>();
 
   public constructor(
     private readonly settings: TemplarSettings,
@@ -33,8 +38,20 @@ export class PreviewSessionService {
     file: TFile,
     template: TemplarTemplate,
   ): void {
+    const existingOwnerSession = this.sessions.get(owner);
+    if (existingOwnerSession && existingOwnerSession.leaf !== leaf) {
+      this.cancelFrame(owner);
+      if (this.leafOwners.get(existingOwnerSession.leaf) === owner) this.leafOwners.delete(existingOwnerSession.leaf);
+      this.sessions.delete(owner);
+      this.handleAsyncFailure(
+        this.renderer.cancelPreview(existingOwnerSession.leaf, owner),
+        'Preview retarget cleanup failed',
+      );
+    }
     const previousOwner = this.leafOwners.get(leaf);
-    if (previousOwner && previousOwner !== owner) void this.cancel(previousOwner);
+    if (previousOwner && previousOwner !== owner) {
+      this.handleAsyncFailure(this.cancel(previousOwner), 'Previous preview cleanup failed');
+    }
     const page = this.pageOptions(file);
     const style = templateToNoteStyle(template, page);
     const session: PreviewSession = {
@@ -50,16 +67,16 @@ export class PreviewSessionService {
     this.cancelFrame(owner);
     const view = leaf.view.containerEl.ownerDocument.defaultView;
     if (!view) {
-      void this.renderer.setPreview(leaf, owner, file.path, style);
+      this.handleAsyncFailure(this.renderer.setPreview(leaf, owner, file.path, style), 'Preview render failed');
       return;
     }
     const frame = view.requestAnimationFrame(() => {
       this.pendingFrames.delete(owner);
       if (this.sessions.get(owner) === session) {
-        void this.renderer.setPreview(leaf, owner, file.path, style);
+        this.handleAsyncFailure(this.renderer.setPreview(leaf, owner, file.path, style), 'Preview render failed');
       }
     });
-    this.pendingFrames.set(owner, frame);
+    this.pendingFrames.set(owner, { id: frame, window: view });
   }
 
   public previewStyle(
@@ -68,6 +85,16 @@ export class PreviewSessionService {
     file: TFile,
     style: TemplarNoteStyle,
   ): void {
+    const existingOwnerSession = this.sessions.get(owner);
+    if (existingOwnerSession && existingOwnerSession.leaf !== leaf) {
+      this.cancelFrame(owner);
+      if (this.leafOwners.get(existingOwnerSession.leaf) === owner) this.leafOwners.delete(existingOwnerSession.leaf);
+      this.sessions.delete(owner);
+      this.handleAsyncFailure(
+        this.renderer.cancelPreview(existingOwnerSession.leaf, owner),
+        'Preview retarget cleanup failed',
+      );
+    }
     const session: PreviewSession = {
       owner,
       leaf,
@@ -77,21 +104,23 @@ export class PreviewSessionService {
       style: clone(style),
     };
     const previousOwner = this.leafOwners.get(leaf);
-    if (previousOwner && previousOwner !== owner) void this.cancel(previousOwner);
+    if (previousOwner && previousOwner !== owner) {
+      this.handleAsyncFailure(this.cancel(previousOwner), 'Previous preview cleanup failed');
+    }
     this.sessions.set(owner, session);
     this.leafOwners.set(leaf, owner);
     this.cancelFrame(owner);
     const view = leaf.view.containerEl.ownerDocument.defaultView;
     if (!view) {
-      void this.renderer.setPreview(leaf, owner, file.path, style);
+      this.handleAsyncFailure(this.renderer.setPreview(leaf, owner, file.path, style), 'Preview render failed');
       return;
     }
-    this.pendingFrames.set(owner, view.requestAnimationFrame(() => {
+    this.pendingFrames.set(owner, { id: view.requestAnimationFrame(() => {
       this.pendingFrames.delete(owner);
       if (this.sessions.get(owner) === session) {
-        void this.renderer.setPreview(leaf, owner, file.path, session.style);
+        this.handleAsyncFailure(this.renderer.setPreview(leaf, owner, file.path, session.style), 'Preview render failed');
       }
-    }));
+    }), window: view });
   }
 
   public current(owner?: string): PreviewSession | null {
@@ -174,8 +203,11 @@ export class PreviewSessionService {
   private cancelFrame(owner: string): void {
     const frame = this.pendingFrames.get(owner);
     if (frame === undefined) return;
-    const session = this.sessions.get(owner);
-    session?.leaf.view.containerEl.ownerDocument.defaultView?.cancelAnimationFrame(frame);
+    frame.window.cancelAnimationFrame(frame.id);
     this.pendingFrames.delete(owner);
+  }
+
+  private handleAsyncFailure(task: Promise<void>, context: string): void {
+    task.catch((error: unknown) => console.error(`[Templar] ${context}`, error));
   }
 }

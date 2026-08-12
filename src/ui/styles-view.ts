@@ -5,6 +5,7 @@ import { noteTemplateSnapshot, synchronizationStatus } from '../services/synchro
 import { templateFolderKey } from '../templates/schema';
 import type { LibraryDensity, TemplarTemplate } from '../types';
 import { ConfirmationModal } from './modals';
+import { runUserAction } from './async-actions';
 
 type LibraryTab = 'recent' | 'favorites' | 'built-in' | 'custom';
 type LibrarySort = 'name' | 'most-used';
@@ -84,7 +85,8 @@ export class TemplarStylesView extends ItemView {
 
   private renderCurrentNote(container: HTMLElement): void {
     const file = this.plugin.activeFile();
-    const style = file ? this.plugin.frontmatter.getStyle(file) : null;
+    const inspection = file ? this.plugin.frontmatter.inspect(file) : null;
+    const style = inspection?.style ?? null;
     const preview = this.plugin.preview.current(this.previewOwner);
     const card = container.createDiv({ cls: `templar-current-note${preview ? ' is-previewing' : ''}` });
     card.createDiv({ cls: 'templar-section-label', text: preview ? 'Previewing' : 'Current note' });
@@ -93,12 +95,16 @@ export class TemplarStylesView extends ItemView {
       card.createDiv({ cls: 'templar-current-style-name', text: preview.templateName });
       const actions = card.createDiv({ cls: 'templar-inline-actions' });
       const apply = actions.createEl('button', { cls: 'mod-cta', text: 'Apply' });
-      apply.addEventListener('click', () => void this.applyPreview());
+      apply.addEventListener('click', () => runUserAction(() => this.applyPreview(), 'Could not apply the previewed style'));
       const cancel = actions.createEl('button', { text: 'Cancel preview' });
-      cancel.addEventListener('click', () => void this.cancelPreview());
+      cancel.addEventListener('click', () => runUserAction(() => this.cancelPreview(), 'Could not cancel the style preview'));
       return;
     }
-    let stateText = style ? `${style.name} · ${style.page.mode}` : 'Normal Obsidian appearance';
+    let stateText = style
+      ? `${style.name} · ${style.page.mode}`
+      : inspection?.rawExists
+        ? inspection.status === 'unsupported-future' ? 'Newer Templar data · Recovery required' : 'Templar data · Recovery required'
+        : 'Normal Obsidian appearance';
     if (style) {
       const status = synchronizationStatus(style, this.plugin.library.get(style.sourceTemplateId ?? style.id));
       if (status.modified) stateText += ' · Modified';
@@ -118,6 +124,9 @@ export class TemplarStylesView extends ItemView {
       const more = actions.createEl('button', { attr: { 'aria-label': 'More current note actions', title: 'More actions' } });
       setIcon(more, 'more-horizontal');
       more.addEventListener('click', (event) => this.showCurrentNoteMenu(event, file));
+    } else if (file && inspection?.rawExists) {
+      const recover = card.createEl('button', { cls: 'mod-warning', text: 'Open recovery' });
+      recover.addEventListener('click', () => this.plugin.showRecovery(file));
     }
   }
 
@@ -174,7 +183,7 @@ export class TemplarStylesView extends ItemView {
       density.createEl('option', { text: value[0]!.toUpperCase() + value.slice(1), value });
     }
     density.value = this.plugin.settings.libraryDensity;
-    density.addEventListener('change', () => void this.setDensity(density.value as LibraryDensity));
+    density.addEventListener('change', () => runUserAction(() => this.setDensity(density.value as LibraryDensity), 'Could not save the library density'));
     const sort = controls.createEl('select', { attr: { 'aria-label': 'Sort styles' } });
     sort.createEl('option', { value: 'name', text: 'Name' });
     sort.createEl('option', { value: 'most-used', text: 'Most used' });
@@ -251,7 +260,10 @@ export class TemplarStylesView extends ItemView {
     swatch.style.setProperty('--templar-swatch-margin', template.paper.marginColor);
     swatch.dataset.pattern = template.paper.pattern;
     const favorite = swatch.createEl('button', { cls: `templar-favourite-toggle${this.plugin.library.isFavourite(template.id) ? ' is-active' : ''}`, attr: { 'aria-label': `${this.plugin.library.isFavourite(template.id) ? 'Remove' : 'Add'} ${template.name} ${this.plugin.library.isFavourite(template.id) ? 'from' : 'to'} favorites`, 'aria-pressed': String(this.plugin.library.isFavourite(template.id)) }, text: '★' });
-    favorite.addEventListener('click', () => void this.plugin.library.toggleFavourite(template.id).then(() => this.render()));
+    favorite.addEventListener('click', () => runUserAction(async () => {
+      await this.plugin.library.toggleFavourite(template.id);
+      this.render();
+    }, 'Could not update favorites'));
     card.createDiv({ cls: 'templar-style-name', text: template.name });
     card.createDiv({ cls: 'templar-folder-badge', text: template.metadata.folder });
     if (this.plugin.settings.libraryDensity === 'comfortable') card.createDiv({ cls: 'templar-style-description', text: template.metadata.description });
@@ -268,7 +280,7 @@ export class TemplarStylesView extends ItemView {
     const actions = card.createDiv({ cls: 'templar-card-actions' });
     const apply = actions.createEl('button', { cls: 'mod-cta', text: 'Apply', attr: { title: this.plugin.activeFile() ? 'Apply style' : 'Open a Markdown note to apply this style' } });
     apply.disabled = !this.plugin.activeFile();
-    apply.addEventListener('click', () => void this.plugin.applyTemplate(template));
+    apply.addEventListener('click', () => runUserAction(() => this.plugin.applyTemplate(template), 'Could not apply the page style'));
     const more = actions.createEl('button', { attr: { 'aria-label': `More actions for ${template.name}`, title: 'More actions' } });
     setIcon(more, 'more-horizontal');
     more.addEventListener('click', (event) => this.showTemplateMenu(event, template));
@@ -280,8 +292,11 @@ export class TemplarStylesView extends ItemView {
     menu.addItem((item) => item.setTitle('Apply with page options…').setIcon('settings-2').setDisabled(!this.plugin.activeFile()).onClick(() => this.plugin.showApplyWithOptions(template)));
     menu.addItem((item) => item.setTitle('Create new note with this style').setIcon('file-plus').onClick(() => this.plugin.showCreateStyledNote(template)));
     menu.addItem((item) => item.setTitle(template.builtIn ? 'Customize template' : 'Edit template').setIcon('pencil').onClick(() => this.plugin.showTemplateCreator(template)));
-    menu.addItem((item) => item.setTitle('Duplicate').setIcon('copy').onClick(() => void this.plugin.library.duplicate(template.id).then(() => this.render())));
-    menu.addItem((item) => item.setTitle('Export').setIcon('upload').onClick(() => void this.plugin.exportTemplate(template)));
+    menu.addItem((item) => item.setTitle('Duplicate').setIcon('copy').onClick(() => runUserAction(async () => {
+      await this.plugin.library.duplicate(template.id);
+      this.render();
+    }, 'Could not duplicate the page style')));
+    menu.addItem((item) => item.setTitle('Export').setIcon('upload').onClick(() => runUserAction(() => this.plugin.exportTemplate(template), 'Could not export the page style')));
     if (!template.builtIn) {
       menu.addSeparator();
       menu.addItem((item) => item.setTitle('Delete from library').setIcon('trash').onClick(() => this.confirmDelete(template)));
@@ -292,10 +307,10 @@ export class TemplarStylesView extends ItemView {
   private showCurrentNoteMenu(event: MouseEvent, file: TFile): void {
     const menu = new Menu();
     menu.addItem((item) => item.setTitle('Edit raw style…').setIcon('code').onClick(() => this.plugin.showRawStyleEditor(file)));
-    menu.addItem((item) => item.setTitle('Print / export styled note').setIcon('printer').onClick(() => void this.plugin.printStyledNote(file)));
+    menu.addItem((item) => item.setTitle('Print / export styled note').setIcon('printer').onClick(() => runUserAction(() => this.plugin.printStyledNote(file), 'Could not print the styled note')));
     menu.addItem((item) => item.setTitle('Review template updates').setIcon('refresh-cw').onClick(() => this.plugin.showSynchronizationReview()));
     menu.addSeparator();
-    menu.addItem((item) => item.setTitle('Remove style').setIcon('eraser').onClick(() => void this.plugin.removeStyle(file)));
+    menu.addItem((item) => item.setTitle('Remove style').setIcon('eraser').onClick(() => runUserAction(() => this.plugin.removeStyle(file), 'Could not remove the page style')));
     menu.showAtMouseEvent(event);
   }
 
@@ -370,7 +385,11 @@ export class TemplarStylesView extends ItemView {
     const inInput = target.matches('input, textarea, select') || target.isContentEditable;
     if (event.key === '/' && !inInput) { event.preventDefault(); this.focusSearch(); return; }
     if (event.key === 'Escape') {
-      if (this.plugin.preview.current(this.previewOwner)) { event.preventDefault(); void this.cancelPreview(); return; }
+      if (this.plugin.preview.current(this.previewOwner)) {
+        event.preventDefault();
+        runUserAction(() => this.cancelPreview(), 'Could not cancel the style preview');
+        return;
+      }
       if (this.searchQuery) { event.preventDefault(); this.searchQuery = ''; this.render(); return; }
       if (this.activeFolder) { event.preventDefault(); this.activeFolder = null; this.render(); return; }
       if (!inInput) { target.blur(); return; }
@@ -386,8 +405,17 @@ export class TemplarStylesView extends ItemView {
     else if (event.key === 'Home') { event.preventDefault(); this.selectedId = this.cardEls[0]?.dataset.templateId ?? null; this.updateRovingFocus(); this.cardEls[0]?.focus(); }
     else if (event.key === 'End') { event.preventDefault(); const last = this.cardEls[this.cardEls.length - 1]; this.selectedId = last?.dataset.templateId ?? null; this.updateRovingFocus(); last?.focus(); }
     else if (event.key === ' ') { event.preventDefault(); this.previewTemplate(template); }
-    else if (event.key === 'Enter') { event.preventDefault(); void this.plugin.applyTemplate(template); }
-    else if (event.key.toLowerCase() === 'f') { event.preventDefault(); void this.plugin.library.toggleFavourite(template.id).then(() => this.render()); }
+    else if (event.key === 'Enter') {
+      event.preventDefault();
+      runUserAction(() => this.plugin.applyTemplate(template), 'Could not apply the page style');
+    }
+    else if (event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      runUserAction(async () => {
+        await this.plugin.library.toggleFavourite(template.id);
+        this.render();
+      }, 'Could not update favorites');
+    }
   };
 
   private confirmDelete(template: TemplarTemplate): void {

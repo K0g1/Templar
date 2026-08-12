@@ -10,14 +10,13 @@ import {
 import type TemplarPlugin from '../../main';
 import {
   parseTemplatePack,
-  uniqueCopyId,
   type PackReview,
 } from '../../services/template-pack';
 import {
   parsedObjectToTemplate,
 } from '../../templates/note-format';
 import {
-  validateTemplateSource,
+  inspectTemplateSchema,
 } from '../../templates/schema';
 import {
   validateCompleteTemplate,
@@ -36,6 +35,7 @@ import {
   stripCodeFence,
 } from './shared';
 import { renderTemplatePreview } from '../template-preview';
+import { runUserAction } from '../async-actions';
 
 /* The class is kept in its focused modal module; shared UI helpers live in ./shared. */
 export class TemplateImportModal extends Modal {
@@ -48,6 +48,7 @@ export class TemplateImportModal extends Modal {
   private packReview: PackReview | null = null;
   private readonly packSelection = new Set<number>();
   private readonly conflictChoices = new Map<number, 'keep' | 'replace' | 'copy'>();
+  private readonly conflictControls = new Map<number, HTMLSelectElement>();
   private applyConflictChoiceToRemaining = false;
   private singleConflictChoice: 'keep' | 'replace' | 'copy' = 'copy';
 
@@ -72,7 +73,7 @@ export class TemplateImportModal extends Modal {
 
     const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
     const validateButton = actions.createEl('button', { text: 'Validate and preview' });
-    validateButton.addEventListener('click', () => void this.validateInput());
+    validateButton.addEventListener('click', () => runUserAction(() => this.validateInput(), 'Could not validate the import'));
     this.saveButton = actions.createEl('button', {
       cls: 'mod-cta',
       text: 'Save to library',
@@ -93,6 +94,7 @@ export class TemplateImportModal extends Modal {
     this.packReview = null;
     this.packSelection.clear();
     this.conflictChoices.clear();
+    this.conflictControls.clear();
     this.singleConflictChoice = 'copy';
     this.saveButton.disabled = true;
     this.previewEl.empty();
@@ -110,11 +112,24 @@ export class TemplateImportModal extends Modal {
         this.renderPackReview();
         return;
       }
-      const template = parsedObjectToTemplate(parsed);
+      const inspected = inspectTemplateSchema(parsed);
+      if (!inspected.value) {
+        renderIssues(this.validationEl, inspected.issues.map((issue) => ({
+          severity: 'error' as const,
+          path: 'schema',
+          message: issue.message,
+        })));
+        return;
+      }
+      const template = parsedObjectToTemplate(inspected.value);
       template.builtIn = false;
       const issues = [
-        ...validateTemplateSource(parsed),
         ...validateCompleteTemplate(template),
+        ...(inspected.status === 'migrated' ? [{
+          severity: 'suggestion' as const,
+          path: 'version',
+          message: `This template was migrated in memory from format v${String(inspected.rawVersion)} to v1. Saving will write the current v1 format.`,
+        }] : []),
       ];
       renderIssues(this.validationEl, issues);
       if (issues.some((issue) => issue.severity === 'error')) {
@@ -161,27 +176,23 @@ export class TemplateImportModal extends Modal {
 
   private async save(): Promise<void> {
     if (this.packReview) {
-      let imported = 0;
-      const usedIds = new Set(this.plugin.library.all().map((template) => template.id));
-      for (const index of this.packSelection) {
-        const review = this.packReview.templates[index];
-        if (!review?.valid) continue;
+      const plan = [...this.packSelection].flatMap((index) => {
+        const review = this.packReview?.templates[index];
+        if (!review?.valid) return [];
         const incoming = clone(review.template);
         const existing = this.plugin.library.get(incoming.id);
-        if (existing) {
-          const choice = this.conflictChoices.get(index) ?? 'keep';
-          if (choice === 'keep') continue;
-          if (choice === 'replace' && !existing.builtIn) {
-            await this.plugin.library.save(incoming);
-            imported += 1;
-            continue;
-          }
-          incoming.id = uniqueCopyId(incoming.id, usedIds);
-        }
-        usedIds.add(incoming.id);
-        await this.plugin.library.saveAsNew(incoming);
-        imported += 1;
-      }
+        const selected = this.conflictChoices.get(index) ?? 'keep';
+        const action = !existing
+          ? 'copy' as const
+          : selected === 'replace' && !existing.builtIn
+            ? 'replace' as const
+            : selected === 'copy' || (selected === 'replace' && existing.builtIn)
+              ? 'copy' as const
+              : 'keep' as const;
+        return [{ template: incoming, action }];
+      });
+      const saved = await this.plugin.library.importMany(plan);
+      const imported = saved.imported.length;
       this.plugin.refreshSidebars();
       new Notice(`Imported ${String(imported)} ${imported === 1 ? 'style' : 'styles'} from “${this.packReview.pack.name}”.`);
       this.close();
@@ -242,7 +253,10 @@ export class TemplateImportModal extends Modal {
       row.createDiv({ cls: 'templar-pack-entry-status', text: errors ? `${String(errors)} errors` : warnings ? `${String(warnings)} warnings` : 'Ready' });
       const preview = row.createEl('button', { text: 'Preview', attr: { 'aria-label': `Preview ${entry.template.name}` } });
       preview.disabled = !entry.valid;
-      preview.addEventListener('click', () => void renderTemplatePreview(detailPreview, entry.template, this.plugin.fontMetrics));
+      preview.addEventListener('click', () => runUserAction(
+        () => renderTemplatePreview(detailPreview, entry.template, this.plugin.fontMetrics),
+        'Could not render the template preview',
+      ));
       const existing = this.plugin.library.get(entry.template.id);
       if (existing && entry.valid) {
         const conflict = row.createEl('select', { attr: { 'aria-label': `Resolve ID conflict for ${entry.template.name}` } });
@@ -256,11 +270,15 @@ export class TemplateImportModal extends Modal {
             for (let remaining = index + 1; remaining < review.templates.length; remaining += 1) {
               const remainingExisting = this.plugin.library.get(review.templates[remaining]!.template.id);
               if (!remainingExisting) continue;
-              this.conflictChoices.set(remaining, choice === 'replace' && remainingExisting.builtIn ? 'copy' : choice);
+              const propagated = choice === 'replace' && remainingExisting.builtIn ? 'copy' : choice;
+              this.conflictChoices.set(remaining, propagated);
+              const remainingControl = this.conflictControls.get(remaining);
+              if (remainingControl) remainingControl.value = propagated;
             }
           }
         });
         this.conflictChoices.set(index, 'keep');
+        this.conflictControls.set(index, conflict);
       }
     });
     this.updatePackSaveButton();

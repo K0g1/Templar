@@ -22,7 +22,9 @@ export function bindPreviewEscape(
         })();
     if (!session) return;
     event.preventDefault();
-    void preview.cancel(session.owner).then(onCancelled);
+    preview.cancel(session.owner)
+      .then(onCancelled)
+      .catch((error: unknown) => console.error('[Templar] Preview cancellation failed', error));
   };
   ownerDocument.addEventListener('keydown', handler);
   return () => ownerDocument.removeEventListener('keydown', handler);

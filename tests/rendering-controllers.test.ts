@@ -83,9 +83,9 @@ describe('renderer ownership primitives', () => {
     expect(harness.resizeInstances).toHaveLength(3);
     expect(harness.mutationInstances).toHaveLength(3);
 
-    imageController.clear(leaf, content);
-    paperController.clear(leaf, content);
-    rhythmController.clear(leaf, content);
+    imageController.clear(leaf);
+    paperController.clear(leaf);
+    rhythmController.clear(leaf);
     expect(harness.resizeInstances.every((instance) => instance.disconnects > 0)).toBe(true);
     expect(harness.mutationInstances.every((instance) => instance.disconnects > 0)).toBe(true);
     expect(image.style.getPropertyValue('--templar-image-snap')).toBe('');
@@ -93,5 +93,28 @@ describe('renderer ownership primitives', () => {
     imageController.destroy();
     paperController.destroy();
     rhythmController.destroy();
+  });
+
+  it('cleans the previous root when a leaf is retargeted before clearing', () => {
+    const harness = createObserverHarness();
+    installObsidianDomExtensions(harness.window);
+    const first = harness.window.document.createElement('div');
+    const firstImage = harness.window.document.createElement('img');
+    first.append(firstImage);
+    const second = harness.window.document.createElement('div');
+    const secondImage = harness.window.document.createElement('img');
+    second.append(secondImage);
+    harness.window.document.body.append(first, second);
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.baseline.snapImages = true;
+    const leaf = {} as WorkspaceLeaf;
+    const imageController = new ImageSnapController();
+    imageController.configure(leaf, first, style);
+    firstImage.setCssProps({ '--templar-image-snap': '1px' });
+    imageController.configure(leaf, second, style);
+    expect(firstImage.style.getPropertyValue('--templar-image-snap')).toBe('');
+    imageController.clear(leaf);
+    expect(secondImage.style.getPropertyValue('--templar-image-snap')).toBe('');
+    imageController.destroy();
   });
 });

@@ -18,6 +18,7 @@ import {
   renderPageOptionSettings,
   runButtonAction,
 } from './shared';
+import { runBackgroundTask } from '../async-actions';
 
 /* The class is kept in its focused modal module; shared UI helpers live in ./shared. */
 export class CurrentNoteInspectorModal extends Modal {
@@ -25,6 +26,7 @@ export class CurrentNoteInspectorModal extends Modal {
   private readonly draft: TemplarNoteStyle;
   private readonly owner = `inspector-${Math.random().toString(36).slice(2)}`;
   private saved = false;
+  private readonly openingFingerprint: string;
 
   public constructor(
     private readonly plugin: TemplarPlugin,
@@ -34,6 +36,7 @@ export class CurrentNoteInspectorModal extends Modal {
     super(plugin.app);
     this.original = clone(style);
     this.draft = clone(style);
+    this.openingFingerprint = plugin.frontmatter.inspect(file).fingerprint;
   }
 
   public onOpen(): void {
@@ -52,7 +55,9 @@ export class CurrentNoteInspectorModal extends Modal {
     discard.addEventListener('click', () => this.close());
     const save = actions.createEl('button', { cls: 'mod-cta', text: 'Save changes' });
     save.addEventListener('click', () => void runButtonAction(save, async () => {
-      await this.plugin.application.writeStyle(this.file, this.draft);
+      await this.plugin.application.writeStyle(this.file, this.draft, 'immediate', {
+        expectedRawFingerprint: this.openingFingerprint,
+      });
       this.saved = true;
       await this.plugin.preview.cancel(this.owner);
       this.plugin.refreshSidebars();
@@ -63,7 +68,7 @@ export class CurrentNoteInspectorModal extends Modal {
   }
 
   public onClose(): void {
-    if (!this.saved) void this.plugin.preview.cancel(this.owner);
+    if (!this.saved) runBackgroundTask(() => this.plugin.preview.cancel(this.owner), 'Could not cancel the note preview');
     this.contentEl.empty();
   }
 

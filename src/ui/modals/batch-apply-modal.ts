@@ -1,11 +1,13 @@
 import { Modal, Notice, Setting, TFile, getAllTags } from 'obsidian';
 import type TemplarPlugin from '../../main';
 import { DEFAULT_PAGE_OPTIONS } from '../../templates/defaults';
-import type { NotePageOptions, TemplarNoteStyle } from '../../types';
+import type { NotePageOptions } from '../../types';
 import { clone } from '../../utils/value';
 import type { BatchApplyRequest } from '../../services/style-application';
-import type { BatchOperationSummary } from '../../services/operation-result';
+import type { NoteStyleInspection } from '../../services/style-inspection';
+import { mergeOperationResults, summarizeFileOperations, type BatchOperationSummary, type FileOperationResult } from '../../services/operation-result';
 import { renderOperationSummary } from '../operation-results';
+import { runUserAction } from '../async-actions';
 import { ConfirmationModal } from './confirmation-modal';
 
 export class BatchApplyModal extends Modal {
@@ -16,6 +18,7 @@ export class BatchApplyModal extends Modal {
   private tag = '';
   private summaryEl!: HTMLElement;
   private resultsEl: HTMLElement | null = null;
+  private aggregateResults: FileOperationResult[] = [];
 
   public constructor(private readonly plugin: TemplarPlugin) {
     super(plugin.app);
@@ -95,8 +98,8 @@ export class BatchApplyModal extends Modal {
     if (!this.summaryEl) return;
     const files = this.matchingFiles();
     const count = files.length;
-    const styled = files.filter((file) => this.plugin.frontmatter.hasStyle(file)).length;
-    this.summaryEl.setText(`${String(count)} Markdown ${count === 1 ? 'note' : 'notes'} match: ${String(count - styled)} unstyled will receive the style; ${String(styled)} styled will be replaced.`);
+    const styled = files.filter((file) => this.plugin.frontmatter.inspect(file).status !== 'absent').length;
+    this.summaryEl.setText(`${String(count)} Markdown ${count === 1 ? 'note' : 'notes'} match: ${String(count - styled)} unstyled will receive the style; ${String(styled)} existing or protected notes will be skipped.`);
   }
 
   private confirm(): void {
@@ -108,12 +111,17 @@ export class BatchApplyModal extends Modal {
     }
 
     const frozenTemplate = clone(template);
+    this.aggregateResults = [];
     const frozenPageMode = this.pageMode;
     const frozenPageSize = this.pageSize;
     const request = Object.freeze({
       files,
       template: frozenTemplate,
-      resolvePageOptions: (_file: TFile, current: TemplarNoteStyle | null): NotePageOptions => {
+      decide: (_file: TFile, inspection: NoteStyleInspection) => {
+        if (inspection.status !== 'absent') {
+          return { kind: 'skip' as const, message: 'Existing or protected Templar data was not overwritten.' };
+        }
+        const current = inspection.style;
         const page: NotePageOptions = clone(current?.page ?? { ...DEFAULT_PAGE_OPTIONS, mode: 'pageless' as const });
         if (frozenPageMode !== 'preserve') page.mode = frozenPageMode;
         if (frozenPageMode === 'paged') {
@@ -121,7 +129,7 @@ export class BatchApplyModal extends Modal {
           page.width = frozenPageSize === 'letter' ? 816 : 794;
           page.height = frozenPageSize === 'letter' ? 1056 : 1123;
         }
-        return page;
+        return { kind: 'apply' as const, pageOptions: page };
       },
       yieldToHost: () => new Promise<void>((resolve) => {
         const view = this.contentEl.ownerDocument.defaultView;
@@ -130,25 +138,29 @@ export class BatchApplyModal extends Modal {
       }),
     }) satisfies BatchApplyRequest;
 
-    const unstyled = files.filter((file) => !this.plugin.frontmatter.hasStyle(file)).length;
+    const unstyled = files.filter((file) => this.plugin.frontmatter.inspect(file).status === 'absent').length;
     const styled = files.length - unstyled;
     new ConfirmationModal(
       this.plugin,
       `Apply “${frozenTemplate.name}” to ${String(files.length)} notes?`,
-      `${String(unstyled)} unstyled notes will receive the style and ${String(styled)} styled notes will be replaced. Markdown and unrelated frontmatter remain unchanged.`,
+      `${String(unstyled)} unstyled notes will receive the style and ${String(styled)} existing or protected notes will be skipped. Markdown and unrelated frontmatter remain unchanged.`,
       async () => this.execute(request, frozenTemplate.name),
     ).open();
   }
 
   private async execute(request: BatchApplyRequest, templateName: string): Promise<void> {
     const summary = await this.plugin.application.applyBatch(request);
+    this.aggregateResults = this.aggregateResults.length === 0
+      ? summary.results
+      : mergeOperationResults(this.aggregateResults, summary.results);
+    const aggregate = summarizeFileOperations(this.aggregateResults);
     this.plugin.refreshSidebars();
-    if (summary.failed === 0 && summary.warnings === 0) {
-      new Notice(`Applied “${templateName}” to ${String(summary.succeeded)} notes.`);
+    if (aggregate.failed === 0 && aggregate.warnings === 0 && aggregate.skipped === 0) {
+      new Notice(`Applied “${templateName}” to ${String(aggregate.succeeded)} notes.`);
       this.close();
       return;
     }
-    this.renderResults(request, templateName, summary);
+    this.renderResults(request, templateName, aggregate);
   }
 
   private renderResults(request: BatchApplyRequest, templateName: string, summary: BatchOperationSummary): void {
@@ -164,7 +176,7 @@ export class BatchApplyModal extends Modal {
           ...request,
           files: Object.freeze(request.files.filter((file) => failedPaths.has(file.path))),
         });
-        void this.execute(retryRequest, templateName);
+        runUserAction(() => this.execute(retryRequest, templateName), 'Could not retry the batch style operation');
       });
     }
     const close = actions.createEl('button', { text: 'Close' });

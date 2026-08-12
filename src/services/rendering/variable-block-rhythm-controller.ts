@@ -31,7 +31,8 @@ export class VariableBlockRhythmController {
     contentEl: HTMLElement,
     style: TemplarNoteStyle,
   ): void {
-    this.clear(leaf, contentEl);
+    this.clear(leaf);
+    this.cleanupOwnedDom(contentEl);
     let realm;
     try {
       realm = realmFor(contentEl);
@@ -142,18 +143,17 @@ export class VariableBlockRhythmController {
     scanBlocks();
   }
 
-  public clear(leaf: WorkspaceLeaf, contentEl?: HTMLElement): void {
+  public clear(leaf: WorkspaceLeaf): void {
     const state = this.states.get(leaf);
     if (state?.frame !== null && state) state.view.cancelAnimationFrame(state.frame);
     state?.resizeObserver.disconnect();
     state?.mutationObserver.disconnect();
-    const root = contentEl ?? state?.contentEl;
-    root?.querySelectorAll<HTMLElement>('.templar-grid-snap-block').forEach((block) => this.clearBlock(block));
+    if (state) this.cleanupOwnedDom(state.contentEl);
     this.states.delete(leaf);
   }
 
   public destroy(): void {
-    for (const [leaf, state] of this.states) this.clear(leaf, state.contentEl);
+    for (const leaf of [...this.states.keys()]) this.clear(leaf);
   }
 
   private variableBlockOwner(element: HTMLElement): HTMLElement | null {
@@ -173,6 +173,10 @@ export class VariableBlockRhythmController {
     block.removeClass('templar-grid-snap-block');
     block.style.removeProperty('--templar-grid-snap');
     block.style.removeProperty('--templar-grid-natural-margin-end');
+  }
+
+  private cleanupOwnedDom(contentEl: HTMLElement): void {
+    contentEl.querySelectorAll<HTMLElement>('.templar-grid-snap-block').forEach((block) => this.clearBlock(block));
   }
 }
 

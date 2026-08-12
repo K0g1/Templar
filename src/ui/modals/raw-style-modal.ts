@@ -11,6 +11,7 @@ import { runButtonAction, stripCodeFence } from './shared';
 export class RawStyleModal extends Modal {
   private inputEl!: HTMLTextAreaElement;
   private validationEl!: HTMLElement;
+  private readonly openingFingerprint: string;
 
   public constructor(
     private readonly plugin: TemplarPlugin,
@@ -18,6 +19,7 @@ export class RawStyleModal extends Modal {
     private readonly style: TemplarNoteStyle,
   ) {
     super(plugin.app);
+    this.openingFingerprint = plugin.frontmatter.inspect(file).fingerprint;
   }
 
   public onOpen(): void {
@@ -84,7 +86,9 @@ export class RawStyleModal extends Modal {
     if (!style) {
       return;
     }
-    await this.plugin.application.writeStyle(this.file, style);
+    await this.plugin.application.writeStyle(this.file, style, 'immediate', {
+      expectedRawFingerprint: this.openingFingerprint,
+    });
     this.plugin.refreshSidebars();
     this.plugin.updateStatusBar();
     new Notice('Saved the note’s page style.');

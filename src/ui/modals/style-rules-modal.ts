@@ -26,6 +26,7 @@ import {
 import {
   runButtonAction,
 } from './shared';
+import { runUserAction } from '../async-actions';
 
 /* The class is kept in its focused modal module; shared UI helpers live in ./shared. */
 export class StyleRulesModal extends Modal {
@@ -52,32 +53,32 @@ export class StyleRulesModal extends Modal {
       row.addEventListener('drop', (event) => {
         event.preventDefault();
         const from = Number(event.dataTransfer?.getData('text/plain'));
-        if (Number.isInteger(from)) void this.moveTo(from, index);
+        if (Number.isInteger(from)) runUserAction(() => this.moveTo(from, index), 'Could not reorder style rules');
       });
       row.createSpan({ cls: 'templar-drag-handle', text: '⋮⋮', attr: { title: 'Drag to reorder', 'aria-hidden': 'true' } });
       const enabled = row.createEl('input', { attr: { type: 'checkbox', 'aria-label': `Enable ${rule.name}` } });
       enabled.checked = rule.enabled;
       enabled.addEventListener('change', () => {
-        void this.plugin.updateSettings((draft) => {
+        runUserAction(() => this.plugin.updateSettings((draft) => {
           const target = draft.styleRules.find((candidate) => candidate.id === rule.id);
           if (target) target.enabled = enabled.checked;
-        });
+        }), 'Could not update the style rule');
       });
       const summary = row.createDiv({ cls: 'templar-rule-summary' });
       summary.createDiv({ cls: 'templar-rule-name', text: rule.name });
       summary.createDiv({ text: `${rule.conditions.length} ${rule.conditions.length === 1 ? 'condition' : 'conditions'} · ${this.plugin.library.get(rule.templateId)?.name ?? 'Missing style'}` });
       const up = row.createEl('button', { text: 'Move up', attr: { 'aria-label': `Move ${rule.name} up` } });
       up.disabled = index === 0;
-      up.addEventListener('click', () => void this.move(index, -1));
+      up.addEventListener('click', () => runUserAction(() => this.move(index, -1), 'Could not reorder style rules'));
       const down = row.createEl('button', { text: 'Move down', attr: { 'aria-label': `Move ${rule.name} down` } });
       down.disabled = index === this.plugin.settings.styleRules.length - 1;
-      down.addEventListener('click', () => void this.move(index, 1));
+      down.addEventListener('click', () => runUserAction(() => this.move(index, 1), 'Could not reorder style rules'));
       const preview = row.createEl('button', { text: 'Preview existing matches' });
       preview.addEventListener('click', () => this.previewMatches(rule));
       const edit = row.createEl('button', { text: 'Edit' });
       edit.addEventListener('click', () => new StyleRuleEditorModal(this.plugin, index, () => this.render()).open());
       const remove = row.createEl('button', { text: 'Delete' });
-      remove.addEventListener('click', () => void this.remove(index));
+      remove.addEventListener('click', () => runUserAction(() => this.remove(index), 'Could not delete the style rule'));
     });
   }
 
@@ -132,7 +133,7 @@ export class StyleRulesModal extends Modal {
         matches.push(file);
       }
     }
-    const eligible = matches.filter((file) => !this.plugin.frontmatter.hasStyle(file));
+    const eligible = matches.filter((file) => this.plugin.frontmatter.inspect(file).status === 'absent');
     const styled = matches.length - eligible.length;
     const missingTemplate = this.plugin.library.get(rule.templateId) === null;
     const invalid = missingTemplate ? eligible.length : 0;
@@ -141,13 +142,21 @@ export class StyleRulesModal extends Modal {
       const template = this.plugin.library.get(rule.templateId);
       if (!template) throw new Error('The rule’s style no longer exists.');
       const page = { ...clone(DEFAULT_PAGE_OPTIONS), ...pageFlowOptions(rule.pageFlow === 'default' ? this.plugin.settings.defaultNewPageFlow : rule.pageFlow) };
-      let completed = 0;
-      for (const file of eligible) {
-        await this.plugin.applyTemplate(template, file, page, { recordRecent: false, notify: false, appliedByRule: { id: rule.id, name: rule.name } });
-        completed += 1;
-        if (completed % 20 === 0) await new Promise<void>((resolve) => this.contentEl.ownerDocument.defaultView?.setTimeout(resolve, 0));
-      }
-      new Notice(`Applied “${template.name}” to ${String(completed)} eligible notes.`);
+      const summary = await this.plugin.application.applyBatch({
+        files: eligible,
+        template,
+        appliedByRule: { id: rule.id, name: rule.name },
+        decide: (_file, inspection) => inspection.status === 'absent'
+          ? { kind: 'apply' as const, pageOptions: clone(page) }
+          : { kind: 'skip' as const, message: 'Existing or protected Templar data was not overwritten.' },
+        yieldEvery: 20,
+        yieldToHost: () => new Promise<void>((resolve) => {
+          const view = this.contentEl.ownerDocument.defaultView;
+          if (view) view.setTimeout(resolve, 0); else resolve();
+        }),
+      });
+      this.plugin.refreshSidebars();
+      new Notice(`Applied “${template.name}” to ${String(summary.succeeded)} eligible notes.`);
     }, `Apply to ${String(eligibleCount)} eligible notes`).open();
   }
 }

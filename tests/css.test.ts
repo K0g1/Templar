@@ -181,14 +181,35 @@ describe('safe CSS compiler', () => {
     }
   });
 
-  it('allows availability properties on narrower descendants', () => {
+  it('allows availability properties on positively narrowed descendants', () => {
     for (const css of [
       '.page img { filter: grayscale(1); }',
       '.page .callout { opacity: 0.8; }',
       '.page p:hover { transform: translateX(1px); }',
-      '.page *:not(img) { opacity: 0.9; }',
+      '.page blockquote { overflow: hidden; }',
     ]) {
       expect(validateCustomCss(css).valid, css).toBe(true);
+    }
+  });
+
+  it('treats negative-only and broad functional subjects as potentially all descendants', () => {
+    for (const css of [
+      '.page *:not(img) { opacity: 0.9; }',
+      '.page :not(.callout) { filter: blur(1px); }',
+      '.page :is(*, p) { pointer-events: none; }',
+      '.page :where(:not(.x), p) { visibility: hidden; }',
+      '.page *:hover { opacity: 0.9; }',
+    ]) {
+      expect(validateCustomCss(css).valid, css).toBe(false);
+    }
+  });
+
+  it('rejects zero geometry combined with broad clipping', () => {
+    for (const css of [
+      '.page * { height: 0px; overflow: hidden; }',
+      '.page :where(*) { line-height: 0.0; overflow-y: clip; }',
+    ]) {
+      expect(validateCustomCss(css).valid, css).toBe(false);
     }
   });
 });

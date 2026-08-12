@@ -6,6 +6,8 @@ All notable changes follow semantic versioning.
 
 - Added a documented BRAT alpha installation path, frozen-version workflow, release artifact verifier, checksums, and a read-only build / publish release gate.
 - Hardened persistence, CSS trust boundaries, DOM-realm ownership, runtime privacy checks, and generated-style resource limits.
+- Added version-classified schema inspection, contiguous migration infrastructure, guarded frontmatter writes, and Vault recovery artifacts for protected note and settings data.
+- Added explicit renderer-root ownership, Reading View activation state, atomic template-library batch operations, preview retarget cleanup, and operation-result retry aggregation.
 
 ## 1.2.0-alpha.2 — 2026-08-11
 

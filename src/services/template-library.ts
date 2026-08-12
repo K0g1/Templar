@@ -9,6 +9,18 @@ import {
 import { validateCompleteTemplate } from '../templates/validation';
 import { SettingsStore } from './settings-store';
 
+export type TemplateImportConflictAction = 'keep' | 'replace' | 'copy';
+
+export interface TemplateImportPlanEntry {
+  template: TemplarTemplate;
+  action: TemplateImportConflictAction;
+}
+
+export interface TemplateImportManyResult {
+  imported: TemplarTemplate[];
+  keptIds: string[];
+}
+
 export class TemplateLibrary {
   public constructor(
     private readonly settings: TemplarSettings,
@@ -113,6 +125,60 @@ export class TemplateLibrary {
       draft.favouriteTemplateIds = draft.favouriteTemplateIds.filter((value) => value !== id);
       draft.recentTemplateIds = draft.recentTemplateIds.filter((value) => value !== id);
       return true;
+    });
+  }
+
+  public async importMany(
+    entries: readonly TemplateImportPlanEntry[],
+  ): Promise<TemplateImportManyResult> {
+    const plan = Object.freeze(entries.map((entry) => ({
+      action: entry.action,
+      template: this.validatedTemplate(entry.template),
+    })));
+    const incomingIds = new Set<string>();
+    for (const entry of plan) {
+      if (incomingIds.has(entry.template.id)) {
+        throw new Error(`The import plan contains duplicate template ID “${entry.template.id}”.`);
+      }
+      incomingIds.add(entry.template.id);
+      if (entry.action === 'replace' && this.isBuiltIn(entry.template.id)) {
+        throw new Error(`Built-in template “${entry.template.id}” cannot be replaced.`);
+      }
+    }
+    return this.store.transaction((draft) => {
+      const imported: TemplarTemplate[] = [];
+      const keptIds: string[] = [];
+      for (const entry of plan) {
+        const existingIndex = draft.userTemplates.findIndex((template) => template.id === entry.template.id);
+        if (entry.action === 'keep') {
+          keptIds.push(entry.template.id);
+          continue;
+        }
+        const candidate = clone(entry.template);
+        candidate.builtIn = false;
+        if (entry.action === 'replace') {
+          if (existingIndex < 0) throw new Error(`Template “${entry.template.id}” disappeared before import.`);
+          draft.userTemplates[existingIndex] = candidate;
+        } else {
+          if (existingIndex >= 0 || BUILT_IN_TEMPLATES.some((template) => template.id === candidate.id)) {
+            candidate.id = this.uniqueId(candidate.id, draft);
+          }
+          draft.userTemplates.push(candidate);
+        }
+        imported.push(clone(candidate));
+      }
+      return { imported, keptIds };
+    });
+  }
+
+  public async removeMany(ids: readonly string[]): Promise<number> {
+    const requested = new Set(ids);
+    return this.store.transaction((draft) => {
+      const before = draft.userTemplates.length;
+      draft.userTemplates = draft.userTemplates.filter((template) => !requested.has(template.id));
+      draft.favouriteTemplateIds = draft.favouriteTemplateIds.filter((id) => !requested.has(id));
+      draft.recentTemplateIds = draft.recentTemplateIds.filter((id) => !requested.has(id));
+      return before - draft.userTemplates.length;
     });
   }
 

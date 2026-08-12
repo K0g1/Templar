@@ -22,6 +22,19 @@ export interface BatchOperationSummary {
   warnings: number;
 }
 
+export function mergeOperationResults(
+  previous: readonly FileOperationResult[],
+  retry: readonly FileOperationResult[],
+): FileOperationResult[] {
+  const retryByPath = new Map(retry.map((result) => [result.path, result]));
+  const merged = previous.map((result) => retryByPath.get(result.path) ?? result);
+  const existing = new Set(previous.map((result) => result.path));
+  for (const result of retry) {
+    if (!existing.has(result.path)) merged.push(result);
+  }
+  return merged.map((result) => ({ ...result, warnings: [...result.warnings] }));
+}
+
 export function summarizeFileOperations(results: readonly FileOperationResult[]): BatchOperationSummary {
   return {
     results: [...results],

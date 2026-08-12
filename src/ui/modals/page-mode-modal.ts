@@ -6,6 +6,7 @@ import { renderPageOptionSettings, runButtonAction } from './shared';
 
 export class PageModeModal extends Modal {
   private pageOptions: NotePageOptions;
+  private readonly openingFingerprint: string;
 
   public constructor(
     private readonly plugin: TemplarPlugin,
@@ -14,6 +15,7 @@ export class PageModeModal extends Modal {
   ) {
     super(plugin.app);
     this.pageOptions = clone(style.page);
+    this.openingFingerprint = plugin.frontmatter.inspect(file).fingerprint;
   }
 
   public onOpen(): void {
@@ -28,7 +30,9 @@ export class PageModeModal extends Modal {
   }
 
   private async save(): Promise<void> {
-    await this.plugin.application.patchPageOptions(this.file, this.pageOptions);
+    await this.plugin.application.patchPageOptions(this.file, this.pageOptions, 'immediate', {
+      expectedRawFingerprint: this.openingFingerprint,
+    });
     this.plugin.refreshSidebars();
     this.plugin.updateStatusBar();
     new Notice(`Changed ${this.file.basename} to ${this.pageOptions.mode} mode.`);

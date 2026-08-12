@@ -8,7 +8,8 @@ const outputDirectory = resolve(process.argv[3] ?? '.release');
 const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const artifactSourceDirectory = resolve(process.argv[4] ?? repositoryRoot);
 
-if (!tag || !isSemver(tag)) {
+const parsedTag = tag ? parseSemver(tag) : null;
+if (!tag || !parsedTag) {
   throw new Error('Pass a SemVer release tag without a v prefix.');
 }
 
@@ -43,7 +44,7 @@ writeText(
   `${JSON.stringify({
     tag,
     title: `Templar ${tag}`,
-    prerelease: tag.includes('-'),
+    prerelease: parsedTag.prerelease !== null,
     assets: [...publicAssets, 'SHA256SUMS.txt'],
   }, null, 2)}\n`,
 );
@@ -74,6 +75,8 @@ function readFile(path) {
   return readFileSync(path);
 }
 
-function isSemver(value) {
-  return /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(value);
+function parseSemver(value) {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(value);
+  if (!match) return null;
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: match[4] ?? null, build: match[5] ?? null };
 }

@@ -21,7 +21,8 @@ export class ImageSnapController {
     contentEl: HTMLElement,
     style: TemplarNoteStyle,
   ): void {
-    this.clear(leaf, contentEl);
+    this.clear(leaf);
+    this.cleanupOwnedDom(contentEl);
 
     let realm;
     try {
@@ -89,19 +90,22 @@ export class ImageSnapController {
     scanImages();
   }
 
-  public clear(leaf: WorkspaceLeaf, contentEl?: HTMLElement): void {
+  public clear(leaf: WorkspaceLeaf): void {
     const state = this.states.get(leaf);
     state?.resizeObserver.disconnect();
     state?.mutationObserver.disconnect();
-    const root = contentEl ?? state?.contentEl;
-    root?.querySelectorAll<HTMLElement>('img').forEach((image) => {
-      image.style.removeProperty('--templar-image-snap');
-    });
+    if (state) this.cleanupOwnedDom(state.contentEl);
     this.states.delete(leaf);
   }
 
   public destroy(): void {
-    for (const [leaf, state] of this.states) this.clear(leaf, state.contentEl);
+    for (const leaf of [...this.states.keys()]) this.clear(leaf);
+  }
+
+  private cleanupOwnedDom(contentEl: HTMLElement): void {
+    contentEl.querySelectorAll<HTMLElement>('img').forEach((image) => {
+      image.style.removeProperty('--templar-image-snap');
+    });
   }
 }
 

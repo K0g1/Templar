@@ -53,6 +53,7 @@ import {
   runButtonAction,
 } from './shared';
 import { renderTemplatePreview } from '../template-preview';
+import { runUserAction } from '../async-actions';
 
 /* The class is kept in its focused modal module; shared UI helpers live in ./shared. */
 export class TemplateCreatorModal extends Modal {
@@ -116,7 +117,7 @@ export class TemplateCreatorModal extends Modal {
       previewMode.setText(
         this.previewPage.mode === 'paged' ? 'Preview pageless' : 'Preview paged',
       );
-      void this.updatePreview();
+      this.schedulePreviewUpdate();
     });
     this.previewEl = previewColumn.createDiv({ cls: 'templar-preview-container' });
     this.issuesEl = previewColumn.createDiv();
@@ -127,7 +128,7 @@ export class TemplateCreatorModal extends Modal {
         cls: 'mod-warning',
         text: 'Reset to default',
       });
-      resetButton.addEventListener('click', () => void this.resetToDefault());
+      resetButton.addEventListener('click', () => runUserAction(() => this.resetToDefault(), 'Could not reset the built-in style'));
     }
     const exportButton = actions.createEl('button', { text: 'Copy YAML' });
     exportButton.addEventListener('click', () =>
@@ -155,7 +156,7 @@ export class TemplateCreatorModal extends Modal {
     } else {
       this.renderSimpleEditor();
     }
-    void this.updatePreview();
+    this.schedulePreviewUpdate();
   }
 
   private renderDetailedEditor(): void {
@@ -197,7 +198,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(this.draft.paper.pattern)
         .onChange((value) => {
           this.draft.paper.pattern = value as PaperPattern;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     this.colorSetting('Minor pattern color', this.draft.paper.patternColor, (value) => {
@@ -263,7 +264,7 @@ export class TemplateCreatorModal extends Modal {
         .onChange((value) => {
           this.draft.baseline.mode = value as BaselineMode;
           this.draft.baseline.enabled = value !== 'free';
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     this.toggleSetting('Snap images to rhythm', this.draft.baseline.snapImages, (value) => {
@@ -285,7 +286,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(this.draft.lists.markerStyle)
         .onChange((value) => {
           this.draft.lists.markerStyle = value as ListMarkerStyle;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     this.colorSetting('Marker color', this.draft.lists.markerColor, (value) => {
@@ -331,7 +332,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(this.draft.images.frame)
         .onChange((value) => {
           this.draft.images.frame = value as ImageFrame;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     this.sliderSetting('Border width', this.draft.images.borderWidth, 0, 40, 1, (value) => {
@@ -382,7 +383,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(this.draft.images.float)
         .onChange((value) => {
           this.draft.images.float = value as ImageFloat;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     new Setting(this.editorEl).setName('Object fit').addDropdown((dropdown) =>
@@ -391,7 +392,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(this.draft.images.objectFit)
         .onChange((value) => {
           this.draft.images.objectFit = value as ImageObjectFit;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     this.colorSetting('Duotone', this.draft.images.duotone, (value) => {
@@ -471,7 +472,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(this.draft.blocks.dividerStyle)
         .onChange((value) => {
           this.draft.blocks.dividerStyle = value as DividerStyle;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     this.colorSetting('Callout accent', this.draft.blocks.calloutAccent, (value) => {
@@ -546,7 +547,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(heading.decoration)
         .onChange((value) => {
           this.draft.headings[level].decoration = value as typeof heading.decoration;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
     this.sliderSetting(`${label} letter spacing`, heading.letterSpacing, 0, 10, 0.5, (value) => {
@@ -563,7 +564,7 @@ export class TemplateCreatorModal extends Modal {
         .setValue(heading.textTransform)
         .onChange((value) => {
           this.draft.headings[level].textTransform = value as HeadingTextTransform;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
     );
   }
@@ -576,7 +577,7 @@ export class TemplateCreatorModal extends Modal {
     new Setting(this.editorEl).setName(name).addToggle((toggle) =>
       toggle.setValue(value).onChange((next) => {
         update(next);
-        void this.updatePreview();
+        this.schedulePreviewUpdate();
       }),
     );
   }
@@ -621,7 +622,7 @@ export class TemplateCreatorModal extends Modal {
           .setValue(this.draft.paper.pattern)
           .onChange((value) => {
             this.draft.paper.pattern = value as PaperPattern;
-            void this.updatePreview();
+            this.schedulePreviewUpdate();
           }),
       );
     this.colorSetting('Pattern color', this.draft.paper.patternColor, (value) => {
@@ -632,7 +633,7 @@ export class TemplateCreatorModal extends Modal {
       .addToggle((toggle) =>
         toggle.setValue(this.draft.paper.marginLine).onChange((value) => {
           this.draft.paper.marginLine = value;
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
       );
 
@@ -655,7 +656,7 @@ export class TemplateCreatorModal extends Modal {
           .onChange((value) => {
             this.draft.baseline.mode = value as BaselineMode;
             this.draft.baseline.enabled = value !== 'free';
-            void this.updatePreview();
+            this.schedulePreviewUpdate();
           }),
       );
     this.colorSetting('Text color', this.draft.typography.textColor, (value) => {
@@ -701,7 +702,7 @@ export class TemplateCreatorModal extends Modal {
           .onChange((value) => {
             this.draft.images.frame = value as ImageFrame;
             applyFramePreset(this.draft, this.draft.images.frame);
-            void this.updatePreview();
+            this.schedulePreviewUpdate();
           }),
       );
     this.sliderSetting('Rotation', this.draft.images.rotation, -8, 8, 0.5, (value) => {
@@ -754,7 +755,7 @@ export class TemplateCreatorModal extends Modal {
     css.value = this.draft.css;
     css.addEventListener('input', () => {
       this.draft.css = css.value;
-      void this.updatePreview();
+      this.schedulePreviewUpdate();
     });
     this.heading('Generated template');
     this.generatedOutputEl = this.editorEl.createEl('textarea', {
@@ -778,7 +779,7 @@ export class TemplateCreatorModal extends Modal {
       text.inputEl.setAttribute('placeholder', 'Unfiled');
       text.setValue(this.draft.metadata.folder).onChange((next) => {
         this.draft.metadata.folder = next;
-        void this.updatePreview();
+        this.schedulePreviewUpdate();
       });
       text.inputEl.addEventListener('blur', () => {
         const normalized = normalizeTemplateFolder(text.inputEl.value);
@@ -806,7 +807,7 @@ export class TemplateCreatorModal extends Modal {
       .addText((text) =>
         text.setValue(value).onChange((next) => {
           update(next);
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
       );
   }
@@ -818,7 +819,7 @@ export class TemplateCreatorModal extends Modal {
       textInput = text.inputEl;
       text.setValue(value).onChange((next) => {
         update(next);
-        void this.updatePreview();
+          this.schedulePreviewUpdate();
       });
     });
     if (/^#[0-9a-f]{6}$/i.test(value)) {
@@ -828,7 +829,7 @@ export class TemplateCreatorModal extends Modal {
             textInput.value = next;
           }
           update(next);
-          void this.updatePreview();
+          this.schedulePreviewUpdate();
         }),
       );
     }
@@ -851,10 +852,17 @@ export class TemplateCreatorModal extends Modal {
           .setValue(value)
           .onChange((next) => {
             update(next);
-            void this.updatePreview();
+            this.schedulePreviewUpdate();
           }),
       );
     return setting;
+  }
+
+  private schedulePreviewUpdate(): void {
+    this.updatePreview().catch((error: unknown) => {
+      console.error('[Templar] Template preview failed', error);
+      new Notice(`Could not render the template preview: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   private async updatePreview(): Promise<void> {

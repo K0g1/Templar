@@ -4,10 +4,14 @@ import { frontmatterToNoteStyle, noteStyleToFrontmatter, templateToNoteStyle } f
 import { normalizePageOptions } from '../templates/schema';
 import { deepEqual } from '../utils/equality';
 import { clone } from '../utils/value';
+import { inspectRawNoteStyle, type NoteStyleInspection } from './style-inspection';
+import { rawTemplarFingerprint } from './style-fingerprint';
 
 interface OptimisticEntry {
   generation: number;
+  rawFingerprint: string;
   style: TemplarNoteStyle | null;
+  inspectionStatus: NoteStyleInspection['status'];
 }
 
 interface KnownLocalSnapshot {
@@ -32,6 +36,25 @@ interface FileMutationState {
 }
 
 const MAX_KNOWN_LOCAL_SNAPSHOTS = 8;
+
+export interface FrontmatterWriteGuard {
+  expectedRawFingerprint?: string;
+  protectedDataPolicy?: 'refuse' | 'allow-after-recovery';
+}
+
+export class StaleTemplarDataError extends Error {
+  public constructor() {
+    super("This note's Templar data changed while this editor was open. Reload the current data before saving.");
+    this.name = 'StaleTemplarDataError';
+  }
+}
+
+export class ProtectedTemplarDataError extends Error {
+  public constructor() {
+    super('This note contains Templar data that cannot be safely interpreted. Open Templar Recovery before replacing or removing it.');
+    this.name = 'ProtectedTemplarDataError';
+  }
+}
 
 /**
  * Serializes Templar's writes per file while keeping the newest requested
@@ -59,11 +82,34 @@ export class FrontmatterService {
     return this.getStyle(file) !== null;
   }
 
+  public inspect(file: TFile): NoteStyleInspection {
+    const state = this.states.get(file.path);
+    if (state?.optimistic) {
+      const raw = state.optimistic.style ? noteStyleToFrontmatter(state.optimistic.style) : undefined;
+      const inspection = inspectRawNoteStyle(raw);
+      return {
+        ...inspection,
+        fingerprint: state.optimistic.rawFingerprint,
+        status: state.optimistic.inspectionStatus,
+      };
+    }
+    return inspectRawNoteStyle(this.app.metadataCache.getFileCache(file)?.frontmatter?.templar);
+  }
+
+  public hasTemplarData(file: TFile): boolean {
+    return this.inspect(file).rawExists;
+  }
+
+  public canAutoApply(file: TFile): boolean {
+    return this.inspect(file).status === 'absent';
+  }
+
   public async applyTemplate(
     file: TFile,
     template: TemplarTemplate,
     pageOptions?: NotePageOptions,
     appliedByRule?: { id: string; name: string },
+    guard: FrontmatterWriteGuard = {},
   ): Promise<void> {
     const existing = this.getStyle(file);
     const style = templateToNoteStyle(template, pageOptions);
@@ -74,23 +120,30 @@ export class FrontmatterService {
     }
     await this.enqueueMutation(file, style, async () => {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-        frontmatter.templar = noteStyleToFrontmatter(style);
+        this.assertWriteAllowed(frontmatter.templar, guard);
+        frontmatter.templar = this.serializedStyle(style, frontmatter.templar);
       });
-    });
+    }, 'current');
   }
 
-  public async writeStyle(file: TFile, style: TemplarNoteStyle): Promise<void> {
+  public async writeStyle(
+    file: TFile,
+    style: TemplarNoteStyle,
+    guard: FrontmatterWriteGuard = {},
+  ): Promise<void> {
     const desired = clone(style);
     await this.enqueueMutation(file, desired, async () => {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-        frontmatter.templar = noteStyleToFrontmatter(desired);
+        this.assertWriteAllowed(frontmatter.templar, guard);
+        frontmatter.templar = this.serializedStyle(desired, frontmatter.templar);
       });
-    });
+    }, 'current');
   }
 
   public async patchPageOptions(
     file: TFile,
     pageOptions: NotePageOptions,
+    guard: FrontmatterWriteGuard = {},
   ): Promise<void> {
     const current = this.getStyle(file);
     if (!current) {
@@ -100,17 +153,22 @@ export class FrontmatterService {
     desired.page = normalizePageOptions(pageOptions);
     await this.enqueueMutation(file, desired, async () => {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-        frontmatter.templar = noteStyleToFrontmatter(desired);
+        this.assertWriteAllowed(frontmatter.templar, guard);
+        const currentStyle = inspectRawNoteStyle(frontmatter.templar).style;
+        if (!currentStyle) throw new Error('The note no longer has a renderable Templar style.');
+        currentStyle.page = normalizePageOptions(pageOptions);
+        frontmatter.templar = this.serializedStyle(currentStyle, frontmatter.templar);
       });
-    });
+    }, 'current');
   }
 
-  public async removeStyle(file: TFile): Promise<void> {
+  public async removeStyle(file: TFile, guard: FrontmatterWriteGuard = {}): Promise<void> {
     await this.enqueueMutation(file, null, async () => {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+        this.assertWriteAllowed(frontmatter.templar, guard);
         delete frontmatter.templar;
       });
-    });
+    }, 'absent');
   }
 
   /** Reconcile one MetadataCache observation with local and external ownership. */
@@ -202,11 +260,17 @@ export class FrontmatterService {
     file: TFile,
     desiredStyle: TemplarNoteStyle | null,
     performWrite: () => Promise<void>,
+    inspectionStatus: NoteStyleInspection['status'],
   ): Promise<void> {
     const state = this.stateFor(file);
     const generation = this.nextGeneration;
     this.nextGeneration += 1;
-    state.optimistic = { generation, style: clone(desiredStyle) };
+    state.optimistic = {
+      generation,
+      rawFingerprint: rawTemplarFingerprint(desiredStyle ? noteStyleToFrontmatter(desiredStyle) : undefined),
+      style: clone(desiredStyle),
+      inspectionStatus,
+    };
     state.pending += 1;
 
     const job = state.tail.then(async () => {
@@ -240,6 +304,43 @@ export class FrontmatterService {
     // failed write while each caller still receives its own rejection.
     state.tail = job.then(() => undefined, () => undefined);
     return job;
+  }
+
+  private assertWriteAllowed(raw: unknown, guard: FrontmatterWriteGuard): void {
+    const currentFingerprint = rawTemplarFingerprint(raw);
+    if (guard.expectedRawFingerprint !== undefined && guard.expectedRawFingerprint !== currentFingerprint) {
+      throw new StaleTemplarDataError();
+    }
+    const inspection = inspectRawNoteStyle(raw);
+    if (
+      inspection.rawExists &&
+      inspection.status !== 'current' &&
+      inspection.status !== 'migrated' &&
+      guard.protectedDataPolicy !== 'allow-after-recovery'
+    ) {
+      throw new ProtectedTemplarDataError();
+    }
+  }
+
+  private serializedStyle(style: TemplarNoteStyle, currentRaw: unknown): Record<string, unknown> {
+    const serialized = noteStyleToFrontmatter(style);
+    const current = typeof currentRaw === 'object' && currentRaw !== null && !Array.isArray(currentRaw)
+      ? currentRaw as Record<string, unknown>
+      : null;
+    const currentProvenance = current?.provenance;
+    const desiredProvenance = serialized.provenance;
+    if (
+      typeof currentProvenance === 'object' && currentProvenance !== null && !Array.isArray(currentProvenance) &&
+      typeof (currentProvenance as Record<string, unknown>)['source-snapshot'] === 'object' &&
+      (!desiredProvenance || typeof desiredProvenance !== 'object' ||
+        (desiredProvenance as Record<string, unknown>)['source-snapshot'] === undefined)
+    ) {
+      serialized.provenance = {
+        ...(typeof desiredProvenance === 'object' && desiredProvenance !== null ? desiredProvenance : {}),
+        'source-snapshot': clone((currentProvenance as Record<string, unknown>)['source-snapshot']),
+      };
+    }
+    return serialized;
   }
 
   private prune(path: string, state: FileMutationState): void {

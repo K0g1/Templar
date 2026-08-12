@@ -17,13 +17,106 @@ const policyRules = [
 
 export function runtimePolicyViolations(text) {
   const violations = [];
+  const semanticText = maskCommentsAndStrings(text);
   for (const rule of policyRules) {
     rule.pattern.lastIndex = 0;
-    for (const match of text.matchAll(rule.pattern)) {
+    const source = rule.label === 'Node/Electron import' ? text : semanticText;
+    for (const match of source.matchAll(rule.pattern)) {
+      if (rule.label === 'Node/Electron import' && !isCodeIndex(text, match.index ?? 0)) continue;
       violations.push({ label: rule.label, text: match[0], index: match.index ?? 0 });
     }
   }
   return violations;
+}
+
+function isCodeIndex(source, targetIndex) {
+  let quote = null;
+  let lineComment = false;
+  let blockComment = false;
+  let escaped = false;
+  for (let index = 0; index < targetIndex; index += 1) {
+    const character = source[index] ?? '';
+    const next = source[index + 1] ?? '';
+    if (lineComment) {
+      if (character === '\n') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+    } else if (character === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
+    } else if (character === '"' || character === "'" || character === '`') {
+      quote = character;
+    }
+  }
+  return !quote && !lineComment && !blockComment;
+}
+
+function maskCommentsAndStrings(source) {
+  let output = '';
+  let quote = null;
+  let lineComment = false;
+  let blockComment = false;
+  let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index] ?? '';
+    const next = source[index + 1] ?? '';
+    if (lineComment) {
+      output += character === '\n' ? '\n' : ' ';
+      if (character === '\n') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      output += character === '\n' ? '\n' : ' ';
+      if (character === '*' && next === '/') {
+        output += ' ';
+        index += 1;
+        blockComment = false;
+      }
+      continue;
+    }
+    if (quote) {
+      output += character === '\n' ? '\n' : ' ';
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '/' && next === '/') {
+      output += '  ';
+      index += 1;
+      lineComment = true;
+      continue;
+    }
+    if (character === '/' && next === '*') {
+      output += '  ';
+      index += 1;
+      blockComment = true;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === '`') {
+      output += ' ';
+      quote = character;
+      continue;
+    }
+    output += character;
+  }
+  return output;
 }
 
 async function sourceFiles(directory) {

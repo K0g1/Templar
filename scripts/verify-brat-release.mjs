@@ -100,7 +100,7 @@ if (strictBundle) {
   const metadata = readJson('release-metadata.json');
   if (metadata.tag !== expectedVersion) fail('release-metadata.json tag does not match the requested version');
   if (metadata.title !== `Templar ${expectedVersion}`) fail('release-metadata.json title is incorrect');
-  if (metadata.prerelease !== expectedVersion.includes('-')) fail('release-metadata.json prerelease flag is incorrect');
+  if (metadata.prerelease !== (semver.prerelease(expectedVersion) !== null)) fail('release-metadata.json prerelease flag is incorrect');
   if (JSON.stringify(metadata.assets) !== JSON.stringify(publicAssets)) {
     fail('release-metadata.json assets must be the exact public asset set');
   }

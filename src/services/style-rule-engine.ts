@@ -30,7 +30,12 @@ export class StyleRuleEngine {
 
   public async evaluate(file: TFile, metadataReady: boolean): Promise<void> {
     const { app, settings, library, frontmatter } = this.dependencies;
-    if (!this.dependencies.isReady() || frontmatter.hasStyle(file)) return;
+    const inspection = typeof (frontmatter as FrontmatterService & { inspect?: unknown }).inspect === 'function'
+      ? frontmatter.inspect(file)
+      : {
+        status: frontmatter.hasStyle(file) ? 'current' as const : 'absent' as const,
+      };
+    if (!this.dependencies.isReady() || inspection.status !== 'absent') return;
     const cache = app.metadataCache.getFileCache(file);
     const rule = firstMatchingRule(settings.styleRules, {
       path: file.path,

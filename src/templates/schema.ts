@@ -6,7 +6,12 @@ import {
   MAX_TAG_LENGTH,
   MAX_TEMPLATE_TAGS,
   TEMPLAR_FORMAT_VERSION,
+  CURRENT_TEMPLAR_FORMAT_VERSION,
+  MIN_SUPPORTED_TEMPLAR_FORMAT_VERSION,
 } from '../constants';
+import { migrateVersionedRecord } from '../migrations/engine';
+import { NOTE_STYLE_MIGRATIONS, TEMPLATE_MIGRATIONS } from '../migrations/format-migrations';
+import type { SchemaMigrationResult } from '../migrations/types';
 import type {
   BaselineMode,
   CalloutVariant,
@@ -892,6 +897,61 @@ export function normalizeNoteStyle(raw: unknown): TemplarNoteStyle | null {
     return null;
   }
   return validateTemplate(normalized).valid ? normalized : null;
+}
+
+export function normalizeCurrentTemplateV1(raw: unknown): TemplarTemplate {
+  const source = sourceCandidate(raw);
+  if (source.version !== CURRENT_TEMPLAR_FORMAT_VERSION) {
+    throw new Error(`Expected current Templar template version ${String(CURRENT_TEMPLAR_FORMAT_VERSION)}.`);
+  }
+  return normalizeTemplate(source);
+}
+
+export function normalizeCurrentNoteStyleV1(raw: unknown): TemplarNoteStyle {
+  const source = record(raw);
+  if (source.version !== CURRENT_TEMPLAR_FORMAT_VERSION) {
+    throw new Error(`Expected current Templar note style version ${String(CURRENT_TEMPLAR_FORMAT_VERSION)}.`);
+  }
+  const style = normalizeNoteStyle(source);
+  if (!style) throw new Error('The current Templar note style is invalid.');
+  return style;
+}
+
+export function inspectTemplateSchema(raw: unknown): SchemaMigrationResult<TemplarTemplate> {
+  const source = sourceCandidate(raw);
+  return migrateVersionedRecord(source, {
+    currentVersion: CURRENT_TEMPLAR_FORMAT_VERSION,
+    minimumSupportedVersion: MIN_SUPPORTED_TEMPLAR_FORMAT_VERSION,
+    steps: TEMPLATE_MIGRATIONS,
+    normalizeCurrent: normalizeCurrentTemplateV1,
+  });
+}
+
+export function inspectNoteStyleSchema(raw: unknown): SchemaMigrationResult<TemplarNoteStyle> {
+  const result = migrateVersionedRecord(raw, {
+    currentVersion: CURRENT_TEMPLAR_FORMAT_VERSION,
+    minimumSupportedVersion: MIN_SUPPORTED_TEMPLAR_FORMAT_VERSION,
+    steps: NOTE_STYLE_MIGRATIONS,
+    normalizeCurrent: normalizeCurrentNoteStyleV1,
+  });
+  if (result.value) {
+    const source = record(raw);
+    const provenance = record(source.provenance);
+    const snapshot = pick(provenance, 'sourceSnapshot', 'source-snapshot');
+    if (snapshot !== undefined) {
+      const snapshotResult = inspectTemplateSchema(snapshot);
+      if (snapshotResult.value) {
+        result.value.provenance ??= {};
+        result.value.provenance.sourceSnapshot = snapshotResult.value;
+      } else {
+        result.issues.push(...snapshotResult.issues.map((entry) => ({
+          ...entry,
+          message: `provenance.source-snapshot: ${entry.message}`,
+        })));
+      }
+    }
+  }
+  return result;
 }
 
 export function normalizePageOptions(raw: unknown): NotePageOptions {

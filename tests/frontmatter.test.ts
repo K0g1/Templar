@@ -1,6 +1,10 @@
 import type { App, TFile } from 'obsidian';
 import { describe, expect, it } from 'vitest';
-import { FrontmatterService } from '../src/services/frontmatter';
+import {
+  FrontmatterService,
+  ProtectedTemplarDataError,
+  StaleTemplarDataError,
+} from '../src/services/frontmatter';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
 import { noteStyleToFrontmatter, templateToNoteStyle } from '../src/templates/note-format';
 import type { TemplarNoteStyle } from '../src/types';
@@ -60,6 +64,39 @@ function style(templateIndex: number): TemplarNoteStyle {
 }
 
 describe('FrontmatterService mutation coordination', () => {
+  it('protects future and invalid raw data from ordinary replacement/removal', async () => {
+    const harness = setup();
+    harness.cache.set(harness.note.path, { frontmatter: { templar: { version: 2, preserved: true } } });
+    await expect(harness.service.applyTemplate(harness.note, style(0))).rejects.toBeInstanceOf(ProtectedTemplarDataError);
+    await expect(harness.service.removeStyle(harness.note)).rejects.toBeInstanceOf(ProtectedTemplarDataError);
+    expect(harness.writes).toHaveLength(0);
+  });
+
+  it('requires the raw fingerprint to match inside the frontmatter callback', async () => {
+    const harness = setup(style(0));
+    const openingFingerprint = harness.service.inspect(harness.note).fingerprint;
+    harness.cache.set(harness.note.path, { frontmatter: { templar: noteStyleToFrontmatter(style(1)) } });
+    await expect(harness.service.writeStyle(harness.note, style(2), {
+      expectedRawFingerprint: openingFingerprint,
+    })).rejects.toBeInstanceOf(StaleTemplarDataError);
+    expect(harness.writes).toHaveLength(0);
+  });
+
+  it('allows an explicitly recovery-backed replacement after the fingerprint guard', async () => {
+    const harness = setup();
+    harness.cache.set(harness.note.path, { frontmatter: { templar: { version: 2, preserved: true } } });
+    const openingFingerprint = harness.service.inspect(harness.note).fingerprint;
+    const write = harness.service.writeStyle(harness.note, style(0), {
+      expectedRawFingerprint: openingFingerprint,
+      protectedDataPolicy: 'allow-after-recovery',
+    });
+    await Promise.resolve();
+    expect(harness.writes).toHaveLength(1);
+    harness.writes[0]!.gate.resolve();
+    await write;
+    expect(harness.service.hasStyle(harness.note)).toBe(true);
+  });
+
   it('keeps a newer optimistic request after an older write fails', async () => {
     const harness = setup();
     const a = style(0);

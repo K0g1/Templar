@@ -67,6 +67,8 @@ Renderer settled state ── PrintService ── temporary print scope → host
 
 It must remain orchestration code. Parsing, compilation, persistence, and complex UI belong elsewhere.
 
+Renderer ownership is explicit: `PageRenderer` orchestrates leaf refreshes; `ReadingWhitespaceController` owns Reading section/spacer state; `ImageSnapController`, `PaperOriginController`, and `VariableBlockRhythmController` own their observer lifecycles and clean the roots they configured.
+
 ## Data model
 
 `src/types.ts` defines two related objects:

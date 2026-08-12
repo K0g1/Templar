@@ -3,7 +3,8 @@ import type { NotePageOptions, TemplarNoteStyle, TemplarTemplate } from '../type
 import { DEFAULT_PAGE_OPTIONS } from '../templates/defaults';
 import { clone } from '../utils/value';
 import { pageFlowOptions } from './style-rules';
-import type { FrontmatterService } from './frontmatter';
+import type { FrontmatterService, FrontmatterWriteGuard } from './frontmatter';
+import type { NoteStyleInspection } from './style-inspection';
 import type { NoteStyleIndex } from './note-style-index';
 import {
   summarizeFileOperations,
@@ -25,9 +26,17 @@ export interface ApplyTemplateRequest {
 export interface BatchApplyRequest {
   files: readonly TFile[];
   template: TemplarTemplate;
-  resolvePageOptions: (file: TFile, current: TemplarNoteStyle | null) => NotePageOptions | null;
+  decide?: (file: TFile, inspection: NoteStyleInspection) => BatchApplyDecision;
+  resolvePageOptions?: (file: TFile, current: TemplarNoteStyle | null) => NotePageOptions | null;
+  appliedByRule?: { id: string; name: string };
   yieldEvery?: number;
   yieldToHost?: () => Promise<void>;
+}
+
+export interface BatchApplyDecision {
+  kind: 'apply' | 'skip';
+  pageOptions?: NotePageOptions;
+  message?: string;
 }
 
 export interface StyleApplicationDependencies {
@@ -48,8 +57,9 @@ export class StyleApplicationService {
     file: TFile,
     style: TemplarNoteStyle,
     refresh: 'immediate' | 'deferred' = 'immediate',
+    guard: FrontmatterWriteGuard = {},
   ): Promise<FileOperationResult> {
-    await this.dependencies.frontmatter.writeStyle(file, style);
+    await this.dependencies.frontmatter.writeStyle(file, style, guard);
     return this.completeWrite(file, refresh);
   }
 
@@ -57,8 +67,9 @@ export class StyleApplicationService {
     file: TFile,
     pageOptions: NotePageOptions,
     refresh: 'immediate' | 'deferred' = 'immediate',
+    guard: FrontmatterWriteGuard = {},
   ): Promise<FileOperationResult> {
-    await this.dependencies.frontmatter.patchPageOptions(file, pageOptions);
+    await this.dependencies.frontmatter.patchPageOptions(file, pageOptions, guard);
     return this.completeWrite(file, refresh);
   }
 
@@ -113,17 +124,21 @@ export class StyleApplicationService {
         results.push(skippedResult(frozenFile.path, 'The note no longer exists as a Markdown file.'));
       } else {
         try {
-          const pageOptions = request.resolvePageOptions(
-            currentFile,
-            this.dependencies.frontmatter.getStyle(currentFile),
-          );
-          if (!pageOptions) {
-            results.push(skippedResult(frozenFile.path, 'The note was skipped by the frozen request.'));
+          const inspection = this.inspect(currentFile);
+          const legacyPageOptions = request.resolvePageOptions?.(currentFile, inspection.style);
+          const decision = request.decide
+            ? request.decide(currentFile, inspection)
+            : legacyPageOptions
+              ? { kind: 'apply' as const, pageOptions: legacyPageOptions }
+              : { kind: 'skip' as const, message: 'The note was skipped by the frozen request.' };
+          if (decision.kind === 'skip') {
+            results.push(skippedResult(frozenFile.path, decision.message ?? 'The note was skipped by the frozen request.'));
           } else {
             results.push(await this.apply({
               file: currentFile,
               template: request.template,
-              pageOptions,
+              pageOptions: decision.pageOptions,
+              appliedByRule: request.appliedByRule,
               recordRecent: false,
               refresh: 'deferred',
             }));
@@ -206,6 +221,25 @@ export class StyleApplicationService {
       folder: file.parent?.path ?? '',
       style,
     });
+  }
+
+  private inspect(file: TFile): NoteStyleInspection {
+    const service = this.dependencies.frontmatter as FrontmatterService & {
+      inspect?: (target: TFile) => NoteStyleInspection;
+    };
+    if (service.inspect) return service.inspect(file);
+    const style = service.getStyle(file);
+    return {
+      status: style ? 'current' : 'absent',
+      rawExists: style !== null,
+      raw: style,
+      rawVersion: style ? 1 : null,
+      style,
+      fingerprint: '',
+      trace: [],
+      issues: [],
+      automaticOverwriteAllowed: style === null,
+    };
   }
 }
 

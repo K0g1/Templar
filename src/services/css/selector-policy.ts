@@ -24,18 +24,17 @@ export interface SelectorAnalysis {
   text: string;
   startsWithVirtualRoot: boolean;
   targetsVirtualRoot: boolean;
-  targetsWholePage: boolean;
-  coverage: SelectorCoverage;
+  availabilityCoverage: AvailabilityCoverage;
   targetsRhythmElement: boolean;
   globalToken: string | null;
   usesPrivateRuntimeClass: boolean;
   usesGlobalEscape: boolean;
 }
 
-export type SelectorCoverage =
-  | 'virtual-root'
-  | 'all-descendants'
-  | 'specific-descendant';
+export type AvailabilityCoverage =
+  | 'root'
+  | 'potentially-all-descendants'
+  | 'positively-narrowed';
 
 export function parseSelector(selector: string): Selector[] {
   const ast = selectorParser().astSync(selector);
@@ -97,13 +96,13 @@ function analyzeRoot(root: Selector): SelectorAnalysis {
   const text = root.toString().trim();
   const startsWithVirtualRoot = rootClassName(root) !== null;
   let targetsVirtualRoot = startsWithVirtualRoot;
-  let coverage: SelectorCoverage = 'specific-descendant';
+  let availabilityCoverage: AvailabilityCoverage = 'positively-narrowed';
   if (startsWithVirtualRoot) {
     // A combinator changes the subject from the page root to a descendant.
     const firstCombinator = root.nodes.findIndex((node) => node.type === 'combinator');
     targetsVirtualRoot = firstCombinator < 0;
     if (targetsVirtualRoot) {
-      coverage = 'virtual-root';
+      availabilityCoverage = 'root';
     } else {
       const lastCombinator = root.nodes.map((node) => node.type).lastIndexOf('combinator');
       const combinator = lastCombinator >= 0 ? root.nodes[lastCombinator] : null;
@@ -113,13 +112,12 @@ function analyzeRoot(root: Selector): SelectorAnalysis {
       if (
         combinator?.type === 'combinator' &&
         (combinator.value === ' ' || combinator.value === '>') &&
-        isUniversalSubjectCompound(subject)
+        !hasPositiveNarrowingWitness(subject)
       ) {
-        coverage = 'all-descendants';
+        availabilityCoverage = 'potentially-all-descendants';
       }
     }
   }
-  const targetsWholePage = coverage === 'virtual-root' || coverage === 'all-descendants';
   let targetsRhythmElement = false;
   let globalToken: string | null = null;
   let usesPrivateRuntimeClass = false;
@@ -143,8 +141,7 @@ function analyzeRoot(root: Selector): SelectorAnalysis {
     text,
     startsWithVirtualRoot,
     targetsVirtualRoot,
-    targetsWholePage,
-    coverage,
+    availabilityCoverage,
     targetsRhythmElement,
     globalToken,
     usesPrivateRuntimeClass,
@@ -152,23 +149,50 @@ function analyzeRoot(root: Selector): SelectorAnalysis {
   };
 }
 
-/** Return true only when a compound can match every descendant element. */
-export function isUniversalSubjectCompound(nodes: readonly Node[]): boolean {
-  let universal = false;
+/**
+ * Return true when the final subject has a positive witness that narrows the
+ * set of elements it can match. Negative predicates alone are deliberately
+ * not witnesses: `*:not(.x)` still applies to almost every descendant.
+ */
+export function hasPositiveNarrowingWitness(nodes: readonly Node[]): boolean {
+  let positiveAnchor = false;
   for (const node of nodes) {
-    if (node.type === 'universal') {
-      universal = true;
+    if (node.type === 'tag') {
+      if (decodeCssEscapes(node.value) !== '*') positiveAnchor = true;
       continue;
     }
-    if (node.type !== 'pseudo') return false;
+    if (node.type === 'class' || node.type === 'attribute' || node.type === 'id') {
+      positiveAnchor = true;
+      continue;
+    }
+    if (node.type !== 'pseudo') continue;
     const value = decodeCssEscapes(node.value).toLowerCase();
-    if (value !== ':is' && value !== ':where') return false;
+    if (value === ':not') continue;
     const nested = (node as Node & { nodes?: Node[] }).nodes ?? [];
     const branches = nested.filter(isSelectorNode);
-    if (!branches.some((branch) => isUniversalSubjectCompound(branch.nodes))) return false;
-    universal = true;
+    if (value === ':is' || value === ':where') {
+      // A functional selector is only as narrow as its broadest branch.
+      if (branches.length > 0 && branches.every((branch) => hasPositiveNarrowingWitness(lastCompound(branch.nodes)))) {
+        return true;
+      }
+      continue;
+    }
+    if (value === ':has') {
+      // A relational predicate is not enough to trust a universal subject.
+      // It can narrow a subject that is already positively anchored.
+      if (positiveAnchor) return true;
+      continue;
+    }
+    // State and structural pseudo-classes (for example :hover and
+    // :nth-child()) are positive predicates on the current subject.
+    if (positiveAnchor) return true;
   }
-  return universal;
+  return positiveAnchor;
+}
+
+function lastCompound(nodes: readonly Node[]): Node[] {
+  const lastCombinator = nodes.map((node) => node.type).lastIndexOf('combinator');
+  return nodes.slice(lastCombinator + 1).filter((node) => node.type !== 'combinator');
 }
 
 export function decodeCssEscapes(value: string): string {

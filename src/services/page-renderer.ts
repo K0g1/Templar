@@ -66,7 +66,6 @@ export class PageRenderer {
     this.readingWhitespace = new ReadingWhitespaceController(
       app,
       () => this.settings.enableReadingView,
-      (file) => this.frontmatter.hasStyle(file),
     );
   }
 
@@ -78,7 +77,9 @@ export class PageRenderer {
     queueMicrotask(() => {
       this.scheduled = false;
       if (!this.destroyed) {
-        void this.refreshAll();
+        this.refreshAll().catch((error: unknown) => {
+          console.error('[Templar] Scheduled renderer refresh failed', error);
+        });
       }
     });
   }
@@ -165,7 +166,9 @@ export class PageRenderer {
     for (const [leaf, state] of this.previews) {
       if (state.owner !== owner) continue;
       this.previews.delete(leaf);
-      void this.refreshLeaf(leaf);
+      this.refreshLeaf(leaf).catch((error: unknown) => {
+        console.error('[Templar] Preview cleanup refresh failed', error);
+      });
     }
   }
 
@@ -277,7 +280,9 @@ export class PageRenderer {
     );
     if (this.settings.enableReadingView && readingRoot) {
       this.readingWhitespace.prepareCachedSections(readingRoot, file);
-      this.readingWhitespace.schedule(readingRoot);
+      this.readingWhitespace.activateRoot(readingRoot, file);
+    } else if (readingRoot) {
+      this.readingWhitespace.deactivateRoot(readingRoot);
     }
   }
 
@@ -301,7 +306,7 @@ export class PageRenderer {
         .querySelector(':scope > .markdown-preview-sizer')
         ?.addClass(TEMPLAR_CONTENT_CLASS);
     } else if (readingRoot) {
-      this.readingWhitespace.clearRoot(readingRoot);
+      this.readingWhitespace.deactivateRoot(readingRoot);
     }
     if (this.settings.enableLivePreview && sourceRoot) {
       const scroller = sourceRoot.querySelector<HTMLElement>(
@@ -344,7 +349,7 @@ export class PageRenderer {
     const contentEl =
       styled?.contentEl ??
       (leaf.view instanceof MarkdownView ? leaf.view.contentEl : undefined);
-    this.paperOrigin.clear(leaf, contentEl);
+    this.paperOrigin.clear(leaf);
     if (contentEl) {
       contentEl.removeClass(TEMPLAR_CLASS);
       delete contentEl.dataset.templarScope;
@@ -362,8 +367,8 @@ export class PageRenderer {
       );
       if (readingRoot) this.readingWhitespace.clearRoot(readingRoot);
     }
-    this.imageSnap.clear(leaf, contentEl);
-    this.rhythm.clear(leaf, contentEl);
+    this.imageSnap.clear(leaf);
+    this.rhythm.clear(leaf);
     this.readingWhitespace.pruneDisconnected();
     if (!preserveIssue) this.issuesByLeaf.delete(leaf);
     this.styledViews.delete(leaf);

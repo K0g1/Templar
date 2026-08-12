@@ -26,6 +26,7 @@ interface ReadingRootState {
   context: MarkdownPostProcessorContext | null;
   filePath: string | null;
   sections: HTMLElement[];
+  active: boolean;
 }
 
 /** Owns Reading View section metadata, spacer reconciliation, and root cleanup. */
@@ -38,7 +39,6 @@ export class ReadingWhitespaceController {
   public constructor(
     private readonly app: App,
     private readonly isEnabled: () => boolean,
-    private readonly hasStyle: (file: TFile) => boolean,
   ) {}
 
   public registerSection(
@@ -60,12 +60,34 @@ export class ReadingWhitespaceController {
       lineEnd: info.lineEnd,
       text: info.text,
     });
-    if (this.hasStyle(file)) {
+    if (state.active) {
       element.addClass('templar-reading-section');
       // Reconcile inside the post-processor so Obsidian measures the spacer
       // before the first paint and before its virtual scroller caches height.
       this.reconcile(readingRoot, element);
     }
+  }
+
+  public activateRoot(readingRoot: HTMLElement, file: TFile): void {
+    if (this.destroyed || !this.isEnabled()) return;
+    const state = this.rootState(readingRoot);
+    this.retargetRoot(readingRoot, state, file.path, this.bodyStartLine(file));
+    state.active = true;
+    for (const section of state.sections) {
+      if (!this.isAliveSection(state, section)) continue;
+      section.addClass('templar-reading-section');
+      this.reconcile(readingRoot, section);
+    }
+    this.schedule(readingRoot);
+  }
+
+  public deactivateRoot(readingRoot: HTMLElement): void {
+    const state = this.readingRoots.get(readingRoot);
+    if (!state) return;
+    state.active = false;
+    this.cancelScheduled(readingRoot);
+    for (const section of state.sections) section.removeClass('templar-reading-section');
+    readingRoot.querySelectorAll('.templar-blank-line-spacer').forEach((spacer) => spacer.remove());
   }
 
   public prepareCachedSections(readingRoot: HTMLElement, file: TFile): void {
@@ -95,13 +117,14 @@ export class ReadingWhitespaceController {
         lineEnd: section.position.end.line,
         text: '',
       });
-      element.addClass('templar-reading-section');
+      if (state.active) element.addClass('templar-reading-section');
     }
   }
 
   public schedule(readingRoot: HTMLElement): void {
-    if (!this.isEnabled() || !readingRoot.hasClass(TEMPLAR_PAGE_CLASS)) {
-      this.clearRoot(readingRoot);
+    const state = this.readingRoots.get(readingRoot);
+    if (!this.isEnabled() || !readingRoot.hasClass(TEMPLAR_PAGE_CLASS) || !state?.active) {
+      this.deactivateRoot(readingRoot);
       return;
     }
     if (this.scheduledRoots.has(readingRoot)) return;
@@ -112,6 +135,7 @@ export class ReadingWhitespaceController {
       if (
         !this.destroyed &&
         this.isEnabled() &&
+        this.readingRoots.get(readingRoot)?.active === true &&
         readingRoot.isConnected &&
         readingRoot.hasClass(TEMPLAR_PAGE_CLASS)
       ) {
@@ -124,11 +148,7 @@ export class ReadingWhitespaceController {
   }
 
   public clearRoot(readingRoot: HTMLElement): void {
-    const frame = this.scheduledRoots.get(readingRoot);
-    if (frame !== undefined) {
-      readingRoot.ownerDocument.defaultView?.cancelAnimationFrame(frame);
-      this.scheduledRoots.delete(readingRoot);
-    }
+    this.cancelScheduled(readingRoot);
     const state = this.readingRoots.get(readingRoot);
     for (const section of state?.sections ?? []) {
       section.removeClass('templar-reading-section');
@@ -152,7 +172,7 @@ export class ReadingWhitespaceController {
   private rootState(readingRoot: HTMLElement): ReadingRootState {
     let state = this.readingRoots.get(readingRoot);
     if (!state) {
-      state = { bodyStartLine: 0, context: null, filePath: null, sections: [] };
+      state = { bodyStartLine: 0, context: null, filePath: null, sections: [], active: false };
       this.readingRoots.set(readingRoot, state);
     }
     return state;
@@ -208,6 +228,7 @@ export class ReadingWhitespaceController {
 
   private reconcile(readingRoot: HTMLElement, current?: HTMLElement): void {
     const state = this.rootState(readingRoot);
+    if (!state.active) return;
     if (!hasReadingWhitespaceWork(Boolean(state.context), Boolean(current), state.sections.length)) return;
     if (current && !state.sections.includes(current)) state.sections.push(current);
     const aliveSections = state.sections.filter((element) => this.isAliveSection(state, element));
@@ -227,6 +248,13 @@ export class ReadingWhitespaceController {
     for (let index = 1; index < sections.length; index += 1) {
       this.reconcileGapSpacer(state, sections[index - 1]!, sections[index]!);
     }
+  }
+
+  private cancelScheduled(readingRoot: HTMLElement): void {
+    const frame = this.scheduledRoots.get(readingRoot);
+    if (frame === undefined) return;
+    readingRoot.ownerDocument.defaultView?.cancelAnimationFrame(frame);
+    this.scheduledRoots.delete(readingRoot);
   }
 
   private reconcileLeadingSpacer(state: ReadingRootState, firstSection: HTMLElement): void {

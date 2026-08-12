@@ -10,6 +10,10 @@ The highlight color pair and template folder were added compatibly within v1: ol
 
 The 1.1 feature batch extends the same compatibility rule: h5/h6, heading letter spacing and text transform, the lists/watermark sections, the new paper patterns and pattern controls, image float/object-fit/duotone, and the expanded block palette are all optional v1 additions. Old styles import unchanged; new exports write the new fields explicitly.
 
+## Versioning
+
+The current template and note-style format is version 1. Unknown future versions are rejected and protected rather than default-filled. Supported older versions may be migrated by the registry in a future release; exports always use the current version.
+
 ## Template versus note data
 
 A reusable template does not contain `page`; the user chooses paged or pageless when creating/applying it. A note contains the full template copy plus:

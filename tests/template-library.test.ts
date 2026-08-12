@@ -19,6 +19,29 @@ function createLibrary(
 }
 
 describe('TemplateLibrary favorites', () => {
+  it('imports a mixed plan in one transaction with deterministic IDs', async () => {
+    const { library, persist } = createLibrary();
+    const custom = clone(BUILT_IN_TEMPLATES[0]!);
+    custom.id = 'custom-style';
+    const result = await library.importMany([{ template: custom, action: 'copy' }]);
+    expect(result.imported[0]?.id).toBe('custom-style');
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes many custom styles and cleans favorites/recent IDs atomically', async () => {
+    const customA = clone(BUILT_IN_TEMPLATES[0]!); customA.id = 'custom-a'; customA.builtIn = false;
+    const customB = clone(BUILT_IN_TEMPLATES[1]!); customB.id = 'custom-b'; customB.builtIn = false;
+    const { library, settings } = createLibrary({
+      userTemplates: [customA, customB],
+      favouriteTemplateIds: ['custom-a'],
+      recentTemplateIds: ['custom-b'],
+    });
+    await expect(library.removeMany(['custom-a', 'custom-b'])).resolves.toBe(2);
+    expect(settings.userTemplates).toEqual([]);
+    expect(settings.favouriteTemplateIds).toEqual([]);
+    expect(settings.recentTemplateIds).toEqual([]);
+  });
+
   it('starts without favourites and toggles them on and off', async () => {
     const { library } = createLibrary();
     expect(library.isFavourite('classic-ruled')).toBe(false);

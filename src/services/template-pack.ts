@@ -1,6 +1,16 @@
 import { parsedObjectToTemplate, templateToExportObject } from '../templates/note-format';
-import { MAX_IMPORT_BYTES, MAX_PACK_TEMPLATES } from '../constants';
+import {
+  CURRENT_PACK_FORMAT_VERSION,
+  MIN_SUPPORTED_PACK_FORMAT_VERSION,
+  MAX_IMPORT_BYTES,
+  MAX_PACK_TEMPLATES,
+} from '../constants';
+import { migrateVersionedRecord } from '../migrations/engine';
+import { PACK_MIGRATIONS } from '../migrations/pack-migrations';
+import type { MigrationIssue, SchemaMigrationResult } from '../migrations/types';
+import { inspectTemplateSchema } from '../templates/schema';
 import { validateTemplate, validateTemplateSource } from '../templates/schema';
+import { DEFAULT_TEMPLATE } from '../templates/defaults';
 import type { TemplarPack, TemplarTemplate, ValidationIssue } from '../types';
 import { clone, slugify, stringArray } from '../utils/value';
 import { validateCustomCss } from './css-validator';
@@ -16,6 +26,58 @@ export interface PackReview {
   templates: PackTemplateReview[];
 }
 
+function normalizeCurrentPack(
+  source: Record<string, unknown>,
+  memberIssues: MigrationIssue[],
+): TemplarPack {
+  if (!Array.isArray(source.templates)) {
+    throw new Error('The template pack is missing its templates list.');
+  }
+  if (source.templates.length > MAX_PACK_TEMPLATES) {
+    throw new Error(`A Templar pack may contain at most ${String(MAX_PACK_TEMPLATES)} templates.`);
+  }
+  const templates: TemplarTemplate[] = [];
+  const entries = source.templates as unknown[];
+  entries.forEach((entry, index) => {
+    const entryRecord = record(entry);
+    const wrapped: unknown = entryRecord['templar-template'] !== undefined
+      ? entryRecord['templar-template']
+      : entry;
+    const inspected = inspectTemplateSchema(wrapped);
+    if (inspected.value) {
+      templates.push(inspected.value);
+    } else {
+      memberIssues.push(...inspected.issues.map((issue) => ({
+        ...issue,
+        code: 'validation-failed' as const,
+        message: `templates[${String(index)}]: ${issue.message}`,
+      })));
+    }
+  });
+  return {
+    version: CURRENT_PACK_FORMAT_VERSION,
+    name: typeof source.name === 'string' && source.name.trim() ? source.name.trim() : 'Untitled Templar pack',
+    description: typeof source.description === 'string' ? source.description.trim() : '',
+    author: typeof source.author === 'string' ? source.author.trim() : '',
+    tags: stringArray(source.tags, []),
+    templates,
+  };
+}
+
+export function inspectTemplatePackSchema(raw: unknown): SchemaMigrationResult<TemplarPack> {
+  const root = record(raw);
+  const source = record(root['templar-pack']);
+  const memberIssues: MigrationIssue[] = [];
+  const result = migrateVersionedRecord(source, {
+    currentVersion: CURRENT_PACK_FORMAT_VERSION,
+    minimumSupportedVersion: MIN_SUPPORTED_PACK_FORMAT_VERSION,
+    steps: PACK_MIGRATIONS,
+    normalizeCurrent: (value) => normalizeCurrentPack(value as Record<string, unknown>, memberIssues),
+  });
+  result.issues.push(...memberIssues);
+  return result;
+}
+
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -26,13 +88,27 @@ export function parseTemplatePack(raw: unknown): PackReview | null {
   const root = record(raw);
   const source = record(root['templar-pack']);
   if (Object.keys(source).length === 0) return null;
-  if (source.version !== 1) throw new Error('This template pack uses an unsupported format version.');
+  if (source.version !== CURRENT_PACK_FORMAT_VERSION) throw new Error('This template pack uses an unsupported format version.');
   if (!Array.isArray(source.templates)) throw new Error('The template pack is missing its templates list.');
   if (source.templates.length > MAX_PACK_TEMPLATES) {
     throw new Error(`A Templar pack may contain at most ${String(MAX_PACK_TEMPLATES)} templates.`);
   }
-  const templates = source.templates.map((entry: unknown): PackTemplateReview => {
+  const templates = source.templates.map((entry: unknown, index: number): PackTemplateReview => {
     const wrapped: unknown = record(entry)['templar-template'] !== undefined ? entry : { 'templar-template': entry };
+    const inspected = inspectTemplateSchema(wrapped);
+    if (!inspected.value) {
+      const blocked = clone(DEFAULT_TEMPLATE);
+      blocked.id = `blocked-template-${String(index + 1)}`;
+      return {
+        template: blocked,
+        issues: inspected.issues.map((issue) => ({
+          severity: 'error' as const,
+          path: 'templar-pack.templates',
+          message: issue.message,
+        })),
+        valid: false,
+      };
+    }
     const template = parsedObjectToTemplate(wrapped);
     template.builtIn = false;
     const issues = [
@@ -66,7 +142,7 @@ export function parseTemplatePack(raw: unknown): PackReview | null {
     entry.valid = false;
   }
   const pack: TemplarPack = {
-    version: 1,
+    version: CURRENT_PACK_FORMAT_VERSION,
     name: typeof source.name === 'string' && source.name.trim() ? source.name.trim() : 'Untitled Templar pack',
     description: typeof source.description === 'string' ? source.description.trim() : '',
     author: typeof source.author === 'string' ? source.author.trim() : '',
@@ -82,7 +158,7 @@ export function templatePackToExportObject(
 ): Record<string, unknown> {
   return {
     'templar-pack': {
-      version: 1,
+      version: CURRENT_PACK_FORMAT_VERSION,
       name: metadata.name.trim() || 'Untitled Templar pack',
       description: metadata.description.trim(),
       author: metadata.author.trim(),

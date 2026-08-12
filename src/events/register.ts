@@ -1,6 +1,7 @@
 import { MarkdownView, Menu, TFile, type EventRef } from 'obsidian';
 import { TEMPLAR_ICON } from '../constants';
 import type TemplarPlugin from '../main';
+import { runBackgroundTask, runUserAction } from '../ui/async-actions';
 
 export function registerEvent(plugin: TemplarPlugin, eventRef: EventRef): void {
   plugin.registerEvent(eventRef);
@@ -19,7 +20,7 @@ export function registerEvents(plugin: TemplarPlugin): void {
       const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
       if (activeView) {
         if (plugin.lastMarkdownLeaf && plugin.lastMarkdownLeaf !== activeView.leaf) {
-          void plugin.preview.cancelAll();
+          runBackgroundTask(() => plugin.preview.cancelAll(), 'preview cleanup after active leaf change');
         }
         plugin.lastMarkdownLeaf = activeView.leaf;
       }
@@ -30,7 +31,7 @@ export function registerEvents(plugin: TemplarPlugin): void {
   );
   registerEvent(plugin,
     plugin.app.workspace.on('file-open', () => {
-      void plugin.preview.cancelMismatchedLeaves();
+      runBackgroundTask(() => plugin.preview.cancelMismatchedLeaves(), 'preview cleanup after file open');
       plugin.renderer.scheduleRefreshAll();
       plugin.updateStatusBar();
     }),
@@ -43,9 +44,10 @@ export function registerEvents(plugin: TemplarPlugin): void {
       // sessions are Markdown-only, so use the authoritative typed list and
       // avoid cancelling a try-on merely because the renderer was swapped.
       const openLeaves = new Set(plugin.app.workspace.getLeavesOfType('markdown'));
-      void plugin.preview.cancelMissingLeaves(openLeaves).then((changed) => {
+      runBackgroundTask(async () => {
+        const changed = await plugin.preview.cancelMissingLeaves(openLeaves);
         if (changed) plugin.refreshSidebars();
-      });
+      }, 'preview cleanup after layout change');
       plugin.renderer.scheduleRefreshAll();
     }),
   );
@@ -55,8 +57,8 @@ export function registerEvents(plugin: TemplarPlugin): void {
       if (plugin.usageIndex.isBuilt()) {
         plugin.usageIndex.update({ path: file.path, folder: file.parent?.path ?? '', style: plugin.frontmatter.getStyle(file) });
       }
-      void plugin.evaluateStyleRules(file, true);
-      void plugin.renderer.refreshFile(file);
+      runBackgroundTask(() => plugin.evaluateStyleRules(file, true), 'style rule evaluation after metadata change');
+      runBackgroundTask(() => plugin.renderer.refreshFile(file), 'renderer refresh after metadata change');
       if (plugin.activeFile()?.path === file.path) {
         plugin.refreshSidebars();
         plugin.updateStatusBar();
@@ -66,19 +68,19 @@ export function registerEvents(plugin: TemplarPlugin): void {
   registerEvent(plugin,
     plugin.app.vault.on('rename', (file, oldPath) => {
       if (file instanceof TFile) {
-        if (file.extension === 'md') void plugin.preview.cancelAll().then(() => plugin.refreshSidebars());
+        if (file.extension === 'md') runBackgroundTask(async () => { await plugin.preview.cancelAll(); plugin.refreshSidebars(); }, 'preview cleanup after rename');
         plugin.frontmatter.rename(oldPath, file.path);
         if (plugin.usageIndex.isBuilt()) {
           plugin.usageIndex.rename(oldPath, { path: file.path, folder: file.parent?.path ?? '', style: plugin.frontmatter.getStyle(file) });
         }
-        if (file.extension === 'md') void plugin.evaluateStyleRules(file, true);
+        if (file.extension === 'md') runBackgroundTask(() => plugin.evaluateStyleRules(file, true), 'style rule evaluation after rename');
       }
       plugin.renderer.scheduleRefreshAll();
     }),
   );
   registerEvent(plugin,
     plugin.app.vault.on('delete', (file) => {
-      if (file instanceof TFile && file.extension === 'md') void plugin.preview.cancelAll().then(() => plugin.refreshSidebars());
+      if (file instanceof TFile && file.extension === 'md') runBackgroundTask(async () => { await plugin.preview.cancelAll(); plugin.refreshSidebars(); }, 'preview cleanup after delete');
       plugin.frontmatter.forget(file.path);
       if (plugin.usageIndex.isBuilt()) plugin.usageIndex.remove(file.path);
       plugin.renderer.scheduleRefreshAll();
@@ -108,7 +110,7 @@ export function registerEvents(plugin: TemplarPlugin): void {
           item
             .setTitle('Remove page style')
             .setIcon('eraser')
-            .onClick(() => void plugin.removeStyle(file)),
+            .onClick(() => runUserAction(() => plugin.removeStyle(file), 'Could not remove the page style')),
         );
       }
     }),

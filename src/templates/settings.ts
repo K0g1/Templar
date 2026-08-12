@@ -6,6 +6,7 @@ import type {
   TemplarSettings,
 } from '../types';
 import {
+  CURRENT_SETTINGS_DATA_VERSION,
   MAX_RULE_CONDITIONS,
   MAX_STYLE_RULES,
 } from '../constants';
@@ -14,12 +15,19 @@ import { DEFAULT_SETTINGS } from './defaults';
 import { normalizeTemplate, validateTemplateSource } from './schema';
 import { validateCompleteTemplate } from './validation';
 
+export type SettingsTemplateIssueKind =
+  | 'invalid'
+  | 'future-version'
+  | 'unsupported-legacy'
+  | 'migration-failed';
+
 export interface QuarantinedTemplate {
   index: number;
   templateId?: string;
   message: string;
   raw: unknown;
   futureVersion: boolean;
+  kind?: SettingsTemplateIssueKind;
 }
 
 export type SettingsLoadIssue = QuarantinedTemplate;
@@ -145,6 +153,9 @@ function normalizeUserTemplates(value: unknown): {
         message: error instanceof Error ? error.message : String(error),
         raw: item,
         futureVersion: record(item).version !== undefined && Number(record(item).version) > 1,
+        kind: record(item).version !== undefined && Number(record(item).version) > 1
+          ? 'future-version'
+          : 'invalid',
       });
     }
   });
@@ -205,5 +216,29 @@ export function cloneSettings(value: TemplarSettings): TemplarSettings {
     libraryDensity: value.libraryDensity,
     styleRules: clone(value.styleRules),
     userTemplates: clone(value.userTemplates),
+  };
+}
+
+export function settingsToPersistedData(
+  settings: TemplarSettings,
+  quarantined: readonly QuarantinedTemplate[] = [],
+): Record<string, unknown> {
+  return {
+    'settings-data-version': CURRENT_SETTINGS_DATA_VERSION,
+    enableReadingView: settings.enableReadingView,
+    enableLivePreview: settings.enableLivePreview,
+    hideStyleMetadata: settings.hideStyleMetadata,
+    defaultTemplateId: settings.defaultTemplateId,
+    defaultGridUnit: settings.defaultGridUnit,
+    fontCacheSize: settings.fontCacheSize,
+    favouriteTemplateIds: [...settings.favouriteTemplateIds],
+    recentTemplateIds: [...settings.recentTemplateIds],
+    defaultNewPageFlow: settings.defaultNewPageFlow,
+    libraryDensity: settings.libraryDensity,
+    styleRules: clone(settings.styleRules),
+    userTemplates: [
+      ...clone(settings.userTemplates),
+      ...quarantined.map((entry) => clone(entry.raw)),
+    ],
   };
 }

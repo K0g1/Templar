@@ -1,12 +1,9 @@
 import {
   Notice,
   Setting,
-  TFolder,
-  normalizePath,
   type DropdownComponent,
   type TextComponent,
 } from 'obsidian';
-import type TemplarPlugin from '../../main';
 import type { ImageFrame, NotePageOptions, TemplarTemplate } from '../../types';
 
 export function renderPageOptionSettings(
@@ -103,21 +100,6 @@ export function renderPageOptionSettings(
         onUpdate();
       }),
     );
-}
-
-export async function createFolderTree(plugin: TemplarPlugin, folder: string): Promise<void> {
-  const segments = normalizePath(folder).split('/').filter(Boolean);
-  let current = '';
-  for (const segment of segments) {
-    current = current ? `${current}/${segment}` : segment;
-    const existing = plugin.app.vault.getAbstractFileByPath(current);
-    if (existing && !(existing instanceof TFolder)) {
-      throw new Error(`“${current}” is a file, not a folder.`);
-    }
-    if (!existing) {
-      await plugin.app.vault.createFolder(current);
-    }
-  }
 }
 
 export function applyFramePreset(template: TemplarTemplate, frame: ImageFrame): void {

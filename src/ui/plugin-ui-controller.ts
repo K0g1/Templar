@@ -15,8 +15,10 @@ import {
   TemplateCreatorModal,
   TemplateImportModal,
   TemplatePackExportModal,
+  RecoveryModal,
 } from './modals';
 import { TemplarStylesView } from './styles-view';
+import { runUserAction } from './async-actions';
 
 /** Owns modal, view, and picker construction at the plugin/UI boundary. */
 export class PluginUiController {
@@ -35,7 +37,7 @@ export class PluginUiController {
       new Notice('Open a Markdown note before applying a page style.');
       return;
     }
-    void this.plugin.applyTemplate(template, file);
+    runUserAction(() => this.plugin.applyTemplate(template, file), 'Could not apply the page style');
   }
 
   public showApplyWithOptions(template: TemplarTemplate, file = this.plugin.activeFile()): void {
@@ -88,18 +90,39 @@ export class PluginUiController {
       new Notice('Open a Markdown note before editing its raw style.');
       return;
     }
-    const style = this.plugin.frontmatter.getStyle(file);
+    const inspection = this.plugin.frontmatter.inspect(file);
+    if (inspection.status !== 'current' && inspection.status !== 'migrated') {
+      new RecoveryModal(this.plugin, file, inspection).open();
+      return;
+    }
+    const style = inspection.style;
     if (!style) {
       new Notice('Apply a page style to this note first.');
       return;
     }
-    void this.plugin.preview.cancelAll().then(() => new RawStyleModal(this.plugin, file, style).open());
+    runUserAction(async () => {
+      await this.plugin.preview.cancelAll();
+      new RawStyleModal(this.plugin, file, style).open();
+    }, 'Could not open the raw style editor');
   }
 
   public showCurrentNoteInspector(file = this.plugin.activeFile()): void {
-    const style = file ? this.plugin.frontmatter.getStyle(file) : null;
+    const inspection = file ? this.plugin.frontmatter.inspect(file) : null;
+    if (file && inspection && inspection.status !== 'current' && inspection.status !== 'migrated') {
+      new RecoveryModal(this.plugin, file, inspection).open();
+      return;
+    }
+    const style = inspection?.style ?? null;
     if (!file || !style) return;
     new CurrentNoteInspectorModal(this.plugin, file, style).open();
+  }
+
+  public showRecovery(file = this.plugin.activeFile()): void {
+    if (!file || !this.plugin.frontmatter.hasTemplarData(file)) {
+      new Notice('The active note has no templar data to recover.');
+      return;
+    }
+    new RecoveryModal(this.plugin, file, this.plugin.frontmatter.inspect(file)).open();
   }
 
   public showBatchApply(): void {

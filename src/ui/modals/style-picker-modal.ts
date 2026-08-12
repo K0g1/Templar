@@ -1,6 +1,7 @@
 import { FuzzySuggestModal, type TFile } from 'obsidian';
 import type TemplarPlugin from '../../main';
 import type { TemplarTemplate } from '../../types';
+import { runUserAction } from '../async-actions';
 import { CreateStyledNoteModal } from './create-styled-note-modal';
 
 export class StylePickerModal extends FuzzySuggestModal<TemplarTemplate> {
@@ -26,7 +27,7 @@ export class StylePickerModal extends FuzzySuggestModal<TemplarTemplate> {
     if (this.intent === 'create') {
       new CreateStyledNoteModal(this.plugin, item).open();
     } else if (this.file) {
-      void this.plugin.applyTemplate(item, this.file);
+      runUserAction(() => this.plugin.applyTemplate(item, this.file), 'Could not apply the page style');
     }
   }
 }

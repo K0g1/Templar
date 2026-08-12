@@ -1,6 +1,14 @@
 export const TEMPLAR_VIEW_TYPE = 'templar-styles';
 export const TEMPLAR_ICON = 'paintbrush-vertical';
-export const TEMPLAR_FORMAT_VERSION = 1;
+export const CURRENT_TEMPLAR_FORMAT_VERSION = 1 as const;
+export const MIN_SUPPORTED_TEMPLAR_FORMAT_VERSION = 1 as const;
+export const CURRENT_PACK_FORMAT_VERSION = 1 as const;
+export const MIN_SUPPORTED_PACK_FORMAT_VERSION = 1 as const;
+export const CURRENT_SETTINGS_DATA_VERSION = 1 as const;
+export const RECOVERY_RECORD_VERSION = 1 as const;
+export const RECOVERY_FOLDER = 'Templar Recovery';
+export const MAX_RECOVERY_RAW_BYTES = 8_000_000;
+export const TEMPLAR_FORMAT_VERSION = CURRENT_TEMPLAR_FORMAT_VERSION;
 export const TEMPLAR_CLASS = 'templar-scope';
 export const TEMPLAR_PAGE_CLASS = 'templar-page';
 export const TEMPLAR_CONTENT_CLASS = 'templar-page-content';

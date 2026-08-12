@@ -3,7 +3,8 @@ import type TemplarPlugin from '../../main';
 import { DEFAULT_PAGE_OPTIONS } from '../../templates/defaults';
 import type { TemplarTemplate } from '../../types';
 import { clone } from '../../utils/value';
-import { createFolderTree, renderPageOptionSettings, runButtonAction } from './shared';
+import { ensureVaultFolderTree } from '../../utils/vault-folders';
+import { renderPageOptionSettings, runButtonAction } from './shared';
 
 export class CreateStyledNoteModal extends Modal {
   private pageOptions = clone(DEFAULT_PAGE_OPTIONS);
@@ -50,7 +51,7 @@ export class CreateStyledNoteModal extends Modal {
         throw new Error(`“${folder}” is a file, not a folder.`);
       }
       if (!existing) {
-        await createFolderTree(this.plugin, folder);
+        await ensureVaultFolderTree(this.app, folder);
       }
     }
     const base = normalizePath(folder ? `${folder}/${safeTitle}` : safeTitle);

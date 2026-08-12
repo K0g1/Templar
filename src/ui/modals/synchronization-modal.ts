@@ -7,10 +7,11 @@ import {
   type SynchronizationStatus,
 } from '../../services/synchronization';
 import type { FileOperationResult } from '../../services/operation-result';
-import { summarizeFileOperations } from '../../services/operation-result';
+import { mergeOperationResults, summarizeFileOperations } from '../../services/operation-result';
 import { validateCompleteTemplate } from '../../templates/validation';
 import type { TemplarNoteStyle, TemplarTemplate } from '../../types';
 import { renderOperationSummary } from '../operation-results';
+import { runUserAction } from '../async-actions';
 import { ConfirmationModal } from './confirmation-modal';
 
 interface SyncReviewItem {
@@ -19,6 +20,7 @@ interface SyncReviewItem {
   source: TemplarTemplate | null;
   status: SynchronizationStatus;
   action: 'safe' | 'merge' | 'replace' | 'skip';
+  reviewedFingerprint: string;
 }
 
 export class SynchronizationReviewModal extends Modal {
@@ -26,6 +28,7 @@ export class SynchronizationReviewModal extends Modal {
   private overview = { total: 0, upToDate: 0, localOnly: 0, safe: 0, modified: 0, legacy: 0, missing: 0 };
   private resultEl: HTMLElement | null = null;
   private retryableFailedPaths = new Set<string>();
+  private aggregateResults: FileOperationResult[] = [];
 
   public constructor(
     private readonly plugin: TemplarPlugin,
@@ -47,7 +50,7 @@ export class SynchronizationReviewModal extends Modal {
         : status.state === 'modified-update-available'
           ? 'merge'
           : 'skip';
-      return [{ file, style: entry.style, source, status, action }];
+      return [{ file, style: entry.style, source, status, action, reviewedFingerprint: this.plugin.frontmatter.inspect(file).fingerprint }];
     });
     this.overview = {
       total: candidates.length,
@@ -81,7 +84,10 @@ export class SynchronizationReviewModal extends Modal {
       row.createDiv({ cls: 'templar-sync-note', text: item.file.path });
       row.createDiv({ cls: 'templar-sync-state', text: item.status.state.replace(/-/g, ' ') });
       const open = row.createEl('button', { text: 'Open note' });
-      open.addEventListener('click', () => void this.app.workspace.getLeaf(false).openFile(item.file));
+      open.addEventListener('click', () => runUserAction(
+        () => this.app.workspace.getLeaf(false).openFile(item.file),
+        'Could not open the note',
+      ));
       const choice = row.createEl('select', { attr: { 'aria-label': `Update choice for ${item.file.basename}` } });
       if (item.status.state === 'update-available') choice.createEl('option', { value: 'safe', text: 'Update safely' });
       if (item.status.state === 'modified-update-available') choice.createEl('option', { value: 'merge', text: 'Keep my changes where possible' });
@@ -99,6 +105,7 @@ export class SynchronizationReviewModal extends Modal {
   }
 
   private confirm(): void {
+    this.aggregateResults = [];
     const counts = {
       safe: this.items.filter((item) => item.action === 'safe').length,
       merge: this.items.filter((item) => item.action === 'merge').length,
@@ -111,7 +118,7 @@ export class SynchronizationReviewModal extends Modal {
 
   private async execute(selected: readonly SyncReviewItem[]): Promise<void> {
     this.retryableFailedPaths = new Set();
-    const planned: Array<{ item: SyncReviewItem; style: TemplarNoteStyle }> = [];
+    const planned: Array<{ item: SyncReviewItem; style: TemplarNoteStyle; expectedRawFingerprint: string }> = [];
     const planningResults: FileOperationResult[] = [];
     let validationBlocked = false;
 
@@ -120,6 +127,12 @@ export class SynchronizationReviewModal extends Modal {
         planningResults.push(skipped(item.file.path, 'Skipped by the selected action.'));
         continue;
       }
+      const currentInspection = this.plugin.frontmatter.inspect(item.file);
+      if (currentInspection.fingerprint !== item.reviewedFingerprint) {
+        planningResults.push(skipped(item.file.path, "This note's Templar data changed while it was awaiting synchronization."));
+        continue;
+      }
+      item.reviewedFingerprint = currentInspection.fingerprint;
       if (!item.source) {
         planningResults.push(skipped(item.file.path, 'The source template is no longer available.'));
         continue;
@@ -139,14 +152,15 @@ export class SynchronizationReviewModal extends Modal {
         planningResults.push(failed(item.file.path, errors.map((issue) => `${issue.path}: ${issue.message}`).join(' ')));
         continue;
       }
-      planned.push({ item, style: candidate.style });
+      planned.push({ item, style: candidate.style, expectedRawFingerprint: currentInspection.fingerprint });
     }
 
     if (validationBlocked) {
       for (const operation of planned) {
         planningResults.push(skipped(operation.item.file.path, 'Not written because another selected candidate failed validation.'));
       }
-      this.renderResults(summarizeFileOperations(planningResults), selected);
+      this.aggregateResults = mergeOperationResults(this.aggregateResults, planningResults);
+      this.renderResults(summarizeFileOperations(this.aggregateResults), selected);
       return;
     }
 
@@ -154,7 +168,9 @@ export class SynchronizationReviewModal extends Modal {
     let processed = 0;
     for (const operation of planned) {
       try {
-        results.push(await this.plugin.application.writeStyle(operation.item.file, operation.style, 'deferred'));
+        results.push(await this.plugin.application.writeStyle(operation.item.file, operation.style, 'deferred', {
+          expectedRawFingerprint: operation.expectedRawFingerprint,
+        }));
       } catch (error) {
         this.retryableFailedPaths.add(operation.item.file.path);
         results.push(failed(operation.item.file.path, errorMessage(error)));
@@ -182,8 +198,9 @@ export class SynchronizationReviewModal extends Modal {
       }
     }
 
-    const summary = summarizeFileOperations(results);
-    if (summary.failed === 0 && summary.warnings === 0) {
+    this.aggregateResults = mergeOperationResults(this.aggregateResults, results);
+    const summary = summarizeFileOperations(this.aggregateResults);
+    if (summary.failed === 0 && summary.warnings === 0 && summary.skipped === 0) {
       new Notice(`Updated ${String(summary.succeeded)} ${summary.succeeded === 1 ? 'note' : 'notes'}.`);
       this.close();
       return;
@@ -200,7 +217,7 @@ export class SynchronizationReviewModal extends Modal {
       const retry = actions.createEl('button', { cls: 'mod-cta', text: 'Retry failed' });
       retry.addEventListener('click', () => {
         const retryItems = selected.filter((item) => this.retryableFailedPaths.has(item.file.path));
-        void this.execute(retryItems);
+        runUserAction(() => this.execute(retryItems), 'Could not retry the template updates');
       });
     }
     const close = actions.createEl('button', { text: 'Close' });

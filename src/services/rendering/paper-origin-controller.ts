@@ -33,7 +33,8 @@ export class PaperOriginController {
     style: TemplarNoteStyle,
     metrics: PageMetricSet,
   ): void {
-    this.clear(leaf, contentEl);
+    this.clear(leaf);
+    this.cleanupOwnedDom(contentEl);
     const pageContents = new Set(
       contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`),
     );
@@ -157,20 +158,23 @@ export class PaperOriginController {
     scan();
   }
 
-  public clear(leaf: WorkspaceLeaf, contentEl?: HTMLElement): void {
+  public clear(leaf: WorkspaceLeaf): void {
     const state = this.states.get(leaf);
     if (state?.frame !== null && state) state.view.cancelAnimationFrame(state.frame);
     state?.resizeObserver.disconnect();
     state?.mutationObserver.disconnect();
-    const root = contentEl ?? state?.contentEl;
-    root?.querySelectorAll<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`).forEach((element) => {
-      element.style.removeProperty('--templar-paper-baseline-position');
-    });
+    if (state) this.cleanupOwnedDom(state.contentEl);
     this.states.delete(leaf);
   }
 
   public destroy(): void {
-    for (const [leaf, state] of this.states) this.clear(leaf, state.contentEl);
+    for (const leaf of [...this.states.keys()]) this.clear(leaf);
+  }
+
+  private cleanupOwnedDom(contentEl: HTMLElement): void {
+    contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`).forEach((element) => {
+      element.style.removeProperty('--templar-paper-baseline-position');
+    });
   }
 }
 
