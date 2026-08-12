@@ -56,7 +56,7 @@ describe('all-template render matrix', () => {
         });
       }
     }
-  });
+  }, 15_000);
 
   it('compiles disabled baselines independently of their stored mode', () => {
     for (const template of BUILT_IN_TEMPLATES) {

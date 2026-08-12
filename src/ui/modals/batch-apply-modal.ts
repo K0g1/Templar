@@ -98,8 +98,12 @@ export class BatchApplyModal extends Modal {
     if (!this.summaryEl) return;
     const files = this.matchingFiles();
     const count = files.length;
-    const styled = files.filter((file) => this.plugin.frontmatter.inspect(file).status !== 'absent').length;
-    this.summaryEl.setText(`${String(count)} Markdown ${count === 1 ? 'note' : 'notes'} match: ${String(count - styled)} unstyled will receive the style; ${String(styled)} existing or protected notes will be skipped.`);
+    const inspections = files.map((file) => this.plugin.frontmatter.inspect(file));
+    const absent = inspections.filter((inspection) => inspection.status === 'absent').length;
+    const current = inspections.filter((inspection) => inspection.status === 'current').length;
+    const migrated = inspections.filter((inspection) => inspection.status === 'migrated').length;
+    const protectedCount = count - absent - current - migrated;
+    this.summaryEl.setText(`${String(count)} Markdown ${count === 1 ? 'note' : 'notes'} match: ${String(absent)} unstyled will be styled; ${String(current)} current styled notes will be replaced; ${String(migrated)} migrated notes need recovery-backed upgrade and will be skipped; ${String(protectedCount)} protected notes will be skipped.`);
   }
 
   private confirm(): void {
@@ -111,25 +115,43 @@ export class BatchApplyModal extends Modal {
     }
 
     const frozenTemplate = clone(template);
+    const reviewed = new Map(files.map((file) => {
+      const inspection = this.plugin.frontmatter.inspect(file);
+      return [file.path, {
+        fingerprint: inspection.fingerprint,
+        status: inspection.status,
+        page: inspection.style?.page ?? null,
+      }];
+    }));
     this.aggregateResults = [];
     const frozenPageMode = this.pageMode;
     const frozenPageSize = this.pageSize;
     const request = Object.freeze({
       files,
       template: frozenTemplate,
-      decide: (_file: TFile, inspection: NoteStyleInspection) => {
-        if (inspection.status !== 'absent') {
-          return { kind: 'skip' as const, message: 'Existing or protected Templar data was not overwritten.' };
+      decide: (file: TFile, inspection: NoteStyleInspection) => {
+        const review = reviewed.get(file.path);
+        if (!review || inspection.fingerprint !== review.fingerprint) {
+          return { kind: 'skip' as const, message: 'The note changed after review and was not overwritten.' };
         }
-        const current = inspection.style;
-        const page: NotePageOptions = clone(current?.page ?? { ...DEFAULT_PAGE_OPTIONS, mode: 'pageless' as const });
+        if (review.status === 'migrated') {
+          return { kind: 'skip' as const, message: 'This note uses an older supported format and needs a recovery-backed upgrade.' };
+        }
+        if (review.status !== 'absent' && review.status !== 'current') {
+          return { kind: 'skip' as const, message: 'Protected future or unreadable Templar data was not overwritten.' };
+        }
+        const page: NotePageOptions = clone(review.page ?? { ...DEFAULT_PAGE_OPTIONS, mode: 'pageless' as const });
         if (frozenPageMode !== 'preserve') page.mode = frozenPageMode;
         if (frozenPageMode === 'paged') {
           page.size = frozenPageSize;
           page.width = frozenPageSize === 'letter' ? 816 : 794;
           page.height = frozenPageSize === 'letter' ? 1056 : 1123;
         }
-        return { kind: 'apply' as const, pageOptions: page };
+        return {
+          kind: 'apply' as const,
+          pageOptions: page,
+          guard: { expectedRawFingerprint: review.fingerprint },
+        };
       },
       yieldToHost: () => new Promise<void>((resolve) => {
         const view = this.contentEl.ownerDocument.defaultView;
@@ -138,12 +160,14 @@ export class BatchApplyModal extends Modal {
       }),
     }) satisfies BatchApplyRequest;
 
-    const unstyled = files.filter((file) => this.plugin.frontmatter.inspect(file).status === 'absent').length;
-    const styled = files.length - unstyled;
+    const unstyled = [...reviewed.values()].filter((review) => review.status === 'absent').length;
+    const current = [...reviewed.values()].filter((review) => review.status === 'current').length;
+    const migrated = [...reviewed.values()].filter((review) => review.status === 'migrated').length;
+    const protectedCount = files.length - unstyled - current - migrated;
     new ConfirmationModal(
       this.plugin,
       `Apply “${frozenTemplate.name}” to ${String(files.length)} notes?`,
-      `${String(unstyled)} unstyled notes will receive the style and ${String(styled)} existing or protected notes will be skipped. Markdown and unrelated frontmatter remain unchanged.`,
+      `${String(unstyled)} unstyled notes will be styled; ${String(current)} current styles will be replaced; ${String(migrated)} migrated notes need recovery-backed upgrade and will be skipped; ${String(protectedCount)} protected notes will be skipped. Current Templar styles in this selection will be replaced. Protected future or unreadable Templar data will never be overwritten. Markdown bodies and unrelated frontmatter are not modified.`,
       async () => this.execute(request, frozenTemplate.name),
     ).open();
   }

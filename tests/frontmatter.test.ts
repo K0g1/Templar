@@ -1,6 +1,7 @@
 import type { App, TFile } from 'obsidian';
 import { describe, expect, it } from 'vitest';
 import {
+  authorizeRecoveryWrite,
   FrontmatterService,
   ProtectedTemplarDataError,
   StaleTemplarDataError,
@@ -88,7 +89,7 @@ describe('FrontmatterService mutation coordination', () => {
     const openingFingerprint = harness.service.inspect(harness.note).fingerprint;
     const write = harness.service.writeStyle(harness.note, style(0), {
       expectedRawFingerprint: openingFingerprint,
-      protectedDataPolicy: 'allow-after-recovery',
+      recoveryAuthorization: authorizeRecoveryWrite('Templar Recovery/test.json', openingFingerprint),
     });
     await Promise.resolve();
     expect(harness.writes).toHaveLength(1);

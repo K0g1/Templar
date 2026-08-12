@@ -21,6 +21,16 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 export function loadVersionedSettings(raw: unknown): SettingsLoadResult {
+  if (raw === undefined || raw === null) {
+    return {
+      settings: normalizeSettingsWithIssues({}).settings,
+      issues: [],
+      status: 'current',
+      raw,
+      rawVersion: null,
+      migrationTrace: [],
+    };
+  }
   const source = record(raw);
   if (!source) {
     return {
@@ -30,6 +40,7 @@ export function loadVersionedSettings(raw: unknown): SettingsLoadResult {
       raw,
       rawVersion: null,
       migrationTrace: [],
+      protectedRaw: clone(raw),
     };
   }
   const rawVersionValue = source['settings-data-version'];

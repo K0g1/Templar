@@ -1,6 +1,6 @@
 import type { App, TFile } from 'obsidian';
 import type { NotePageOptions, TemplarNoteStyle, TemplarTemplate } from '../types';
-import { frontmatterToNoteStyle, noteStyleToFrontmatter, templateToNoteStyle } from '../templates/note-format';
+import { noteStyleToFrontmatter, templateToNoteStyle } from '../templates/note-format';
 import { normalizePageOptions } from '../templates/schema';
 import { deepEqual } from '../utils/equality';
 import { clone } from '../utils/value';
@@ -39,7 +39,24 @@ const MAX_KNOWN_LOCAL_SNAPSHOTS = 8;
 
 export interface FrontmatterWriteGuard {
   expectedRawFingerprint?: string;
-  protectedDataPolicy?: 'refuse' | 'allow-after-recovery';
+  /**
+   * Issued by the recovery flow after it has durably saved the exact raw
+   * value. Ordinary editors should not set this: protected data must first
+   * be exported through RecoveryService.
+   */
+  recoveryAuthorization?: RecoveryWriteAuthorization;
+}
+
+export interface RecoveryWriteAuthorization {
+  backupPath: string;
+  sourceFingerprint: string;
+}
+
+export function authorizeRecoveryWrite(
+  backupPath: string,
+  sourceFingerprint: string,
+): RecoveryWriteAuthorization {
+  return { backupPath, sourceFingerprint };
 }
 
 export class StaleTemplarDataError extends Error {
@@ -53,6 +70,13 @@ export class ProtectedTemplarDataError extends Error {
   public constructor() {
     super('This note contains Templar data that cannot be safely interpreted. Open Templar Recovery before replacing or removing it.');
     this.name = 'ProtectedTemplarDataError';
+  }
+}
+
+export class ProtectedNestedTemplarDataError extends Error {
+  public constructor() {
+    super('This note contains synchronization data written in a format this version cannot safely replace. Open Templar Recovery before replacing or removing it.');
+    this.name = 'ProtectedNestedTemplarDataError';
   }
 }
 
@@ -120,8 +144,9 @@ export class FrontmatterService {
     }
     await this.enqueueMutation(file, style, async () => {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-        this.assertWriteAllowed(frontmatter.templar, guard);
-        frontmatter.templar = this.serializedStyle(style, frontmatter.templar);
+        const serialized = this.serializedStyle(style, frontmatter.templar);
+        this.assertWriteAllowed(frontmatter.templar, guard, serialized);
+        frontmatter.templar = serialized;
       });
     }, 'current');
   }
@@ -134,8 +159,9 @@ export class FrontmatterService {
     const desired = clone(style);
     await this.enqueueMutation(file, desired, async () => {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-        this.assertWriteAllowed(frontmatter.templar, guard);
-        frontmatter.templar = this.serializedStyle(desired, frontmatter.templar);
+        const serialized = this.serializedStyle(desired, frontmatter.templar);
+        this.assertWriteAllowed(frontmatter.templar, guard, serialized);
+        frontmatter.templar = serialized;
       });
     }, 'current');
   }
@@ -153,7 +179,8 @@ export class FrontmatterService {
     desired.page = normalizePageOptions(pageOptions);
     await this.enqueueMutation(file, desired, async () => {
       await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-        this.assertWriteAllowed(frontmatter.templar, guard);
+        const serialized = this.serializedStyle(currentStyleForPage(frontmatter.templar, pageOptions), frontmatter.templar);
+        this.assertWriteAllowed(frontmatter.templar, guard, serialized);
         const currentStyle = inspectRawNoteStyle(frontmatter.templar).style;
         if (!currentStyle) throw new Error('The note no longer has a renderable Templar style.');
         currentStyle.page = normalizePageOptions(pageOptions);
@@ -235,7 +262,7 @@ export class FrontmatterService {
 
   private cachedStyle(file: TFile): TemplarNoteStyle | null {
     const cache = this.app.metadataCache.getFileCache(file);
-    return frontmatterToNoteStyle(cache?.frontmatter?.templar);
+    return inspectRawNoteStyle(cache?.frontmatter?.templar).style;
   }
 
   private stateFor(file: TFile): FileMutationState {
@@ -306,7 +333,11 @@ export class FrontmatterService {
     return job;
   }
 
-  private assertWriteAllowed(raw: unknown, guard: FrontmatterWriteGuard): void {
+  private assertWriteAllowed(
+    raw: unknown,
+    guard: FrontmatterWriteGuard,
+    desiredRaw?: unknown,
+  ): void {
     const currentFingerprint = rawTemplarFingerprint(raw);
     if (guard.expectedRawFingerprint !== undefined && guard.expectedRawFingerprint !== currentFingerprint) {
       throw new StaleTemplarDataError();
@@ -315,10 +346,16 @@ export class FrontmatterService {
     if (
       inspection.rawExists &&
       inspection.status !== 'current' &&
-      inspection.status !== 'migrated' &&
-      guard.protectedDataPolicy !== 'allow-after-recovery'
+      !hasRecoveryAuthorization(guard)
     ) {
       throw new ProtectedTemplarDataError();
+    }
+    if (
+      inspection.protectedPaths.length > 0 &&
+      !hasRecoveryAuthorization(guard) &&
+      !preservesProtectedSourceSnapshot(raw, desiredRaw)
+    ) {
+      throw new ProtectedNestedTemplarDataError();
     }
   }
 
@@ -329,15 +366,16 @@ export class FrontmatterService {
       : null;
     const currentProvenance = current?.provenance;
     const desiredProvenance = serialized.provenance;
+    const currentSnapshot = sourceSnapshot(currentProvenance);
     if (
       typeof currentProvenance === 'object' && currentProvenance !== null && !Array.isArray(currentProvenance) &&
-      typeof (currentProvenance as Record<string, unknown>)['source-snapshot'] === 'object' &&
+      currentSnapshot !== undefined &&
       (!desiredProvenance || typeof desiredProvenance !== 'object' ||
         (desiredProvenance as Record<string, unknown>)['source-snapshot'] === undefined)
     ) {
       serialized.provenance = {
         ...(typeof desiredProvenance === 'object' && desiredProvenance !== null ? desiredProvenance : {}),
-        'source-snapshot': clone((currentProvenance as Record<string, unknown>)['source-snapshot']),
+        'source-snapshot': clone(currentSnapshot),
       };
     }
     return serialized;
@@ -353,4 +391,37 @@ export class FrontmatterService {
       this.states.delete(path);
     }
   }
+}
+
+function hasRecoveryAuthorization(guard: FrontmatterWriteGuard): boolean {
+  return guard.expectedRawFingerprint !== undefined &&
+    guard.recoveryAuthorization?.sourceFingerprint === guard.expectedRawFingerprint &&
+    guard.recoveryAuthorization.backupPath.trim().length > 0;
+}
+
+function sourceSnapshot(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  return source['source-snapshot'] ?? source.sourceSnapshot;
+}
+
+function preservesProtectedSourceSnapshot(currentRaw: unknown, desiredRaw: unknown): boolean {
+  const current = typeof currentRaw === 'object' && currentRaw !== null && !Array.isArray(currentRaw)
+    ? currentRaw as Record<string, unknown>
+    : null;
+  const desired = typeof desiredRaw === 'object' && desiredRaw !== null && !Array.isArray(desiredRaw)
+    ? desiredRaw as Record<string, unknown>
+    : null;
+  const currentSnapshot = sourceSnapshot(current?.provenance);
+  const desiredSnapshot = sourceSnapshot(desired?.provenance);
+  return currentSnapshot !== undefined &&
+    desiredSnapshot !== undefined &&
+    rawTemplarFingerprint(currentSnapshot) === rawTemplarFingerprint(desiredSnapshot);
+}
+
+function currentStyleForPage(raw: unknown, pageOptions: NotePageOptions): TemplarNoteStyle {
+  const style = inspectRawNoteStyle(raw).style;
+  if (!style) throw new Error('The note no longer has a renderable Templar style.');
+  style.page = normalizePageOptions(pageOptions);
+  return style;
 }

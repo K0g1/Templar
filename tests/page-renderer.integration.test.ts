@@ -69,6 +69,70 @@ function styleAt(index: number): TemplarNoteStyle {
 }
 
 describe('PageRenderer integration lifecycle', () => {
+  it('keeps Reading View whitespace identical for preview, persisted apply, and style removal', async () => {
+    const harness = createObserverHarness();
+    const note = file('Notes/reading-whitespace.md');
+    const leaf = leafFor(harness.window, note);
+    const content = (leaf.view as unknown as { contentEl: HTMLElement }).contentEl;
+    const readingRoot = content.querySelector<HTMLElement>('.markdown-preview-view')!;
+    const sizer = readingRoot.querySelector<HTMLElement>('.markdown-preview-sizer')!;
+    const first = sizer.querySelector<HTMLElement>('.markdown-preview-section')!;
+    const second = harness.window.document.createElement('div');
+    second.className = 'markdown-preview-section';
+    second.append(harness.window.document.createElement('p'));
+    sizer.append(second);
+    let stored: TemplarNoteStyle | null = null;
+    const sectionInfo = new Map<HTMLElement, { lineStart: number; lineEnd: number; text: string }>([
+      [first, { lineStart: 4, lineEnd: 4, text: '' }],
+      [second, { lineStart: 8, lineEnd: 8, text: '' }],
+    ]);
+    const context = {
+      sourcePath: note.path,
+      getSectionInfo: (element: HTMLElement) => sectionInfo.get(element) ?? null,
+    };
+    const app = {
+      workspace: { getLeavesOfType: () => [leaf] },
+      vault: { getAbstractFileByPath: () => note },
+      metadataCache: {
+        getFileCache: () => ({ frontmatterPosition: { end: { line: 1 } } }),
+      },
+    };
+    const renderer = new PageRenderer(
+      app as never,
+      { ...DEFAULT_SETTINGS, enableReadingView: true, enableLivePreview: false },
+      { getStyle: vi.fn(() => stored), hasStyle: vi.fn(() => stored !== null) } as never,
+      { measurePage: vi.fn(async () => metrics()), clear: vi.fn() } as never,
+    );
+
+    await renderer.refreshAll();
+    expect(readingRoot.hasClass('templar-page')).toBe(false);
+    expect(readingRoot.querySelectorAll('.templar-blank-line-spacer')).toHaveLength(0);
+
+    renderer.registerReadingSection(first, context as never);
+    renderer.registerReadingSection(second, context as never);
+
+    const style = styleAt(0);
+    await renderer.setPreview(leaf, 'preview', note.path, style);
+    const previewSpacers = Array.from(readingRoot.querySelectorAll<HTMLElement>('.templar-blank-line-spacer'))
+      .map((element) => element.style.getPropertyValue('--templar-blank-lines'));
+    expect(first.hasClass('templar-reading-section')).toBe(true);
+    expect(second.hasClass('templar-reading-section')).toBe(true);
+    expect(previewSpacers.length).toBeGreaterThan(0);
+
+    stored = style;
+    await renderer.cancelPreview(leaf, 'preview');
+    expect(Array.from(readingRoot.querySelectorAll<HTMLElement>('.templar-blank-line-spacer'))
+      .map((element) => element.style.getPropertyValue('--templar-blank-lines'))).toEqual(previewSpacers);
+
+    stored = null;
+    await renderer.refreshAll();
+    expect(readingRoot.hasClass('templar-page')).toBe(false);
+    expect(first.hasClass('templar-reading-section')).toBe(false);
+    expect(second.hasClass('templar-reading-section')).toBe(false);
+    expect(readingRoot.querySelectorAll('.templar-blank-line-spacer')).toHaveLength(0);
+    renderer.destroy();
+  });
+
   it('keeps renderer scopes, observers, and temporary previews leaf-local', async () => {
     const first = createObserverHarness();
     const second = createObserverHarness();

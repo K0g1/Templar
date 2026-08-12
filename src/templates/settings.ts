@@ -12,22 +12,23 @@ import {
 } from '../constants';
 import { clone, numberValue, slugify, stringArray } from '../utils/value';
 import { DEFAULT_SETTINGS } from './defaults';
-import { normalizeTemplate, validateTemplateSource } from './schema';
+import { inspectTemplateSchema, validateTemplateSource } from './schema';
 import { validateCompleteTemplate } from './validation';
 
-export type SettingsTemplateIssueKind =
+export type QuarantineKind =
   | 'invalid'
   | 'future-version'
   | 'unsupported-legacy'
   | 'migration-failed';
+
+export type SettingsTemplateIssueKind = QuarantineKind;
 
 export interface QuarantinedTemplate {
   index: number;
   templateId?: string;
   message: string;
   raw: unknown;
-  futureVersion: boolean;
-  kind?: SettingsTemplateIssueKind;
+  kind: QuarantineKind;
 }
 
 export type SettingsLoadIssue = QuarantinedTemplate;
@@ -132,14 +133,32 @@ function normalizeUserTemplates(value: unknown): {
   const issues: SettingsLoadIssue[] = [];
   value.forEach((item, index) => {
     try {
-      const sourceIssues = validateTemplateSource(item);
+      const inspected = inspectTemplateSchema(item);
+      if (!inspected.value) {
+        const kind = inspected.status === 'unsupported-future'
+          ? 'future-version'
+          : inspected.status === 'unsupported-legacy'
+            ? 'unsupported-legacy'
+            : inspected.status === 'migration-failed'
+              ? 'migration-failed'
+              : 'invalid';
+        issues.push({
+          index,
+          ...(templateIdIfRecoverable(item) ? { templateId: templateIdIfRecoverable(item) } : {}),
+          message: inspected.issues.map((issue) => issue.message).join(' ') || 'The saved template could not be interpreted.',
+          raw: item,
+          kind,
+        });
+        return;
+      }
+      const sourceIssues = validateTemplateSource(inspected.value);
       if (sourceIssues.some((issue) => issue.severity === 'error')) {
         throw new Error(sourceIssues
           .filter((issue) => issue.severity === 'error')
           .map((issue) => issue.message)
           .join(' '));
       }
-      const template = normalizeTemplate(item);
+      const template = inspected.value;
       const validation = validateCompleteTemplate(template);
       const errors = validation.filter((issue) => issue.severity === 'error');
       if (errors.length > 0) {
@@ -152,10 +171,7 @@ function normalizeUserTemplates(value: unknown): {
         ...(templateIdIfRecoverable(item) ? { templateId: templateIdIfRecoverable(item) } : {}),
         message: error instanceof Error ? error.message : String(error),
         raw: item,
-        futureVersion: record(item).version !== undefined && Number(record(item).version) > 1,
-        kind: record(item).version !== undefined && Number(record(item).version) > 1
-          ? 'future-version'
-          : 'invalid',
+        kind: 'invalid',
       });
     }
   });

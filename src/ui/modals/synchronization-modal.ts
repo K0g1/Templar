@@ -21,6 +21,7 @@ interface SyncReviewItem {
   status: SynchronizationStatus;
   action: 'safe' | 'merge' | 'replace' | 'skip';
   reviewedFingerprint: string;
+  protectedSourceSnapshot: boolean;
 }
 
 export class SynchronizationReviewModal extends Modal {
@@ -43,14 +44,18 @@ export class SynchronizationReviewModal extends Modal {
       if (!entry.style || (this.templateId && entry.style.sourceTemplateId !== this.templateId)) return [];
       const file = this.app.vault.getAbstractFileByPath(entry.path);
       if (!(file instanceof TFile)) return [];
+      const inspection = this.plugin.frontmatter.inspect(file);
       const source = this.plugin.library.get(entry.style.sourceTemplateId ?? entry.style.id);
       const status = synchronizationStatus(entry.style, source);
-      const action: SyncReviewItem['action'] = status.state === 'update-available'
+      const protectedSourceSnapshot = inspection.protectedPaths.length > 0;
+      const action: SyncReviewItem['action'] = protectedSourceSnapshot
+        ? 'skip'
+        : status.state === 'update-available'
         ? 'safe'
         : status.state === 'modified-update-available'
           ? 'merge'
           : 'skip';
-      return [{ file, style: entry.style, source, status, action, reviewedFingerprint: this.plugin.frontmatter.inspect(file).fingerprint }];
+      return [{ file, style: entry.style, source, status, action, reviewedFingerprint: inspection.fingerprint, protectedSourceSnapshot }];
     });
     this.overview = {
       total: candidates.length,
@@ -61,7 +66,7 @@ export class SynchronizationReviewModal extends Modal {
       legacy: candidates.filter((item) => item.status.state === 'legacy-update-unknown').length,
       missing: candidates.filter((item) => item.status.state === 'source-missing').length,
     };
-    this.items = candidates.filter((item) => item.status.updateAvailable || item.status.state === 'source-missing');
+    this.items = candidates.filter((item) => item.protectedSourceSnapshot || item.status.updateAvailable || item.status.state === 'source-missing');
     this.render();
   }
 
@@ -82,19 +87,30 @@ export class SynchronizationReviewModal extends Modal {
     for (const item of this.items) {
       const row = list.createDiv({ cls: 'templar-sync-entry' });
       row.createDiv({ cls: 'templar-sync-note', text: item.file.path });
-      row.createDiv({ cls: 'templar-sync-state', text: item.status.state.replace(/-/g, ' ') });
+      row.createDiv({
+        cls: 'templar-sync-state',
+        text: item.protectedSourceSnapshot ? 'recovery required' : item.status.state.replace(/-/g, ' '),
+      });
       const open = row.createEl('button', { text: 'Open note' });
       open.addEventListener('click', () => runUserAction(
         () => this.app.workspace.getLeaf(false).openFile(item.file),
         'Could not open the note',
       ));
       const choice = row.createEl('select', { attr: { 'aria-label': `Update choice for ${item.file.basename}` } });
-      if (item.status.state === 'update-available') choice.createEl('option', { value: 'safe', text: 'Update safely' });
-      if (item.status.state === 'modified-update-available') choice.createEl('option', { value: 'merge', text: 'Keep my changes where possible' });
-      if (item.source) choice.createEl('option', { value: 'replace', text: 'Replace with latest' });
+      if (!item.protectedSourceSnapshot) {
+        if (item.status.state === 'update-available') choice.createEl('option', { value: 'safe', text: 'Update safely' });
+        if (item.status.state === 'modified-update-available') choice.createEl('option', { value: 'merge', text: 'Keep my changes where possible' });
+        if (item.source) choice.createEl('option', { value: 'replace', text: 'Replace with latest' });
+      }
       choice.createEl('option', { value: 'skip', text: item.status.legacy ? 'Keep current / skip' : 'Skip this note' });
       choice.value = item.action;
+      choice.disabled = item.protectedSourceSnapshot;
       choice.addEventListener('change', () => { item.action = choice.value as SyncReviewItem['action']; });
+      if (item.protectedSourceSnapshot) {
+        row.createEl('p', { text: 'This note has a source snapshot that this version cannot safely interpret. Recover it before synchronizing.' });
+        const recover = row.createEl('button', { text: 'Open recovery' });
+        recover.addEventListener('click', () => this.plugin.showRecovery(item.file));
+      }
       if (item.status.legacy) row.createEl('p', { text: 'Templar cannot reliably separate local changes from the original template for this older note.' });
     }
     const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
@@ -133,6 +149,10 @@ export class SynchronizationReviewModal extends Modal {
         continue;
       }
       item.reviewedFingerprint = currentInspection.fingerprint;
+      if (currentInspection.protectedPaths.length > 0) {
+        planningResults.push(skipped(item.file.path, 'A protected source snapshot requires recovery before synchronization.'));
+        continue;
+      }
       if (!item.source) {
         planningResults.push(skipped(item.file.path, 'The source template is no longer available.'));
         continue;

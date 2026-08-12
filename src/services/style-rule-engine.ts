@@ -8,6 +8,7 @@ import { DEFAULT_PAGE_OPTIONS } from '../templates/defaults';
 import { clone } from '../utils/value';
 import { firstMatchingRule, pageFlowOptions } from './style-rules';
 import type { FrontmatterService } from './frontmatter';
+import type { FrontmatterWriteGuard } from './frontmatter';
 import type { TemplateLibrary } from './template-library';
 
 export interface StyleRuleEngineDependencies {
@@ -16,12 +17,13 @@ export interface StyleRuleEngineDependencies {
   library: TemplateLibrary;
   frontmatter: FrontmatterService;
   isReady: () => boolean;
-  apply: (
-    template: TemplarTemplate,
-    file: TFile,
-    pageOptions: NotePageOptions,
-    appliedByRule: { id: string; name: string },
-  ) => Promise<void>;
+  apply: (request: {
+    template: TemplarTemplate;
+    file: TFile;
+    pageOptions: NotePageOptions;
+    appliedByRule: { id: string; name: string };
+    guard: FrontmatterWriteGuard;
+  }) => Promise<void>;
 }
 
 /** Evaluates metadata-dependent rules without making the plugin root a rule engine. */
@@ -30,11 +32,7 @@ export class StyleRuleEngine {
 
   public async evaluate(file: TFile, metadataReady: boolean): Promise<void> {
     const { app, settings, library, frontmatter } = this.dependencies;
-    const inspection = typeof (frontmatter as FrontmatterService & { inspect?: unknown }).inspect === 'function'
-      ? frontmatter.inspect(file)
-      : {
-        status: frontmatter.hasStyle(file) ? 'current' as const : 'absent' as const,
-      };
+    const inspection = frontmatter.inspect(file);
     if (!this.dependencies.isReady() || inspection.status !== 'absent') return;
     const cache = app.metadataCache.getFileCache(file);
     const rule = firstMatchingRule(settings.styleRules, {
@@ -51,11 +49,12 @@ export class StyleRuleEngine {
     const flow = pageFlowOptions(
       rule.pageFlow === 'default' ? settings.defaultNewPageFlow : rule.pageFlow,
     );
-    await this.dependencies.apply(
+    await this.dependencies.apply({
       template,
       file,
-      { ...clone(DEFAULT_PAGE_OPTIONS), ...flow },
-      { id: rule.id, name: rule.name },
-    );
+      pageOptions: { ...clone(DEFAULT_PAGE_OPTIONS), ...flow },
+      appliedByRule: { id: rule.id, name: rule.name },
+      guard: { expectedRawFingerprint: inspection.fingerprint },
+    });
   }
 }

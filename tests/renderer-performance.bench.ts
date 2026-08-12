@@ -1,6 +1,6 @@
 /* @vitest-environment happy-dom */
 
-import { bench, describe } from 'vitest';
+import { afterAll, bench, describe } from 'vitest';
 import type { WorkspaceLeaf } from 'obsidian';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
 import { templateToNoteStyle } from '../src/templates/note-format';
@@ -109,11 +109,20 @@ function fixtureForBenchmark(key: string, blocks: number, images: number): Retur
   return value;
 }
 
+afterAll(() => {
+  activeFixture?.value.window.close();
+  activeFixture = undefined;
+});
+
 describe('renderer controller performance fixtures', () => {
   for (const blocks of [100, 1_000, 5_000, 10_000]) {
     describe(`${String(blocks)} block fixture`, () => {
       for (const mode of ['pageless', 'paged'] as const) {
-        for (const leafCount of [1, 3, 10]) {
+        // The full PageRenderer suite owns the large-document multi-leaf
+        // matrix. Keep these extracted-controller fixtures representative
+        // without multiplying 5k/10k DOM scans by ten in each benchmark.
+        const leafCounts = blocks >= 5_000 ? [1] : [1, 3, 10];
+        for (const leafCount of leafCounts) {
           bench(`${String(blocks)} blocks / same file / ${mode} / ${String(leafCount)} leaves`, () => {
             const testFixture = fixtureForBenchmark(`blocks:${String(blocks)}`, blocks, 0);
             const image = new ImageSnapController();

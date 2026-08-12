@@ -1,5 +1,5 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
-import { DEFAULT_TEMPLATE_ID, VIRTUAL_SELECTORS } from '../constants';
+import { CURRENT_SETTINGS_DATA_VERSION, DEFAULT_TEMPLATE_ID, VIRTUAL_SELECTORS } from '../constants';
 import type TemplarPlugin from '../main';
 import { DEFAULT_SETTINGS } from '../templates/defaults';
 import { clone } from '../utils/value';
@@ -25,6 +25,45 @@ export class TemplarSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.addClass('templar-settings');
+
+    const protectedSettings = this.plugin.protectedSettings();
+    if (protectedSettings) {
+      new Setting(containerEl).setName('Protected data').setHeading();
+      containerEl.createEl('p', {
+        text: 'Templar loaded safe defaults because the stored settings cannot be safely interpreted. The original data is protected and will not be overwritten automatically.',
+      });
+      containerEl.createEl('p', {
+        text: `Status: ${protectedSettings.status}. Current settings-data version: ${String(CURRENT_SETTINGS_DATA_VERSION)}.`,
+      });
+      const raw = JSON.stringify(protectedSettings.raw, null, 2) ?? String(protectedSettings.raw);
+      new Setting(containerEl)
+        .setName('Recovery actions')
+        .setDesc('Copy or export the original raw settings before deliberately replacing them with current safe defaults.')
+        .addButton((button) => button.setButtonText('Copy raw settings').onClick(() => runUserAction(async () => {
+          await writeTextToClipboard(raw);
+          new Notice('Copied protected templar data.');
+        }, 'Could not copy protected settings')))
+        .addButton((button) => button.setButtonText('Export recovery').onClick(() => runUserAction(async () => {
+          const path = await this.plugin.exportProtectedSettingsRecovery();
+          new Notice(`Created a recovery copy at “${path}”.`);
+        }, 'Could not export protected settings')))
+        .addButton((button) => {
+          button.setButtonText('Reset after recovery…');
+          button.buttonEl.addClass('mod-warning');
+          button.onClick(() => new ConfirmationModal(
+            this.plugin,
+            'Reset protected Templar settings?',
+            'Templar will first create a new recovery copy of the protected raw settings. It will then replace the stored settings with the current safe defaults.',
+            async () => {
+              const path = await this.plugin.resetProtectedSettingsAfterRecovery();
+              this.render();
+              new Notice(`Created a recovery copy at “${path}” and reset Templar settings.`);
+            },
+            'Back up and reset settings',
+          ).open());
+        });
+      return;
+    }
 
     new Setting(containerEl)
       .setName('Style reading view')
@@ -191,9 +230,9 @@ export class TemplarSettingTab extends PluginSettingTab {
       });
       for (const entry of this.plugin.quarantinedTemplates) {
         const raw = JSON.stringify(entry.raw, null, 2) ?? String(entry.raw);
-        const warning = entry.futureVersion
-          ? 'This appears to come from a newer Templar version; removing it may discard data that this version cannot understand.'
-          : entry.message;
+        const warning = entry.kind === 'future-version'
+          ? 'This appears to come from a newer Templar version; it is protected until you make a recovery-backed removal.'
+          : `${entry.kind.replace(/-/g, ' ')}: ${entry.message}`;
         new Setting(containerEl)
           .setName(entry.templateId ? `Entry ${entry.templateId}` : `Entry ${String(entry.index + 1)}`)
           .setDesc(`${warning} Raw data is retained until you choose an action.`)
@@ -206,9 +245,7 @@ export class TemplarSettingTab extends PluginSettingTab {
             new ConfirmationModal(
               this.plugin,
               'Remove invalid saved style entry?',
-              entry.futureVersion
-                ? 'This entry may have been written by a newer Templar version. Removing it can discard data that cannot be recovered here.'
-                : 'This removes the invalid saved entry from Templar settings. The raw data will no longer be retained.',
+              'Templar will first create a recovery copy of this raw entry. Only if that backup succeeds will the entry be removed from Templar settings.',
               async () => {
                 try {
                   await this.plugin.removeQuarantinedTemplate(entry.index);

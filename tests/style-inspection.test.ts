@@ -48,4 +48,17 @@ describe('protected schema inspection', () => {
     expect(first.fingerprint).toBe(second.fingerprint);
     expect(inspectTemplateSchema({ version: 2 }).status).toBe('unsupported-future');
   });
+
+  it('keeps a renderable outer style while marking a future source snapshot as protected', () => {
+    const raw = noteStyleToFrontmatter(templateToNoteStyle(BUILT_IN_TEMPLATES[0]!));
+    raw.provenance = { 'source-snapshot': { version: 2, future: 'preserve-me' } };
+    const inspection = inspectRawNoteStyle(raw);
+    expect(inspection.status).toBe('current');
+    expect(inspection.style?.id).toBe(BUILT_IN_TEMPLATES[0]!.id);
+    expect(inspection.protectedPaths).toEqual([expect.objectContaining({
+      path: 'provenance.source-snapshot',
+      status: 'unsupported-future',
+      rawVersion: 2,
+    })]);
+  });
 });

@@ -171,14 +171,17 @@ export class TemplateLibrary {
     });
   }
 
-  public async removeMany(ids: readonly string[]): Promise<number> {
+  public async removeMany(ids: readonly string[]): Promise<{ removedIds: string[]; count: number }> {
     const requested = new Set(ids);
     return this.store.transaction((draft) => {
-      const before = draft.userTemplates.length;
+      const removedIds = draft.userTemplates
+        .filter((template) => requested.has(template.id))
+        .map((template) => template.id);
+      if (removedIds.length === 0) return { removedIds, count: 0 };
       draft.userTemplates = draft.userTemplates.filter((template) => !requested.has(template.id));
       draft.favouriteTemplateIds = draft.favouriteTemplateIds.filter((id) => !requested.has(id));
       draft.recentTemplateIds = draft.recentTemplateIds.filter((id) => !requested.has(id));
-      return before - draft.userTemplates.length;
+      return { removedIds, count: removedIds.length };
     });
   }
 

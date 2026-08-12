@@ -1,8 +1,9 @@
-import { Modal, Notice, type TFile } from 'obsidian';
+import { Modal, type TFile } from 'obsidian';
 import type TemplarPlugin from '../../main';
 import type { NotePageOptions, TemplarNoteStyle } from '../../types';
 import { clone } from '../../utils/value';
 import { renderPageOptionSettings, runButtonAction } from './shared';
+import { reportSingleFileOperation } from '../async-actions';
 
 export class PageModeModal extends Modal {
   private pageOptions: NotePageOptions;
@@ -30,12 +31,12 @@ export class PageModeModal extends Modal {
   }
 
   private async save(): Promise<void> {
-    await this.plugin.application.patchPageOptions(this.file, this.pageOptions, 'immediate', {
+    const result = await this.plugin.application.patchPageOptions(this.file, this.pageOptions, 'immediate', {
       expectedRawFingerprint: this.openingFingerprint,
     });
     this.plugin.refreshSidebars();
     this.plugin.updateStatusBar();
-    new Notice(`Changed ${this.file.basename} to ${this.pageOptions.mode} mode.`);
+    reportSingleFileOperation(result, `Changed ${this.file.basename} to ${this.pageOptions.mode} mode.`);
     this.close();
   }
 }

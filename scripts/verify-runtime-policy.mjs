@@ -20,102 +20,126 @@ export function runtimePolicyViolations(text) {
   const semanticText = maskCommentsAndStrings(text);
   for (const rule of policyRules) {
     rule.pattern.lastIndex = 0;
-    const source = rule.label === 'Node/Electron import' ? text : semanticText;
-    for (const match of source.matchAll(rule.pattern)) {
-      if (rule.label === 'Node/Electron import' && !isCodeIndex(text, match.index ?? 0)) continue;
+    for (const match of semanticText.matchAll(rule.pattern)) {
       violations.push({ label: rule.label, text: match[0], index: match.index ?? 0 });
     }
   }
   return violations;
 }
 
-function isCodeIndex(source, targetIndex) {
-  let quote = null;
-  let lineComment = false;
-  let blockComment = false;
-  let escaped = false;
-  for (let index = 0; index < targetIndex; index += 1) {
-    const character = source[index] ?? '';
-    const next = source[index + 1] ?? '';
-    if (lineComment) {
-      if (character === '\n') lineComment = false;
-      continue;
-    }
-    if (blockComment) {
-      if (character === '*' && next === '/') {
-        blockComment = false;
-        index += 1;
-      }
-      continue;
-    }
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (character === '\\') escaped = true;
-      else if (character === quote) quote = null;
-      continue;
-    }
-    if (character === '/' && next === '/') {
-      lineComment = true;
-      index += 1;
-    } else if (character === '/' && next === '*') {
-      blockComment = true;
-      index += 1;
-    } else if (character === '"' || character === "'" || character === '`') {
-      quote = character;
-    }
-  }
-  return !quote && !lineComment && !blockComment;
-}
-
+/**
+ * Mask prose while preserving executable template interpolation. A template
+ * literal is static text except between `${` and its matching `}`; that range
+ * is ordinary JavaScript and must be scanned with the same comment/string/
+ * nested-template handling as the surrounding source.
+ */
 function maskCommentsAndStrings(source) {
+  let index = 0;
   let output = '';
-  let quote = null;
-  let lineComment = false;
-  let blockComment = false;
-  let escaped = false;
-  for (let index = 0; index < source.length; index += 1) {
-    const character = source[index] ?? '';
-    const next = source[index + 1] ?? '';
-    if (lineComment) {
-      output += character === '\n' ? '\n' : ' ';
-      if (character === '\n') lineComment = false;
-      continue;
-    }
-    if (blockComment) {
-      output += character === '\n' ? '\n' : ' ';
-      if (character === '*' && next === '/') {
-        output += ' ';
-        index += 1;
-        blockComment = false;
-      }
-      continue;
-    }
-    if (quote) {
-      output += character === '\n' ? '\n' : ' ';
+  const mask = (character) => {
+    output += character === '\n' ? '\n' : ' ';
+  };
+  const consumeQuoted = (quote, importSpecifier = false) => {
+    const append = (character) => {
+      if (importSpecifier) output += character;
+      else mask(character);
+    };
+    append(source[index++]);
+    let escaped = false;
+    while (index < source.length) {
+      const character = source[index++];
+      append(character);
       if (escaped) escaped = false;
       else if (character === '\\') escaped = true;
-      else if (character === quote) quote = null;
-      continue;
+      else if (character === quote) return;
     }
-    if (character === '/' && next === '/') {
-      output += '  ';
+  };
+  const consumeLineComment = () => {
+    mask(source[index++]);
+    mask(source[index++]);
+    while (index < source.length) {
+      const character = source[index++];
+      mask(character);
+      if (character === '\n') return;
+    }
+  };
+  const consumeBlockComment = () => {
+    mask(source[index++]);
+    mask(source[index++]);
+    while (index < source.length) {
+      const character = source[index++];
+      mask(character);
+      if (character === '*' && source[index] === '/') {
+        mask(source[index++]);
+        return;
+      }
+    }
+  };
+  const consumeTemplate = () => {
+    mask(source[index++]);
+    while (index < source.length) {
+      const character = source[index] ?? '';
+      const next = source[index + 1] ?? '';
+      if (character === '`') {
+        mask(source[index++]);
+        return;
+      }
+      if (character === '\\') {
+        mask(source[index++]);
+        if (index < source.length) mask(source[index++]);
+        continue;
+      }
+      if (character === '$' && next === '{') {
+        output += '${';
+        index += 2;
+        consumeCode(true);
+        continue;
+      }
+      mask(source[index++]);
+    }
+  };
+  const consumeCode = (insideInterpolation) => {
+    let braceDepth = insideInterpolation ? 1 : 0;
+    while (index < source.length) {
+      const character = source[index] ?? '';
+      const next = source[index + 1] ?? '';
+      if (insideInterpolation && character === '{') {
+        output += character;
+        index += 1;
+        braceDepth += 1;
+        continue;
+      }
+      if (insideInterpolation && character === '}') {
+        output += character;
+        index += 1;
+        braceDepth -= 1;
+        if (braceDepth === 0) return;
+        continue;
+      }
+      if (character === '/' && next === '/') {
+        consumeLineComment();
+        continue;
+      }
+      if (character === '/' && next === '*') {
+        consumeBlockComment();
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        consumeQuoted(
+          character,
+          /(?:\bfrom|\bimport|\brequire)\s*(?:\(\s*)?$/.test(output),
+        );
+        continue;
+      }
+      if (character === '`') {
+        consumeTemplate();
+        continue;
+      }
+      output += character;
       index += 1;
-      lineComment = true;
-      continue;
     }
-    if (character === '/' && next === '*') {
-      output += '  ';
-      index += 1;
-      blockComment = true;
-      continue;
-    }
-    if (character === '"' || character === "'" || character === '`') {
-      output += ' ';
-      quote = character;
-      continue;
-    }
-    output += character;
-  }
+  };
+  consumeCode(false);
   return output;
 }
 

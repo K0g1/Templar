@@ -1,6 +1,7 @@
 import type { TFile } from 'obsidian';
 import { describe, expect, it, vi } from 'vitest';
 import { StyleApplicationService } from '../src/services/style-application';
+import { StaleTemplarDataError } from '../src/services/frontmatter';
 import { summarizeFileOperations } from '../src/services/operation-result';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
 import type { TemplarNoteStyle } from '../src/types';
@@ -19,10 +20,12 @@ function harness(options: {
   refreshFailure?: boolean;
   indexFailure?: boolean;
   deletedPaths?: string[];
+  stalePath?: string;
 } = {}) {
   const frontmatter = {
     getStyle: vi.fn((_target: TFile): TemplarNoteStyle | null => null),
     applyTemplate: vi.fn(async (target: TFile) => {
+      if (target.path === options.stalePath) throw new StaleTemplarDataError();
       if (target.path === options.failPath) throw new Error('frontmatter write failed');
     }),
     writeStyle: vi.fn(async () => undefined),
@@ -132,5 +135,31 @@ describe('StyleApplicationService', () => {
     });
     expect(summary.succeeded).toBe(3);
     expect(yieldToHost).toHaveBeenCalledOnce();
+  });
+
+  it('requires an absence fingerprint for automatic applications', async () => {
+    const setup = harness();
+    await expect(setup.service.apply({
+      file: file('Notes/rule.md'),
+      template: BUILT_IN_TEMPLATES[0]!,
+      appliedByRule: { id: 'rule', name: 'Rule' },
+    })).rejects.toThrow('expected raw fingerprint');
+    expect(setup.frontmatter.applyTemplate).not.toHaveBeenCalled();
+  });
+
+  it('reports a stale guarded bulk write as skipped rather than failed', async () => {
+    const setup = harness({ stalePath: 'Notes/stale.md' });
+    const summary = await setup.service.applyBatch({
+      files: [file('Notes/stale.md')],
+      template: BUILT_IN_TEMPLATES[0]!,
+      appliedByRule: { id: 'rule', name: 'Rule' },
+      decide: () => ({
+        kind: 'apply',
+        pageOptions: { mode: 'pageless', size: 'a4', width: 794, height: 1123, gap: 32, scaleToFit: true },
+        guard: { expectedRawFingerprint: 'absent-at-review' },
+      }),
+    });
+    expect(summary).toMatchObject({ succeeded: 0, failed: 0, skipped: 1 });
+    expect(summary.results[0]?.message).toContain('changed after review');
   });
 });

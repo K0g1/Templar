@@ -117,4 +117,96 @@ describe('renderer ownership primitives', () => {
     expect(secondImage.style.getPropertyValue('--templar-image-snap')).toBe('');
     imageController.destroy();
   });
+
+  it('retargets PaperOrigin and VariableBlockRhythm without leaving old-root artifacts', () => {
+    const harness = createObserverHarness();
+    installObsidianDomExtensions(harness.window);
+    const createRoot = (): { root: HTMLElement; pageContent: HTMLElement; table: HTMLElement } => {
+      const root = harness.window.document.createElement('div');
+      const page = harness.window.document.createElement('div');
+      page.className = 'templar-page';
+      const pageContent = harness.window.document.createElement('div');
+      pageContent.className = 'templar-page-content';
+      const table = harness.window.document.createElement('table');
+      pageContent.append(table);
+      page.append(pageContent);
+      root.append(page);
+      harness.window.document.body.append(root);
+      return { root, pageContent, table };
+    };
+    const first = createRoot();
+    const second = createRoot();
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.baseline.enabled = true;
+    style.baseline.mode = 'balanced';
+    const metric = { baseline: 14, ascent: 11, descent: 4, lineHeight: 24, measuredAt: 0 };
+    const metrics: PageMetricSet = { body: metric, h1: metric, h2: metric, h3: metric, h4: metric, h5: metric, h6: metric, code: metric };
+    const leaf = {} as WorkspaceLeaf;
+    const paper = new PaperOriginController();
+    const rhythm = new VariableBlockRhythmController();
+    paper.configure(leaf, first.root, style, metrics);
+    rhythm.configure(leaf, first.root, style);
+    first.pageContent.setCssProps({ '--templar-paper-baseline-position': '4px' });
+    first.table.addClass('templar-grid-snap-block');
+    first.table.setCssProps({
+      '--templar-grid-snap': '4px',
+      '--templar-grid-natural-margin-end': '2px',
+    });
+
+    paper.configure(leaf, second.root, style, metrics);
+    rhythm.configure(leaf, second.root, style);
+    expect(first.pageContent.style.getPropertyValue('--templar-paper-baseline-position')).toBe('');
+    expect(first.table.hasClass('templar-grid-snap-block')).toBe(false);
+    expect(first.table.style.getPropertyValue('--templar-grid-snap')).toBe('');
+    expect(first.table.style.getPropertyValue('--templar-grid-natural-margin-end')).toBe('');
+    expect(harness.resizeInstances.slice(0, 2).every((instance) => instance.disconnects > 0)).toBe(true);
+
+    paper.clear(leaf);
+    rhythm.clear(leaf);
+    expect(second.pageContent.style.getPropertyValue('--templar-paper-baseline-position')).toBe('');
+    paper.destroy();
+    rhythm.destroy();
+  });
+
+  it('cleans each controller using the old document realm before cross-window retargeting', () => {
+    const first = createObserverHarness();
+    const second = createObserverHarness();
+    installObsidianDomExtensions(first.window);
+    installObsidianDomExtensions(second.window);
+    const rootFor = (owner: Window): HTMLElement => {
+      const root = owner.document.createElement('div');
+      const page = owner.document.createElement('div');
+      page.className = 'templar-page';
+      const content = owner.document.createElement('div');
+      content.className = 'templar-page-content';
+      content.append(owner.document.createElement('img'), owner.document.createElement('table'));
+      page.append(content);
+      root.append(page);
+      owner.document.body.append(root);
+      return root;
+    };
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    style.baseline.enabled = true;
+    style.baseline.mode = 'balanced';
+    style.baseline.snapImages = true;
+    const metric = { baseline: 14, ascent: 11, descent: 4, lineHeight: 24, measuredAt: 0 };
+    const metrics: PageMetricSet = { body: metric, h1: metric, h2: metric, h3: metric, h4: metric, h5: metric, h6: metric, code: metric };
+    const leaf = {} as WorkspaceLeaf;
+    const image = new ImageSnapController();
+    const paper = new PaperOriginController();
+    const rhythm = new VariableBlockRhythmController();
+    const firstRoot = rootFor(first.window);
+    const secondRoot = rootFor(second.window);
+    image.configure(leaf, firstRoot, style);
+    paper.configure(leaf, firstRoot, style, metrics);
+    rhythm.configure(leaf, firstRoot, style);
+    image.configure(leaf, secondRoot, style);
+    paper.configure(leaf, secondRoot, style, metrics);
+    rhythm.configure(leaf, secondRoot, style);
+    expect(first.resizeInstances.every((instance) => instance.disconnects > 0)).toBe(true);
+    expect(first.mutationInstances.every((instance) => instance.disconnects > 0)).toBe(true);
+    image.destroy();
+    paper.destroy();
+    rhythm.destroy();
+  });
 });

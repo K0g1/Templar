@@ -48,6 +48,8 @@ Every non-keyframe selector must start with `.page` or `.page-content`. The vali
 - viewport/container/environment-dependent lengths, container queries, `!important`, and private runtime selectors that could override the fixed canvas.
 - vertical box/font geometry on rhythmic descendants while a baseline grid is active.
 - availability-affecting declarations on the virtual root or universal descendant coverage (`.page *`, `.page > :is(*)`, and `.page > :where(*)`), including display, visibility, opacity, filters, masks, clipping, transforms, scale, and zoom.
+- broad descendant readability changes, including transparent text, `-webkit-text-fill-color`, zero/tiny font sizes, zero line height, and text indentation.
+- virtual-root escape combinators other than descendant or child (`.page + *`, `.page ~ *`, and their `.page-content` equivalents).
 
 Infinite animations and backdrop filters produce warnings. Validation errors omit advanced CSS from rendering.
 

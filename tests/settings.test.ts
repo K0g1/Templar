@@ -54,8 +54,8 @@ describe('settings migration', () => {
     expect(result.issues).toHaveLength(2);
     expect(result.issues[0]?.templateId).toBe('future-style');
     expect(result.issues[0]?.raw).toEqual({ version: 99, id: 'future-style' });
-    expect(result.issues[0]?.futureVersion).toBe(true);
+    expect(result.issues[0]?.kind).toBe('future-version');
     expect(result.issues[1]?.raw).toEqual({ malformed: true });
-    expect(result.issues[1]?.futureVersion).toBe(false);
+    expect(result.issues[1]?.kind).toBe('invalid');
   });
 });

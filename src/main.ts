@@ -40,7 +40,7 @@ import { clone, slugify } from './utils/value';
 import { PluginUiController } from './ui/plugin-ui-controller';
 import { TemplarSettingTab } from './ui/settings-tab';
 import { TemplarStylesView } from './ui/styles-view';
-import { runBackgroundTask, runUserAction } from './ui/async-actions';
+import { reportSingleFileOperation, runBackgroundTask, runUserAction } from './ui/async-actions';
 
 export default class TemplarPlugin extends Plugin {
   public settings: TemplarSettings = clone(DEFAULT_SETTINGS);
@@ -64,6 +64,7 @@ export default class TemplarPlugin extends Plugin {
   private pendingSettingsMigration = false;
   private pendingSettingsMigrationRaw: unknown = null;
   private protectedSettingsRaw: unknown = null;
+  private protectedSettingsStatus: 'unsupported-future' | 'invalid' | 'migration-failed' | null = null;
   private lastSettingsRecoveryPath: string | null = null;
   private authoringKit!: AuthoringKitService;
   private ruleEngine!: StyleRuleEngine;
@@ -77,7 +78,7 @@ export default class TemplarPlugin extends Plugin {
       new Notice(`${String(this.settingsLoadIssueCount)} saved Templar style entr${this.settingsLoadIssueCount === 1 ? 'y was' : 'ies were'} quarantined because it was invalid.`);
     }
     if (this.protectedSettingsRaw !== null) {
-      new Notice('Templar found settings written by a newer version. Safe defaults are active and the original settings will not be overwritten automatically.');
+      new Notice('Templar could not safely interpret stored settings. Safe defaults are active and the original data will not be overwritten automatically.');
     } else if (this.pendingSettingsMigration) {
       new Notice('Templar loaded older settings in compatibility mode. Finalize migration to write versioned settings. A recovery copy will be created first.');
     }
@@ -116,11 +117,11 @@ export default class TemplarPlugin extends Plugin {
       library: this.library,
       frontmatter: this.frontmatter,
       isReady: () => this.rulesReady,
-      apply: (template, file, pageOptions, appliedByRule) => this.applyTemplate(
+      apply: ({ template, file, pageOptions, appliedByRule, guard }) => this.applyTemplate(
         template,
         file,
         pageOptions,
-        { recordRecent: false, appliedByRule },
+        { recordRecent: false, appliedByRule, guard },
       ),
     });
 
@@ -186,6 +187,10 @@ export default class TemplarPlugin extends Plugin {
     this.pendingSettingsMigration = result.status === 'migrated';
     this.pendingSettingsMigrationRaw = this.pendingSettingsMigration ? clone(result.raw) : null;
     this.protectedSettingsRaw = result.protectedRaw ?? null;
+    this.protectedSettingsStatus = result.protectedRaw !== undefined &&
+      (result.status === 'unsupported-future' || result.status === 'invalid' || result.status === 'migration-failed')
+      ? result.status
+      : null;
   }
 
   public async saveSettings(): Promise<void> {
@@ -208,7 +213,7 @@ export default class TemplarPlugin extends Plugin {
     const entry = previous.find((candidate) => candidate.index === index);
     this.quarantinedTemplates = previous.filter((entry) => entry.index !== index);
     try {
-      if (entry && (entry.kind === 'future-version' || entry.futureVersion)) {
+      if (entry) {
         await this.recovery.backupRaw(
           'template-import',
           entry.raw,
@@ -238,9 +243,31 @@ export default class TemplarPlugin extends Plugin {
     return this.lastSettingsRecoveryPath;
   }
 
+  public protectedSettings(): { raw: unknown; status: string } | null {
+    return this.protectedSettingsRaw === null || this.protectedSettingsStatus === null
+      ? null
+      : { raw: clone(this.protectedSettingsRaw), status: this.protectedSettingsStatus };
+  }
+
+  public async exportProtectedSettingsRecovery(): Promise<string> {
+    const protectedSettings = this.protectedSettings();
+    if (!protectedSettings) throw new Error('There is no protected Templar settings data to export.');
+    return this.recovery.backupSettings(protectedSettings.raw, 'manual-replace');
+  }
+
+  public async resetProtectedSettingsAfterRecovery(): Promise<string> {
+    const protectedSettings = this.protectedSettings();
+    if (!protectedSettings) throw new Error('There is no protected Templar settings data to reset.');
+    const recoveryPath = await this.recovery.backupSettings(protectedSettings.raw, 'manual-replace');
+    await this.saveData(settingsToPersistedData(this.settings, this.quarantinedTemplates));
+    this.protectedSettingsRaw = null;
+    this.protectedSettingsStatus = null;
+    return recoveryPath;
+  }
+
   private async persistSettingsCandidate(value: TemplarSettings): Promise<void> {
     if (this.protectedSettingsRaw !== null) {
-      throw new Error('Templar found settings written by a newer version. Safe defaults are active and the original settings will not be overwritten automatically.');
+      throw new Error('Templar could not safely interpret stored settings. Safe defaults are active and the original data will not be overwritten automatically. Export recovery data and reset settings before saving changes.');
     }
     const data = settingsToPersistedData(value, this.quarantinedTemplates);
     if (this.pendingSettingsMigration) {
@@ -294,7 +321,12 @@ export default class TemplarPlugin extends Plugin {
     template: TemplarTemplate,
     file = this.activeFile(),
     pageOptions?: NotePageOptions,
-    options: { recordRecent?: boolean; notify?: boolean; appliedByRule?: { id: string; name: string } } = {},
+    options: {
+      recordRecent?: boolean;
+      notify?: boolean;
+      appliedByRule?: { id: string; name: string };
+      guard?: import('./services/frontmatter').FrontmatterWriteGuard;
+    } = {},
   ): Promise<void> {
     if (!file) {
       new Notice('Open a Markdown note before applying a page style.');
@@ -308,11 +340,12 @@ export default class TemplarPlugin extends Plugin {
       appliedByRule: options.appliedByRule,
       recordRecent: options.recordRecent,
       refresh: 'immediate',
+      guard: options.guard,
     });
     this.refreshSidebars();
     this.updateStatusBar();
-    for (const warning of result.warnings) new Notice(warning.message);
-    if (options.notify !== false) new Notice(`Applied “${template.name}” to ${file.basename}.`);
+    if (options.notify !== false) reportSingleFileOperation(result, `Applied “${template.name}” to ${file.basename}.`);
+    else for (const warning of result.warnings) new Notice(warning.message);
   }
 
   public async removeStyle(file = this.activeFile()): Promise<void> {
@@ -321,10 +354,9 @@ export default class TemplarPlugin extends Plugin {
       return;
     }
     const result = await this.application.removeStyle(file);
-    for (const warning of result.warnings) new Notice(warning.message);
     this.refreshSidebars();
     this.updateStatusBar();
-    new Notice(`Removed Templar styling from ${file.basename}.`);
+    reportSingleFileOperation(result, `Removed Templar styling from ${file.basename}.`);
   }
 
   public showStylePicker(file = this.activeFile()): void {

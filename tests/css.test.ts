@@ -181,6 +181,21 @@ describe('safe CSS compiler', () => {
     }
   });
 
+  it('blocks broad descendant readability collapse and virtual-root escapes', () => {
+    for (const css of [
+      '.page * { color: transparent; }',
+      '.page * { -webkit-text-fill-color: transparent; }',
+      '.page * { font-size: 0; }',
+      '.page * { font-size: 0.01px; line-height: 0; }',
+      '.page * { height: +0; overflow: hidden; }',
+      '.page + * { display: none; }',
+      '.page ~ * { visibility: hidden; }',
+      '.page-content + * { opacity: 0; }',
+    ]) {
+      expect(validateCustomCss(css).valid, css).toBe(false);
+    }
+  });
+
   it('allows availability properties on positively narrowed descendants', () => {
     for (const css of [
       '.page img { filter: grayscale(1); }',

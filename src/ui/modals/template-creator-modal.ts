@@ -929,9 +929,7 @@ export class TemplateCreatorModal extends Modal {
       `Reset “${pristine.name}” to its default?`,
       description,
       async () => {
-        for (const override of overrides) {
-          await this.plugin.library.remove(override.id);
-        }
+        await this.plugin.library.removeMany(overrides.map((override) => override.id));
         this.draft = clone(pristine);
         this.draft.builtIn = false;
         this.plugin.refreshSidebars();

@@ -4,6 +4,10 @@ Templar currently reads version 1 note styles, templates, and packs. Settings us
 
 `current` is readable version 1 data. `migrated` is data transformed in memory by contiguous, pure migration steps. `unsupported-future`, `unsupported-legacy`, `invalid`, and `migration-failed` are protected: they remain raw and cannot be replaced by ordinary actions. Missing note/template version is invalid; only missing settings data version is treated as legacy settings v0.
 
+The runtime consumer is always the classified result, never a direct raw-to-current parser: `FrontmatterService.getStyle()` uses the note-style inspection result, user-template settings use template inspection, and pack parsing inspects both its wrapper and each member before exposing a value. These read paths do not persist migration results. The first explicit settings persistence after a legacy load creates a recovery record before writing current settings data.
+
+`provenance.source-snapshot` is a second versioned template boundary. A current outer note can still render if its embedded snapshot is future, invalid, legacy, or migration-failed, but the protected path is reported. Page-only edits preserve the original nested raw value; replacement, removal, and synchronization require the Recovery flow and a fresh raw fingerprint.
+
 When adding v2:
 
 1. Change `CURRENT_TEMPLAR_FORMAT_VERSION`.

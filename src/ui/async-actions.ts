@@ -5,6 +5,14 @@ export function showOperationWarnings(result: FileOperationResult): void {
   for (const warning of result.warnings) new Notice(warning.message);
 }
 
+export function reportSingleFileOperation(
+  result: FileOperationResult,
+  successMessage: string,
+): void {
+  new Notice(successMessage);
+  showOperationWarnings(result);
+}
+
 export function runUserAction(action: () => Promise<void>, context: string): void {
   void action().catch((error: unknown) => {
     new Notice(`${context}: ${error instanceof Error ? error.message : String(error)}`);

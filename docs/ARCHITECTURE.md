@@ -20,7 +20,7 @@ Markdown frontmatter
       ▼
 SettingsStore ── durable settings transactions
       │
-FrontmatterService ── normalizeNoteStyle()
+FrontmatterService ── inspectRawNoteStyle() ── normalized/migrated runtime style
       │
       ▼
 PageRenderer ─────── FontMetricsService
@@ -82,7 +82,7 @@ This separation guarantees that paged/pageless is a note choice. The same templa
 
 ## Frontmatter boundary
 
-`FrontmatterService` reads parsed metadata and writes through `FileManager.processFrontMatter()`. It maintains a per-file serialized queue, generation-aware optimistic state, and last-committed snapshot because MetadataCache updates after the filesystem operation. This lets the active view render immediately without reading or rewriting the note body; stale metadata events cannot clear a newer result.
+`FrontmatterService` classifies parsed metadata before exposing a runtime style and writes through `FileManager.processFrontMatter()`. Supported older schemas may migrate in memory; protected future/invalid/legacy data remains raw and is never rewritten by reads. It maintains a per-file serialized queue, generation-aware optimistic state, and last-committed snapshot because MetadataCache updates after the filesystem operation. Every reviewed mutation may carry an expected raw fingerprint, checked inside the callback, so stale user, batch, rule, recovery, and synchronization decisions cannot overwrite newer data. This lets the active view render immediately without reading or rewriting the note body; stale metadata events cannot clear a newer result.
 
 The service exposes:
 

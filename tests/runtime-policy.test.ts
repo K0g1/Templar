@@ -39,4 +39,22 @@ describe('runtime policy scanner', () => {
     const source = `// fetch FileSystemAdapter process\nconst processValue = 'fetch'; const regex = /a+b/;`;
     expect(runtimePolicyViolations(source)).toEqual([]);
   });
+
+  it.each([
+    ['process', 'const x = `${process.env.HOME}`;'],
+    ['fetch', 'const x = `${fetch(\'/x\')}`;'],
+    ['WebSocket', 'const x = `${new WebSocket(\'ws://x\')}`;'],
+    ['requestUrl', 'const x = `${requestUrl({ url: \'/x\' })}`;'],
+    ['require', 'const x = `${require(\'x\')}`;'],
+    ['node import', 'const x = `${import(\'node:fs\')}`;'],
+    ['nested template', 'const x = `${`${fetch(\'/x\')}`}`;'],
+  ])('rejects %s inside template interpolation', (_label, source) => {
+    expect(runtimePolicyViolations(source).length).toBeGreaterThan(0);
+  });
+
+  it('allows static template text and safe interpolation', () => {
+    expect(runtimePolicyViolations('const x = `process fetch(\'/x\')`;')).toEqual([]);
+    expect(runtimePolicyViolations('const x = `literal ${safeValue}`;')).toEqual([]);
+    expect(runtimePolicyViolations('const x = `${/* fetch */ safeValue}`;')).toEqual([]);
+  });
 });

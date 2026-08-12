@@ -144,6 +144,13 @@ const broadAvailabilityProperties = new Set([
   'scale',
   'zoom',
 ]);
+const broadReadabilityProperties = new Set([
+  'color',
+  '-webkit-text-fill-color',
+  'font-size',
+  'line-height',
+  'text-indent',
+]);
 const broadCollapseProperties = new Set([
   'height',
   'block-size',
@@ -262,6 +269,14 @@ function validateSelector(selector: string, issues: ValidationIssue[]): Selector
           fix: 'Use only the documented .page and .page-content virtual vocabulary.',
         });
       }
+      if (analysis.hasVirtualRootEscapeCombinator) {
+        issues.push({
+          severity: 'error',
+          path: 'css.selector',
+          message: 'Custom CSS may select only the virtual page root or its descendants. Sibling and column combinators after .page/.page-content are not supported.',
+          fix: 'Use descendant or child selectors beneath .page or .page-content.',
+        });
+      }
     }
     return analyses;
   } catch (error) {
@@ -274,13 +289,14 @@ function validateSelector(selector: string, issues: ValidationIssue[]): Selector
   }
 }
 
-function isCssZero(value: string): boolean {
+export function isCssZero(value: string): boolean {
   const normalized = decodeCssEscapes(value)
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '');
-  if (/^(?:0+(?:\.0+)?|\.0+)(?:[a-z%]+)?$/.test(normalized)) return true;
-  return /^calc\(0+(?:\.0+)?(?:[a-z%]+)?\)$/.test(normalized);
+  const zero = '[+-]?(?:0+(?:\\.0+)?|\\.0+)';
+  if (new RegExp(`^${zero}(?:[a-z%]+)?$`).test(normalized)) return true;
+  return new RegExp(`^calc\\(${zero}(?:[a-z%]+)?\\)$`).test(normalized);
 }
 
 function isClippingOverflow(value: string): boolean {
@@ -316,6 +332,14 @@ function validateBroadAvailabilityRule(
         path: `css.${property}`,
         message: `“${property}” is not allowed on a selector that may cover every page descendant.`,
         fix: 'Add a positive tag, class, attribute, or ID subject so the effect cannot remove the whole note.',
+      });
+    }
+    if (broadReadabilityProperties.has(property)) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” is not allowed on a selector that may cover every page descendant because it can make all note text unreadable.`,
+        fix: 'Apply typography and readability effects to a positively narrowed Markdown descendant.',
       });
     }
     if (collapse && clipping && (broadCollapseProperties.has(property) || broadClippingProperties.has(property))) {

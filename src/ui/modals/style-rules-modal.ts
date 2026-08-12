@@ -133,7 +133,8 @@ export class StyleRulesModal extends Modal {
         matches.push(file);
       }
     }
-    const eligible = matches.filter((file) => this.plugin.frontmatter.inspect(file).status === 'absent');
+    const reviewed = new Map(matches.map((file) => [file.path, this.plugin.frontmatter.inspect(file)]));
+    const eligible = matches.filter((file) => reviewed.get(file.path)?.status === 'absent');
     const styled = matches.length - eligible.length;
     const missingTemplate = this.plugin.library.get(rule.templateId) === null;
     const invalid = missingTemplate ? eligible.length : 0;
@@ -146,9 +147,20 @@ export class StyleRulesModal extends Modal {
         files: eligible,
         template,
         appliedByRule: { id: rule.id, name: rule.name },
-        decide: (_file, inspection) => inspection.status === 'absent'
-          ? { kind: 'apply' as const, pageOptions: clone(page) }
-          : { kind: 'skip' as const, message: 'Existing or protected Templar data was not overwritten.' },
+        decide: (file, inspection) => {
+          const review = reviewed.get(file.path);
+          if (!review || review.status !== 'absent' || inspection.status !== 'absent') {
+            return { kind: 'skip' as const, message: 'Existing or protected Templar data was not overwritten.' };
+          }
+          if (inspection.fingerprint !== review.fingerprint) {
+            return { kind: 'skip' as const, message: 'The note changed after rule review and was not overwritten.' };
+          }
+          return {
+            kind: 'apply' as const,
+            pageOptions: clone(page),
+            guard: { expectedRawFingerprint: review.fingerprint },
+          };
+        },
         yieldEvery: 20,
         yieldToHost: () => new Promise<void>((resolve) => {
           const view = this.contentEl.ownerDocument.defaultView;

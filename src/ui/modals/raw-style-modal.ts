@@ -1,4 +1,4 @@
-import { Modal, Notice, TFile, parseYaml, stringifyYaml } from 'obsidian';
+import { Modal, TFile, parseYaml, stringifyYaml } from 'obsidian';
 import { MAX_IMPORT_BYTES } from '../../constants';
 import type TemplarPlugin from '../../main';
 import { normalizeNoteStyle, validateTemplateSource } from '../../templates/schema';
@@ -7,6 +7,7 @@ import { validateCompleteTemplate } from '../../templates/validation';
 import type { TemplarNoteStyle } from '../../types';
 import { renderIssues } from '../issues';
 import { runButtonAction, stripCodeFence } from './shared';
+import { reportSingleFileOperation } from '../async-actions';
 
 export class RawStyleModal extends Modal {
   private inputEl!: HTMLTextAreaElement;
@@ -86,12 +87,12 @@ export class RawStyleModal extends Modal {
     if (!style) {
       return;
     }
-    await this.plugin.application.writeStyle(this.file, style, 'immediate', {
+    const result = await this.plugin.application.writeStyle(this.file, style, 'immediate', {
       expectedRawFingerprint: this.openingFingerprint,
     });
     this.plugin.refreshSidebars();
     this.plugin.updateStatusBar();
-    new Notice('Saved the note’s page style.');
+    reportSingleFileOperation(result, 'Saved the note’s page style.');
     this.close();
   }
 }

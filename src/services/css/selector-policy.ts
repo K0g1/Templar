@@ -29,6 +29,7 @@ export interface SelectorAnalysis {
   globalToken: string | null;
   usesPrivateRuntimeClass: boolean;
   usesGlobalEscape: boolean;
+  hasVirtualRootEscapeCombinator: boolean;
 }
 
 export type AvailabilityCoverage =
@@ -52,6 +53,18 @@ export function rootClassName(selector: Selector): 'page' | 'page-content' | nul
   return virtualRoots.has(value)
     ? value as 'page' | 'page-content'
     : null;
+}
+
+/**
+ * Virtual roots compile to a real page element. Sibling and column
+ * combinators would select outside that element after compilation, so the
+ * template vocabulary permits only descendant and child movement from it.
+ */
+export function hasVirtualRootEscapeCombinator(selector: Selector): boolean {
+  if (!rootClassName(selector)) return false;
+  return selector.nodes.slice(1).some((node) =>
+    node.type === 'combinator' && node.value !== ' ' && node.value !== '>',
+  );
 }
 
 export function transformSelectorAst(
@@ -146,6 +159,7 @@ function analyzeRoot(root: Selector): SelectorAnalysis {
     globalToken,
     usesPrivateRuntimeClass,
     usesGlobalEscape,
+    hasVirtualRootEscapeCombinator: hasVirtualRootEscapeCombinator(root),
   };
 }
 

@@ -75,8 +75,8 @@ One-click apply preserves all page options and attachments on a styled note. An 
 
 - Current Note distinguishes Normal, Applied, Previewing, Modified, Update available, their combined state, and Source missing. Missing sources never affect ordinary rendering.
 - The inspector edits a draft copy live and writes once on Save. Reset Section uses the current source where available, or the opening state for a missing source; Discard restores the opening style.
-- Synchronization compares the note design, its embedded source snapshot, and the current library source. Clean notes replace safely; modified notes can recursively three-way merge unchanged fields, replace, or skip; legacy notes do not claim a safe merge.
-- Ordered style rules support folder (optional descendants), normalized tag, filename starts/ends/contains/exact, and simple frontmatter equality. Conditions within a rule are AND; the first enabled match wins. Automatic triggers react to vault/metadata events and only style unstyled Markdown notes.
+- Synchronization compares the note design, its embedded source snapshot, and the current library source. Clean notes replace safely; modified notes can recursively three-way merge unchanged fields, replace, or skip; legacy or protected nested snapshots do not claim a safe merge and route to Recovery.
+- Ordered style rules support folder (optional descendants), normalized tag, filename starts/ends/contains/exact, and simple frontmatter equality. Conditions within a rule are AND; the first enabled match wins. Automatic triggers react to vault/metadata events and only style unstyled Markdown notes; the exact raw fingerprint captured during absence inspection is rechecked at write time.
 - Existing-note rule application is a dry-run plus explicit chunked bulk action. Synchronization/bulk confirmation reports exact safe/merge/replace/skip or eligible/styled/invalid counts.
 
 ### Template authoring and portability
@@ -148,7 +148,7 @@ templar:
   css: ''
 ```
 
-`FrontmatterService` reads MetadataCache with a small optimistic write-through map, then writes with `FileManager.processFrontMatter()`. It replaces only `frontmatter.templar`; unrelated properties and the Markdown body are preserved. Applying another template preserves page and attachments unless explicit page options are supplied. `removeStyle()` deletes that property. Metadata-cache, rename, and delete events settle or move the optimistic entry.
+`FrontmatterService` classifies MetadataCache data before exposing a small optimistic write-through runtime style, then writes with `FileManager.processFrontMatter()`. Reads can render an in-memory supported migration but never persist it. It replaces only `frontmatter.templar`; unrelated properties and the Markdown body are preserved. Applying another template preserves page and attachments unless explicit page options are supplied. `removeStyle()` deletes that property. Protected outer data and destructive nested source-snapshot changes require Recovery; reviewed writes recheck their raw fingerprint inside the callback. Metadata-cache, rename, and delete events settle or move the optimistic entry.
 
 Reusable exports use `templar-template` and omit `page`, `attachments`, and `provenance`. Import accepts `templar-template`, `templar`, or the inner mapping. Packs use a versioned `templar-pack` wrapper and an array of the same normalized template mappings. `normalizeTemplate()` accepts persisted kebab-case aliases and internal camel-case form, fills defaults for older v1 styles, clamps bounded values, drops unknown fields, and normalizes folder labels. `normalizeNoteStyle()` adds note page options, attachment overrides, and provenance.
 
@@ -310,7 +310,7 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | `src/services/rendering/` | Focused renderer ownership primitives and compatibility re-exports for stylesheet, observer, whitespace, and paper-origin concerns. |
 | `src/services/style-compiler/` | Structured compiler entry point plus pure fragment modules; `src/services/style-compiler.ts` remains a stable barrel. |
 | `tests/*integration.test.ts` | happy-dom/fake-owner lifecycle coverage; these tests are not a substitute for a real Obsidian smoke test. |
-| `tests/performance.bench.ts` | Repeatable renderer/catalog/vault/pagination benchmark fixtures; run with `npm run bench`. |
+| `tests/performance.bench.ts`, `tests/renderer-performance.bench.ts`, `tests/page-renderer-performance.bench.ts` | Pure, controller, and full-renderer workload fixtures; run with `npm run bench`. |
 | `tests/*.test.ts` | Pure schema/catalog/CSS/compiler/grid/font/whitespace plus synchronization, rules, index, settings, packs, and print regression suites. |
 | `scripts/verify-mobile-bundle.mjs` | Scans generated `main.js` for Node/Electron imports and runtime globals. |
 | `scripts/verify-release.mjs` | Confirms a release tag, package/manifest/lockfile/versions metadata, and matching release-notes file agree. |

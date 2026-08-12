@@ -86,9 +86,16 @@ function record(value: unknown): Record<string, unknown> {
 
 export function parseTemplatePack(raw: unknown): PackReview | null {
   const root = record(raw);
-  const source = record(root['templar-pack']);
-  if (Object.keys(source).length === 0) return null;
-  if (source.version !== CURRENT_PACK_FORMAT_VERSION) throw new Error('This template pack uses an unsupported format version.');
+  const rawSource = record(root['templar-pack']);
+  if (Object.keys(rawSource).length === 0) return null;
+  const inspectedPack = inspectTemplatePackSchema(raw);
+  if (!inspectedPack.value) {
+    throw new Error(inspectedPack.issues.map((issue) => issue.message).join(' ') || 'This template pack uses an unsupported format version.');
+  }
+  // Wrapper migrations can rename or reshape the member list. Current
+  // wrappers use their raw value, while supported old wrappers must feed the
+  // migrated record into independent member inspection below.
+  const source = inspectedPack.migratedRaw ?? rawSource;
   if (!Array.isArray(source.templates)) throw new Error('The template pack is missing its templates list.');
   if (source.templates.length > MAX_PACK_TEMPLATES) {
     throw new Error(`A Templar pack may contain at most ${String(MAX_PACK_TEMPLATES)} templates.`);
@@ -109,10 +116,10 @@ export function parseTemplatePack(raw: unknown): PackReview | null {
         valid: false,
       };
     }
-    const template = parsedObjectToTemplate(wrapped);
+    const template = parsedObjectToTemplate(inspected.value);
     template.builtIn = false;
     const issues = [
-      ...validateTemplateSource(wrapped),
+      ...validateTemplateSource(inspected.value),
       ...validateTemplate(template).issues,
       ...validateCustomCss(template.css, {
         protectRhythm: template.baseline.enabled && template.baseline.mode !== 'free',
@@ -142,11 +149,11 @@ export function parseTemplatePack(raw: unknown): PackReview | null {
     entry.valid = false;
   }
   const pack: TemplarPack = {
-    version: CURRENT_PACK_FORMAT_VERSION,
-    name: typeof source.name === 'string' && source.name.trim() ? source.name.trim() : 'Untitled Templar pack',
-    description: typeof source.description === 'string' ? source.description.trim() : '',
-    author: typeof source.author === 'string' ? source.author.trim() : '',
-    tags: stringArray(source.tags, []),
+    version: inspectedPack.value.version,
+    name: inspectedPack.value.name,
+    description: inspectedPack.value.description,
+    author: inspectedPack.value.author,
+    tags: inspectedPack.value.tags,
     templates: templates.map(({ template }) => clone(template)),
   };
   return { pack, templates };

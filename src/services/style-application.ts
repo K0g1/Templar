@@ -3,7 +3,11 @@ import type { NotePageOptions, TemplarNoteStyle, TemplarTemplate } from '../type
 import { DEFAULT_PAGE_OPTIONS } from '../templates/defaults';
 import { clone } from '../utils/value';
 import { pageFlowOptions } from './style-rules';
-import type { FrontmatterService, FrontmatterWriteGuard } from './frontmatter';
+import {
+  StaleTemplarDataError,
+  type FrontmatterService,
+  type FrontmatterWriteGuard,
+} from './frontmatter';
 import type { NoteStyleInspection } from './style-inspection';
 import type { NoteStyleIndex } from './note-style-index';
 import {
@@ -21,6 +25,7 @@ export interface ApplyTemplateRequest {
   appliedByRule?: { id: string; name: string };
   recordRecent?: boolean;
   refresh?: 'immediate' | 'deferred';
+  guard?: FrontmatterWriteGuard;
 }
 
 export interface BatchApplyRequest {
@@ -36,6 +41,7 @@ export interface BatchApplyRequest {
 export interface BatchApplyDecision {
   kind: 'apply' | 'skip';
   pageOptions?: NotePageOptions;
+  guard?: FrontmatterWriteGuard;
   message?: string;
 }
 
@@ -76,12 +82,16 @@ export class StyleApplicationService {
   public async removeStyle(
     file: TFile,
     refresh: 'immediate' | 'deferred' = 'immediate',
+    guard: FrontmatterWriteGuard = {},
   ): Promise<FileOperationResult> {
-    await this.dependencies.frontmatter.removeStyle(file);
+    await this.dependencies.frontmatter.removeStyle(file, guard);
     return this.completeWrite(file, refresh);
   }
 
   public async apply(request: ApplyTemplateRequest): Promise<FileOperationResult> {
+    if (request.appliedByRule && request.guard?.expectedRawFingerprint === undefined) {
+      throw new Error('Automatic Templar application requires an expected raw fingerprint.');
+    }
     const existing = this.dependencies.frontmatter.getStyle(request.file);
     const resolvedPageOptions = request.pageOptions
       ? clone(request.pageOptions)
@@ -95,6 +105,7 @@ export class StyleApplicationService {
       request.template,
       resolvedPageOptions,
       request.appliedByRule,
+      request.guard ?? {},
     );
 
     return this.completeWrite(request.file, request.refresh ?? 'immediate', () => {
@@ -141,9 +152,17 @@ export class StyleApplicationService {
               appliedByRule: request.appliedByRule,
               recordRecent: false,
               refresh: 'deferred',
+              guard: decision.guard,
             }));
           }
         } catch (error) {
+          if (error instanceof StaleTemplarDataError) {
+            results.push(skippedResult(
+              frozenFile.path,
+              'The note changed after review and was not overwritten.',
+            ));
+            continue;
+          }
           results.push({
             path: frozenFile.path,
             status: 'failed',
@@ -238,6 +257,7 @@ export class StyleApplicationService {
       fingerprint: '',
       trace: [],
       issues: [],
+      protectedPaths: [],
       automaticOverwriteAllowed: style === null,
     };
   }

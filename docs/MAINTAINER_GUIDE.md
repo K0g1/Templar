@@ -4,6 +4,16 @@ The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.m
 
 At `1.2.0-alpha.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT is a supported alpha distribution/update path under final clean-vault validation. Do not call it recommended until the release E2E matrix is recorded. Manual installation of the three release artifacts remains the compatibility fallback; see [`INSTALLATION.md`](INSTALLATION.md).
 
+## Promotion policy
+
+| Stage | Required evidence |
+| --- | --- |
+| Alpha | Architecture and data format may change. Automated gates are required; an incomplete manual matrix is permitted only when the release note discloses it exactly. |
+| Beta | Persistence, schema, recovery, and CSS-security contracts are frozen; no known data-loss or trust-boundary blocker remains; BRAT packaged install, desktop matrix, migration/recovery scenarios, and interactive mobile coverage have been recorded. Any unavailable physical device is disclosed in the beta release note. |
+| Stable | Beta soak is complete and physical iOS plus Android validation is recorded, alongside all automated, BRAT, desktop, migration, and recovery gates. |
+
+Do not label a build beta merely because its automated suite passes. Manual evidence applies to the packaged GitHub/BRAT artifact, not a development checkout.
+
 ## Local workflow
 
 ```bash

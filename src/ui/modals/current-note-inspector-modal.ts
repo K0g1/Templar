@@ -18,7 +18,7 @@ import {
   renderPageOptionSettings,
   runButtonAction,
 } from './shared';
-import { runBackgroundTask } from '../async-actions';
+import { reportSingleFileOperation, runBackgroundTask } from '../async-actions';
 
 /* The class is kept in its focused modal module; shared UI helpers live in ./shared. */
 export class CurrentNoteInspectorModal extends Modal {
@@ -55,13 +55,14 @@ export class CurrentNoteInspectorModal extends Modal {
     discard.addEventListener('click', () => this.close());
     const save = actions.createEl('button', { cls: 'mod-cta', text: 'Save changes' });
     save.addEventListener('click', () => void runButtonAction(save, async () => {
-      await this.plugin.application.writeStyle(this.file, this.draft, 'immediate', {
+      const result = await this.plugin.application.writeStyle(this.file, this.draft, 'immediate', {
         expectedRawFingerprint: this.openingFingerprint,
       });
       this.saved = true;
       await this.plugin.preview.cancel(this.owner);
       this.plugin.refreshSidebars();
       this.plugin.updateStatusBar();
+      reportSingleFileOperation(result, 'Saved note style changes.');
       this.close();
     }));
     this.updatePreview();

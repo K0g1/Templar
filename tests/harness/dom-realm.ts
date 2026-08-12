@@ -4,6 +4,7 @@ export interface ObserverHarness {
   window: Window;
   resizeInstances: Array<{ disconnects: number; observes: Element[] }>;
   mutationInstances: Array<{ disconnects: number; observes: Element[] }>;
+  pendingAnimationFrames: Set<number>;
 }
 
 export function createObserverHarness(): ObserverHarness {
@@ -13,6 +14,8 @@ export function createObserverHarness(): ObserverHarness {
   const window = new HappyWindow() as unknown as Window;
   const resizeInstances: ObserverHarness['resizeInstances'] = [];
   const mutationInstances: ObserverHarness['mutationInstances'] = [];
+  const pendingAnimationFrames = new Set<number>();
+  let nextAnimationFrame = 1;
 
   class RealmResizeObserver {
     private readonly record = { disconnects: 0, observes: [] as Element[] };
@@ -54,5 +57,22 @@ export function createObserverHarness(): ObserverHarness {
 
   Object.defineProperty(window, 'ResizeObserver', { configurable: true, value: RealmResizeObserver });
   Object.defineProperty(window, 'MutationObserver', { configurable: true, value: RealmMutationObserver });
-  return { window, resizeInstances, mutationInstances };
+  Object.defineProperty(window, 'requestAnimationFrame', {
+    configurable: true,
+    value: (callback: FrameRequestCallback): number => {
+      const frame = nextAnimationFrame;
+      nextAnimationFrame += 1;
+      pendingAnimationFrames.add(frame);
+      queueMicrotask(() => {
+        if (!pendingAnimationFrames.delete(frame)) return;
+        callback(Date.now());
+      });
+      return frame;
+    },
+  });
+  Object.defineProperty(window, 'cancelAnimationFrame', {
+    configurable: true,
+    value: (frame: number): void => { pendingAnimationFrames.delete(frame); },
+  });
+  return { window, resizeInstances, mutationInstances, pendingAnimationFrames };
 }

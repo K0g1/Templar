@@ -36,7 +36,10 @@ describe('TemplateLibrary favorites', () => {
       favouriteTemplateIds: ['custom-a'],
       recentTemplateIds: ['custom-b'],
     });
-    await expect(library.removeMany(['custom-a', 'custom-b'])).resolves.toBe(2);
+    await expect(library.removeMany(['custom-a', 'custom-b'])).resolves.toEqual({
+      removedIds: ['custom-a', 'custom-b'],
+      count: 2,
+    });
     expect(settings.userTemplates).toEqual([]);
     expect(settings.favouriteTemplateIds).toEqual([]);
     expect(settings.recentTemplateIds).toEqual([]);
@@ -85,5 +88,21 @@ describe('TemplateLibrary favorites', () => {
     expect(library.isFavourite('my-style')).toBe(true);
     await library.remove('my-style');
     expect(library.isFavourite('my-style')).toBe(false);
+  });
+
+  it('rolls back a multi-template removal when persistence fails', async () => {
+    const customA = clone(BUILT_IN_TEMPLATES[0]!); customA.id = 'custom-a'; customA.builtIn = false;
+    const customB = clone(BUILT_IN_TEMPLATES[1]!); customB.id = 'custom-b'; customB.builtIn = false;
+    const settings = clone(DEFAULT_SETTINGS);
+    settings.userTemplates = [customA, customB];
+    settings.favouriteTemplateIds = ['custom-a'];
+    settings.recentTemplateIds = ['custom-b'];
+    const library = new TemplateLibrary(settings, new SettingsStore(settings, async () => {
+      throw new Error('persistence failed');
+    }));
+    await expect(library.removeMany(['custom-a', 'custom-b'])).rejects.toThrow('persistence failed');
+    expect(settings.userTemplates.map((template) => template.id)).toEqual(['custom-a', 'custom-b']);
+    expect(settings.favouriteTemplateIds).toEqual(['custom-a']);
+    expect(settings.recentTemplateIds).toEqual(['custom-b']);
   });
 });
