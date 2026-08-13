@@ -8,7 +8,7 @@ This is the current implementation reference for Templar. It is deliberately mor
 | --- | --- |
 | Product | Templar, an Obsidian plugin that gives each Markdown note a portable visual page style |
 | Repository | [`K0g1/Templar`](https://github.com/K0g1/Templar) |
-| Current release | `1.2.0-alpha.3` (remediation validation candidate) |
+| Current release | `1.2.0-alpha.4` (published remediation validation candidate) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
 | Installation channel | BRAT supported for alpha testing under final clean-vault validation; manual release artifacts remain supported; not listed in Community Plugins yet |
@@ -17,7 +17,7 @@ This is the current implementation reference for Templar. It is deliberately mor
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
 | Test status at this snapshot | Run `npm test` for the current pure plus targeted DOM integration count; `npm run check` and `npm run verify:ship -- <version>` are the required gates |
 
-`1.2.0-alpha.3` validates the remediation contracts: recovery-backed protected writes, migration-aware reads/imports, compare-and-swap automatic rules, restored explicit batch semantics, stricter custom-CSS isolation/readability checks, and full PageRenderer lifecycle evidence. The release note is [`releases/1.2.0-alpha.3.md`](releases/1.2.0-alpha.3.md).
+`1.2.0-alpha.4` validates the remediation contracts: recovery-backed protected writes, migration-aware reads/imports, compare-and-swap automatic rules, restored explicit batch semantics, stricter custom-CSS isolation/readability checks, and full PageRenderer lifecycle evidence. It corrects alpha.3’s hidden-artifact upload without moving that immutable tag. The release note is [`releases/1.2.0-alpha.4.md`](releases/1.2.0-alpha.4.md).
 
 ### Source-of-truth rules
 
@@ -367,10 +367,10 @@ npm test                    # pure plus targeted DOM integration tests
 npm run test:coverage       # V8 lines/statements/functions/branches report
 npm run build               # runtime tsc, production browser bundle, mobile/privacy guards
 npm run check               # lint + test-inclusive tsc + test + build + BRAT verifier
-npm run verify:ship -- 1.2.0-alpha.3
+npm run verify:ship -- 1.2.0-alpha.4
 npm run verify:mobile       # scan the generated main.js directly
-npm run verify:release -- 1.2.0-alpha.3
-npm run verify:brat -- 1.2.0-alpha.3
+npm run verify:release -- 1.2.0-alpha.4
+npm run verify:brat -- 1.2.0-alpha.4
 git diff --check
 ```
 

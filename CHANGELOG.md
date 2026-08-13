@@ -4,6 +4,12 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.2.0-alpha.4 — 2026-08-12
+
+### Release engineering
+
+- Corrected the release workflow so the intentionally hidden verified staging bundle is uploaded to the publish job. The `1.2.0-alpha.3` tag completed all build and verification steps but did not publish artifacts because the upload action excluded `.release`; it is not repointed.
+
 ## 1.2.0-alpha.3 — 2026-08-12
 
 ### Fixed
