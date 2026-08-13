@@ -150,12 +150,15 @@ describe('BRAT release contract verifier', () => {
     expect(publish).not.toContain('actions/setup-node');
     expect(publish).not.toContain('npm ci');
     expect(publish).not.toMatch(/npm run/);
+    expect(publish).toContain('--repo "${GITHUB_REPOSITORY}"');
     expect(releaseWorkflow).toContain('contents: read');
     expect(releaseWorkflow).toContain('node scripts/stage-release.mjs');
     expect(releaseWorkflow).toContain('path: .release/');
     expect(releaseWorkflow).toContain('Refusing to modify an already-published release');
     expect(releaseWorkflow.indexOf('Verify remote draft before publication')).toBeLessThan(
-      releaseWorkflow.indexOf('gh release edit "${RELEASE_TAG}" --draft=false'),
+        releaseWorkflow.indexOf(
+          'gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false',
+        ),
     );
     expect(releaseWorkflow).toContain('cmp .release/SHA256SUMS.txt .release-remote/SHA256SUMS.txt');
     expect(releaseWorkflow).toContain('release-metadata.json');
