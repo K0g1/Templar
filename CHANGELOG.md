@@ -4,6 +4,12 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.2.0-alpha.5 — 2026-08-12
+
+### Release engineering
+
+- Made every publish-job `gh release` call target `${GITHUB_REPOSITORY}` explicitly. The `1.2.0-alpha.4` build, bundle upload, and artifact download all passed, but its checkout-free publish job lacked repository context. The immutable alpha.4 tag is preserved; alpha.5 is the published validation candidate.
+
 ## 1.2.0-alpha.4 — 2026-08-12
 
 ### Release engineering
