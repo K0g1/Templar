@@ -4,6 +4,14 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.2.0-beta.1 — 2026-08-12
+
+### Beta promotion
+
+- Promoted the published alpha.5 remediation candidate after package-level BRAT, desktop, recovery, batch, and automatic-rule validation.
+- Preserved the v1 note/template schema compatibility promise: existing readable v1 `templar` frontmatter remains portable, while future, invalid, and protected nested data is never rewritten by ordinary operations.
+- Recorded recovery-first replacement/removal and fingerprint-guarded automatic/batch writes as beta compatibility contracts.
+
 ## 1.2.0-alpha.5 — 2026-08-12
 
 ### Release engineering
