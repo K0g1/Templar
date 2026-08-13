@@ -39,7 +39,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@codemirror/view": "6.38.6",
+    "@codemirror/view": "6.43.8",
     "postcss": "8.5.26",
     "postcss-selector-parser": "7.1.0"
   },
