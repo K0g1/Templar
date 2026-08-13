@@ -11,14 +11,14 @@ const sampleHtml = fieldGuide.sampleHtml;
     <div class="demo-tools"><strong>Page Styles</strong><span>Search · Recent · Favorites</span></div>
     <div class="style-grid">
       {samples.map((sample, index) => (
-        <button type="button" class:list={['style-swatch', { selected: index === 0 }]} data-style={sample.slug} aria-pressed={index === 0 ? 'true' : 'false'}>
-          <span class="swatch-paper">
+        <button type="button" class:list={['style-swatch', { selected: index === 0 }]} data-style={sample.slug} aria-pressed={index === 0 ? 'true' : 'false'} aria-label={'Preview the ' + sample.label + ' style'}>
+          <span class="swatch-paper" aria-hidden="true">
             <span class="live-note-scope" data-templar-scope={sample.scopeId} aria-hidden="true">
               <style is:inline set:html={sample.css}></style>
               <div class="templar-page"><div class="templar-page-content swatch-content" set:html={sampleHtml} /></div>
             </span>
           </span>
-          {sample.label}
+          <span aria-hidden="true">{sample.label}</span>
         </button>
       ))}
     </div>

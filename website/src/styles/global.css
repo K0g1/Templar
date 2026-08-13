@@ -79,6 +79,7 @@
 }
 
 @layer utilities {
+  [hidden] { display: none !important; }
   .grid { display: grid; gap: 24px; }
   .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
