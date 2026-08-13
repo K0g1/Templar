@@ -1,0 +1,41 @@
+---
+// Engraved alpine ridge vignette.
+interface Props { class?: string }
+const { class: className } = Astro.props;
+---
+<svg class={'art alpine-vignette ' + (className ?? '')} viewBox="0 0 720 300" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="alp-ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fa9b8"/><stop offset="1" stop-color="#54677a"/>
+    </linearGradient>
+    <linearGradient id="alp-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f5d78e"/><stop offset="1" stop-color="#e8b45e"/>
+    </linearGradient>
+    <clipPath id="alp-sunclip"><circle cx="360" cy="118" r="46"/></clipPath>
+  </defs>
+  <g clip-path="url(#alp-sunclip)">
+    <circle cx="360" cy="118" r="46" fill="url(#alp-sun)"/>
+    <g stroke="#54677a" stroke-width="1.6" opacity="0.9">
+      <line x1="328" y1="118" x2="392" y2="118"/><line x1="341" y1="94" x2="341" y2="142"/><line x1="360" y1="88" x2="360" y2="148"/><line x1="379" y1="94" x2="379" y2="142"/>
+    </g>
+  </g>
+  <path d="M0 236 L96 206 L128 168 L176 196 L232 132 L286 186 L330 150 L360 118 L390 150 L434 186 L488 132 L544 196 L592 168 L624 206 L720 236 L720 300 L0 300 Z" fill="url(#alp-ink)" fill-opacity="0.9"/>
+  <path d="M0 236 L96 206 L128 168 L176 196 L232 132 L286 186 L330 150 L360 118 L390 150 L434 186 L488 132 L544 196 L592 168 L624 206 L720 236" stroke="#3f4e5c" stroke-width="2"/>
+  <!-- snow caps -->
+  <g fill="#f7f3e8">
+    <path d="M330 150 L360 118 L390 150 L386 150 L360 128 L334 150 Z"/>
+    <path d="M232 132 L286 186 L276 186 L246 152 L228 142 Z"/>
+    <path d="M488 132 L544 196 L534 196 L502 160 L482 146 Z"/>
+  </g>
+  <!-- ridge engraving lines -->
+  <g stroke="#3f4e5c" stroke-width="0.9" stroke-opacity="0.55">
+    <path d="M128 168 L176 196"/><path d="M176 196 L232 132"/><path d="M592 168 L544 196"/>
+    <path d="M286 186 L330 150"/><path d="M390 150 L434 186"/><path d="M434 186 L488 132"/>
+  </g>
+  <g stroke="#3f4e5c" stroke-width="0.7" stroke-opacity="0.4">
+    <line x1="0" y1="254" x2="720" y2="254"/><line x1="0" y1="270" x2="720" y2="270"/><line x1="0" y1="286" x2="720" y2="286"/>
+  </g>
+  <g fill="#54677a">
+    <circle cx="94" cy="80" r="2.2"/><circle cx="160" cy="56" r="1.7"/><circle cx="580" cy="66" r="2"/><circle cx="650" cy="92" r="1.6"/>
+  </g>
+</svg>

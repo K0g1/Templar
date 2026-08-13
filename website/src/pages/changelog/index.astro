@@ -1,0 +1,67 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Icon from '../../components/Icon.astro';
+import Fleuron from '../../components/art/Fleuron.astro';
+import releases from '../../data/releases.generated.json';
+import project from '../../data/project.generated.json';
+import { url, releasesUrl } from '../../lib/site';
+---
+<BaseLayout title="Templar changelog" description="Immutable release history and current release notes for Templar.">
+  <header class="page-hero paper-panel deckle">
+    <span class="eyebrow">Current · {project.version}</span>
+    <h1>Changelog.</h1>
+    <p>What changed, when it shipped, and the evidence recorded for each release.</p>
+  </header>
+
+  <section class="site-section changelog" data-release-list>
+    <div class="filter-row" role="group" aria-label="Filter releases">
+      <button class="active" data-filter="all">All</button>
+      <button data-filter="stable">Stable</button>
+      <button data-filter="beta">Beta</button>
+      <button data-filter="alpha">Alpha</button>
+    </div>
+    <div class="release-list">
+      {releases.map((release,index)=><article class:list={['paper-panel','release-card',{featured:index===0}]} data-stage={release.stage}>
+        <div class="release-meta"><span class="eyebrow">{release.stage}</span><h2>{release.version}</h2><time datetime={release.date}>{new Date(release.date + 'T00:00:00').toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}</time></div>
+        <div><ul>{release.bullets.slice(0,index===0?5:3).map(item=><li>{item}</li>)}</ul>{release.hasNotes ? <a href={url('/docs/releases/' + release.slug + '/')}>Full release notes <Icon name="arrow" size={18}/></a> : <a href={releasesUrl}>Release on GitHub <Icon name="github" size={17}/></a>}</div>
+      </article>)}
+    </div>
+    <div class="paper-panel release-footer">
+      <a href={url('/docs/releases/' + releases[0].slug + '/')}><Icon name="book" /> Browse documentation release notes</a>
+      <a href={releasesUrl}><Icon name="github" /> Browse GitHub releases</a>
+    </div>
+  </section>
+</BaseLayout>
+<script>
+  document.querySelectorAll<HTMLElement>('[data-release-list]').forEach(list=>list.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
+    list.querySelectorAll('[data-filter]').forEach(b=>b.classList.remove('active'));
+    button.classList.add('active');
+    list.querySelectorAll<HTMLElement>('[data-stage]').forEach(card=>card.hidden=button.dataset.filter!=='all'&&card.dataset.stage!==button.dataset.filter);
+  })))
+</script>
+<style>
+  .filter-row { display: flex; justify-content: flex-end; margin-bottom: 22px; }
+  .filter-row button { border: 1px solid var(--line-strong); background: rgba(253, 250, 240, 0.7); padding: 9px 20px; cursor: pointer; border-radius: 4px; font-weight: 600; }
+  .filter-row button.active { background: var(--ink-1); color: var(--paper-0); border-color: var(--ink-1); }
+  .release-list { display: grid; gap: 16px; }
+  .release-card { padding: 30px 40px; display: grid; grid-template-columns: 250px 1fr; gap: 40px; }
+  .release-card.featured { padding: 42px; }
+  .release-meta { border-right: 1px solid var(--line); }
+  .release-meta h2 { font: 600 1.55rem var(--mono); letter-spacing: 0; }
+  .release-meta time { color: var(--ink-muted); font-size: 0.9rem; }
+  .release-card li { margin: 7px 0; }
+  .release-card a { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--oxblood); font-weight: 700; }
+  .release-footer { display: flex; justify-content: center; gap: 1px; margin-top: 28px; padding: 20px; }
+  .release-footer a { display: flex; align-items: center; gap: 10px; padding: 15px 40px; text-decoration: none; border-right: 1px solid var(--line); color: var(--ink-2); }
+  .release-footer a:last-child { border: 0; }
+  .release-footer a:hover { color: var(--oxblood); }
+  @media (max-width: 700px) {
+    .filter-row { justify-content: stretch; overflow: auto; }
+    .filter-row button { flex: 1; }
+    .release-card, .release-card.featured { grid-template-columns: 1fr; padding: 26px 22px; gap: 18px; }
+    .release-meta { border-right: 0; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+    .release-footer { align-items: stretch; flex-direction: column; }
+    .release-footer a { border-right: 0; border-bottom: 1px solid var(--line); padding: 15px; }
+  }
+</style>
+

@@ -1,0 +1,34 @@
+---
+// Synthwave night vignette.
+interface Props { class?: string }
+const { class: className } = Astro.props;
+---
+<svg class={'art neon-vignette ' + (className ?? '')} viewBox="0 0 720 300" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="neo-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d0a24"/><stop offset="0.5" stop-color="#2a1450"/><stop offset="0.78" stop-color="#7b2d7e"/><stop offset="1" stop-color="#ff7a3d"/>
+    </linearGradient>
+    <linearGradient id="neo-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe066"/><stop offset="0.6" stop-color="#ff9e3d"/><stop offset="1" stop-color="#ff4d6d"/>
+    </linearGradient>
+    <filter id="neo-bloom" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="14"/></filter>
+  </defs>
+  <rect width="720" height="300" fill="url(#neo-sky)"/>
+  <g fill="#ffffff">
+    <circle cx="96" cy="52" r="1.8"/><circle cx="220" cy="34" r="1.3"/><circle cx="420" cy="58" r="1.7"/><circle cx="600" cy="40" r="1.5"/><circle cx="670" cy="84" r="1.4"/><circle cx="316" cy="20" r="1.2"/>
+  </g>
+  <circle cx="360" cy="236" r="150" fill="#ffb3d1" opacity="0.22" filter="url(#neo-bloom)"/>
+  <g>
+    <circle cx="360" cy="236" r="88" fill="url(#neo-sun)"/>
+    <g fill="#2a1450">
+      <rect x="296" y="198" width="128" height="6"/><rect x="282" y="212" width="156" height="8"/><rect x="270" y="228" width="180" height="10"/><rect x="262" y="246" width="196" height="12"/><rect x="258" y="266" width="204" height="14"/>
+    </g>
+  </g>
+  <path d="M0 268 L120 246 L240 264 L360 252 L480 268 L600 254 L720 266 L720 300 L0 300 Z" fill="#171034"/>
+  <g stroke="#f04bb3" stroke-opacity="0.9" stroke-width="1.6">
+    <g transform="translate(0,262)">
+      <line x1="0" y1="0" x2="720" y2="60"/><line x1="0" y1="16" x2="720" y2="76"/><line x1="0" y1="32" x2="720" y2="92"/>
+      <line x1="0" y1="0" x2="0" y2="38"/><line x1="120" y1="0" x2="120" y2="40"/><line x1="240" y1="0" x2="240" y2="42"/><line x1="360" y1="0" x2="360" y2="44"/><line x1="480" y1="0" x2="480" y2="46"/><line x1="600" y1="0" x2="600" y2="48"/><line x1="720" y1="0" x2="720" y2="50"/>
+    </g>
+  </g>
+</svg>

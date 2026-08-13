@@ -1,0 +1,71 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import '../styles/tokens.css';
+import '../styles/global.css';
+import '../styles/components.css';
+import '../styles/motion.css';
+import { url } from '../lib/site';
+interface Props { title: string; description: string; image?: string }
+const { title, description, image = '/og.png' } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const og = new URL(url(image), Astro.site);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#efe4cd" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content="website" /><meta property="og:title" content={title} /><meta property="og:description" content={description} /><meta property="og:url" content={canonical} /><meta property="og:image" content={og} />
+    <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content={title} /><meta name="twitter:description" content={description} /><meta name="twitter:image" content={og} />
+    <link rel="icon" href={url('/favicon.svg')} type="image/svg+xml" />
+  </head>
+  <body>
+    <SiteHeader />
+    <main id="main"><slot /></main>
+    <SiteFooter />
+    <script is:inline>
+      // Progressive enhancement marker: reveal animations only run when JS exists.
+      document.documentElement.classList.add('js');
+      const root = document.documentElement;
+      const stored = localStorage.getItem('templar-theme');
+      if (stored) root.dataset.theme = stored;
+      const themeToggle = document.querySelector('[data-theme-toggle]');
+      const setTheme = (next) => {
+        root.dataset.theme = next;
+        localStorage.setItem('templar-theme', next);
+        const label = next === 'dark' ? 'Use light desk theme' : 'Use dark desk theme';
+        themeToggle?.setAttribute('aria-label', label);
+        themeToggle?.setAttribute('title', label);
+      };
+      themeToggle?.addEventListener('click', () => {
+        setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark');
+      });
+      const menu = document.querySelector('[data-menu-toggle]');
+      const mobileNav = document.querySelector('[data-mobile-nav]');
+      menu?.addEventListener('click', () => {
+        const open = menu.getAttribute('aria-expanded') === 'true';
+        menu.setAttribute('aria-expanded', String(!open));
+        menu.setAttribute('aria-label', open ? 'Open menu' : 'Close menu');
+        mobileNav?.classList.toggle('open', !open);
+      });
+      const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+        if (entry.isIntersecting) { entry.target.classList.add('revealed'); observer.unobserve(entry.target); }
+      }), { threshold: 0.08 });
+      document.querySelectorAll('[data-reveal]').forEach((el) => observer.observe(el));
+      document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(button.dataset.copy || '');
+          const old = button.textContent;
+          button.textContent = 'Copied';
+          setTimeout(() => { button.textContent = old; }, 1500);
+        } catch { /* clipboard unavailable */ }
+      }));
+    </script>
+  </body>
+</html>
+

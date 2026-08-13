@@ -1,0 +1,78 @@
+---
+// FieldGuideSection — tabbed live rendering of the four field-guide notes.
+// Without JS every note is visible stacked; with JS they collapse into tabs.
+import LiveNote from './LiveNote.astro';
+import Icon from './Icon.astro';
+import fieldGuide from '../data/field-guide.generated.json';
+import { repo } from '../lib/site';
+
+const notes = fieldGuide.notes;
+---
+<section class="site-section wide field-guide-section" data-reveal>
+  <div class="section-heading">
+    <span class="eyebrow">Rendered live, not screenshots</span>
+    <h2>The field guide, as the plugin sees it.</h2>
+    <p>These are the actual field-guide notes from the repository — Markdown rendered to HTML and styled by Templar's own compiled stylesheet, live in your browser. Open them in Obsidian and you will see the same pages.</p>
+  </div>
+  <div class="field-guide" data-field-guide>
+    <div class="field-guide-tabs" role="tablist" aria-label="Field guide notes">
+      {notes.map((note, index) => (
+        <button class:list={['field-guide-tab', { active: index === 0 }]} type="button" role="tab" data-tab={note.slug} aria-selected={index === 0 ? 'true' : 'false'} aria-controls={'pane-' + note.slug}>
+          <span class="swatch-dot" style={'background:' + note.paperColor + '; box-shadow: inset 0 0 0 3px ' + note.accentColor}></span>
+          {note.title}
+        </button>
+      ))}
+    </div>
+    <div class="field-guide-panes">
+      {notes.map((note, index) => (
+        <section class:list={['live-note-pane', { active: index === 0 }]} id={'pane-' + note.slug} data-pane={note.slug} role="tabpanel" aria-labelledby={'tab-' + note.slug}>
+          <div class="pane-meta">
+            <div class="pane-meta-heading">
+              <h3>{note.title}</h3>
+              <span class="tag">{note.styleName}</span>
+              <span class="tag">{note.styleFolder}</span>
+            </div>
+            <a href={repo + '/blob/main/examples/Templar%20Field%20Guide/' + note.basename + '.md'}>
+              View source Markdown <Icon name="arrow" size={16} />
+            </a>
+          </div>
+          <LiveNote note={note} notes={notes} height="660px" chrome="full" />
+        </section>
+      ))}
+    </div>
+    <p class="live-caption"><Icon name="wand" size={17} /> Live HTML, styled by the plugin's real compiled CSS — paper patterns, baseline grids, callouts, tables, and highlights included.</p>
+  </div>
+</section>
+<script>
+  document.querySelectorAll<HTMLElement>('[data-field-guide]').forEach((guide) => {
+    const tabs = guide.querySelectorAll<HTMLButtonElement>('[data-tab]');
+    const panes = guide.querySelectorAll<HTMLElement>('[data-pane]');
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      const slug = tab.dataset.tab;
+      tabs.forEach((entry) => {
+        const selected = entry === tab;
+        entry.classList.toggle('active', selected);
+        entry.setAttribute('aria-selected', String(selected));
+      });
+      panes.forEach((pane) => pane.classList.toggle('active', pane.dataset.pane === slug));
+    }));
+  });
+</script>
+<style>
+  .field-guide-tabs { display: none; }
+  html.js .field-guide-tabs { display: flex; }
+  .live-note-pane .pane-meta { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 14px; flex-wrap: wrap; }
+  .pane-meta-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pane-meta-heading h3 { font-size: 1.5rem; }
+  .pane-meta > a { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 0.88rem; color: var(--oxblood); text-decoration: none; }
+  .pane-meta > a:hover { text-decoration: underline; }
+  html.js .live-note-pane { display: none; }
+  html.js .live-note-pane.active { display: block; }
+  html.js .live-note-pane.active { animation: pane-in 320ms var(--ease-out); }
+  @keyframes pane-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  html:not(.js) .live-note-pane { margin-bottom: 64px; }
+  @media (max-width: 600px) {
+    .pane-meta-heading h3 { font-size: 1.25rem; }
+  }
+</style>
+

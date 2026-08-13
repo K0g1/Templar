@@ -1,0 +1,57 @@
+---
+// PageModeDemo — one shared sheet compiled by the plugin twice: pageless and
+// paged. The paged variant scales as a whole sheet, exactly like the plugin.
+import fieldGuide from '../data/field-guide.generated.json';
+import { url } from '../lib/site';
+const demo = fieldGuide.pageModeDemo;
+const resolvedHtml = demo.html.replaceAll('src="field-guide/', 'src="' + url('/field-guide/'));
+---
+<div class="page-mode-demo paper-panel" data-page-demo style="--pane-width: 84%; --pane-scale: 0.84">
+  <div class="mode-controls" role="group" aria-label="Page mode">
+    <button type="button" class="active" data-mode="pageless" aria-pressed="true">Pageless</button>
+    <button type="button" data-mode="paged" aria-pressed="false">Paged</button>
+    <label>Narrow pane <input type="range" min="45" max="100" value="84" data-pane-width /></label>
+  </div>
+  <div class="mode-pane">
+    <div class="mode-sheet pageless" data-mode-sheet="pageless">
+      <div class="live-note-scope" data-templar-scope={demo.pageless.scopeId}>
+        <style is:inline set:html={demo.pageless.css}></style>
+        <div class="templar-page"><div class="templar-page-content" set:html={resolvedHtml} /></div>
+      </div>
+    </div>
+    <div class="mode-sheet paged" data-mode-sheet="paged" hidden>
+      <div class="live-note-scope" data-templar-scope={demo.paged.scopeId}>
+        <style is:inline set:html={demo.paged.css}></style>
+        <div class="templar-page"><div class="templar-page-content" set:html={resolvedHtml} /></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.querySelectorAll<HTMLElement>('[data-page-demo]').forEach((demo) => {
+    const sheets = demo.querySelectorAll<HTMLElement>('[data-mode-sheet]');
+    const buttons = demo.querySelectorAll<HTMLButtonElement>('[data-mode]');
+    const range = demo.querySelector<HTMLInputElement>('[data-pane-width]');
+    const setMode = (mode: string) => {
+      buttons.forEach((entry) => {
+        const selected = entry.dataset.mode === mode;
+        entry.classList.toggle('active', selected);
+        entry.setAttribute('aria-pressed', String(selected));
+      });
+      sheets.forEach((sheet) => { sheet.hidden = sheet.dataset.modeSheet !== mode; });
+    };
+    buttons.forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode || 'pageless')));
+    range?.addEventListener('input', () => {
+      const value = Number(range.value);
+      demo.style.setProperty('--pane-width', String(value) + '%');
+      demo.style.setProperty('--pane-scale', String(value / 100));
+    });
+  });
+</script>
+<style>
+  .mode-sheet.paged .live-note-scope { --templar-page-scale: var(--pane-scale, 0.84); }
+  .mode-sheet .templar-page { height: 100%; }
+  .mode-sheet .templar-page-content { box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22); border: 1px solid rgba(40, 32, 20, 0.14); }
+  .mode-sheet.pageless .templar-page-content { border-radius: 4px; }
+</style>
+

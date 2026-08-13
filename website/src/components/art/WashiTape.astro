@@ -1,0 +1,27 @@
+---
+interface Props { variant?: 'oxblood' | 'olive' | 'brass'; class?: string }
+const { variant = 'oxblood', class: className } = Astro.props;
+const colors = {
+  oxblood: { fill: '#8a3b2c', line: '#61261b' },
+  olive: { fill: '#5f6d44', line: '#3f4a2b' },
+  brass: { fill: '#b58f4e', line: '#83662f' },
+} as const;
+const c = colors[variant];
+const uid = 'wt-' + (variant);
+---
+<svg class={'art washi-tape ' + (className ?? '')} viewBox="0 0 220 56" fill="none" aria-hidden="true" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id={uid + '-g'} x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color={c.fill} stop-opacity="0.92"/>
+      <stop offset="0.5" stop-color={c.fill} stop-opacity="0.78"/>
+      <stop offset="1" stop-color={c.fill} stop-opacity="0.94"/>
+    </linearGradient>
+    <pattern id={uid + '-p'} width="7" height="7" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="7" y2="7" stroke={c.line} stroke-opacity="0.16" stroke-width="0.7"/>
+    </pattern>
+  </defs>
+  <path d="M2 2 h58 l7 -2 l6 3 l8 -3 l7 3 l7 -2 l8 2 l6 -2 l7 3 l6 -3 l7 2 h71 l8 -3 l7 3 l6 -2 l7 3 l8 -3 l7 3 l6 -2 v54 H2 Z" fill={'url(#' + uid + '-g)'}/>
+  <path d="M2 2 h58 l7 -2 l6 3 l8 -3 l7 3 l7 -2 l8 2 l6 -2 l7 3 l6 -3 l7 2 h71 l8 -3 l7 3 l6 -2 l7 3 l8 -3 l7 3 l6 -2 v54 H2 Z" fill={'url(#' + uid + '-p)'}/>
+  <path d="M2 2 h58 l7 -2 l6 3 l8 -3 l7 3 l7 -2 l8 2 l6 -2 l7 3 l6 -3 l7 2 h71 l8 -3 l7 3 l6 -2 l7 3 l8 -3 l7 3 l6 -2" stroke={c.line} stroke-opacity="0.45" stroke-width="1"/>
+  <path d="M2 54 h216" stroke={c.line} stroke-opacity="0.45" stroke-width="1"/>
+</svg>

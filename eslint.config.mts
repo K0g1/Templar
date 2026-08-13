@@ -12,6 +12,8 @@ export default defineConfig(
     'version-bump.mjs',
     'versions.json',
     'package-lock.json',
+    // The Astro website has its own type-aware checks and generated output.
+    'website',
   ]),
   {
     languageOptions: {

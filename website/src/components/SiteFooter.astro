@@ -1,0 +1,17 @@
+---
+import Icon from './Icon.astro';
+import project from '../data/project.generated.json';
+import { url, repo } from '../lib/site';
+---
+<footer class="site-footer">
+  <div class="footer-main paper-panel deckle">
+    <div class="footer-brand">
+      <img src={url('/favicon.svg')} alt="" width="46" height="46" />
+      <div><strong>Templar</strong><p>Content remains stable. Presentation can be expressive.</p></div>
+    </div>
+    <div><strong>Explore</strong><a href={url('/docs/')}>Documentation</a><a href={url('/examples/')}>Examples</a><a href={url('/changelog/')}>Changelog</a></div>
+    <div><strong>Project</strong><a href={repo}><Icon name="github" size={16} /> GitHub</a><a href={repo + '/blob/main/LICENSE'}>MIT License</a><a href={url('/privacy/')}>Privacy &amp; safety</a></div>
+  </div>
+  <div class="footer-meta"><span>Templar {project.version}</span><span>•</span><span>No analytics. No cookies. No telemetry.</span><span>•</span><span>Built for Markdown.</span></div>
+</footer>
+

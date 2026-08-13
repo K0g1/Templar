@@ -1,0 +1,120 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Icon from '../components/Icon.astro';
+import Fleuron from '../components/art/Fleuron.astro';
+import project from '../data/project.generated.json';
+import { bratUrl, releasesUrl, url } from '../lib/site';
+---
+<BaseLayout title={'Install Templar ' + project.version} description="Install the Templar beta with BRAT or exact manual release assets.">
+  <header class="page-hero paper-panel deckle status-hero">
+    <div>
+      <span class="eyebrow">{project.stage}</span>
+      <h1>Templar {project.version}</h1>
+      <p>Requires Obsidian {project.minAppVersion}+ · Desktop and mobile</p>
+    </div>
+    <div class="notice">
+      <strong>Beta distribution</strong>
+      <p>Templar is not listed in Community Plugins yet. Use BRAT for current beta updates or exact release assets for frozen, reproducible installs.</p>
+    </div>
+  </header>
+
+  <section class="site-section">
+    <div class="route-tabs">
+      <a class="button primary" href="#brat"><Icon name="download" /> Install with BRAT</a>
+      <a class="button" href="#manual">Manual installation</a>
+    </div>
+    <div id="brat" class="paper-panel install-route">
+      <div class="section-heading">
+        <span class="eyebrow">Recommended beta route</span>
+        <h2>Install with BRAT.</h2>
+        <p>BRAT tracks the latest beta automatically. It may require a newer Obsidian version than Templar itself.</p>
+        <div class="fleuron-row"><Fleuron /></div>
+      </div>
+      <div class="grid grid-4 steps">
+        {[['1','Install BRAT','Find “Obsidian42 - BRAT” in Community Plugins, install it, and enable it.'],['2','Add beta plugin','Run “BRAT: Add a beta plugin for testing” from the command palette.'],['3','Enter the repository','Paste K0g1/Templar into the repository field.'],['4','Enable Templar','Open Settings → Community plugins → Installed plugins and enable Templar.']].map(([n,title,copy]) => <article><b>{n}</b><h3>{title}</h3><p>{copy}</p></article>)}
+      </div>
+      <div class="route-actions">
+        <a class="button primary" href={bratUrl}>Open BRAT in Obsidian <Icon name="arrow" /></a>
+        <div class="code-line"><code>K0g1/Templar</code><button class="copy-button" data-copy="K0g1/Templar">Copy</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="site-section compact">
+    <div class="paper-panel frozen">
+      <div>
+        <span class="eyebrow">Reproducible reports</span>
+        <h2>Freeze the current release.</h2>
+        <p>Use BRAT’s frozen-version command with <code>{project.version}</code> when a bug report must not follow later updates.</p>
+      </div>
+      <div class="code-line"><code>{project.version}</code><button class="copy-button" data-copy={project.version}>Copy tag</button></div>
+    </div>
+  </section>
+
+  <section id="manual" class="site-section">
+    <div class="paper-panel install-route">
+      <div class="section-heading">
+        <span class="eyebrow">Exact release assets</span>
+        <h2>Manual installation.</h2>
+        <p>Use this route on an older supported host, as a rate-limit fallback, or when testing one exact release.</p>
+      </div>
+      <ol class="manual-list">
+        <li>Open <a href={releasesUrl}>GitHub Releases</a> and choose a version.</li>
+        <li>Download <code>main.js</code>, <code>manifest.json</code>, and <code>styles.css</code>.</li>
+        <li>Create <code>&lt;your-vault&gt;/.obsidian/plugins/templar/</code>.</li>
+        <li>Place all three files there, reload Obsidian, and enable Templar.</li>
+      </ol>
+      <div class="assets">
+        <span>main.js <small>JavaScript</small></span>
+        <span>manifest.json <small>JSON</small></span>
+        <span>styles.css <small>CSS</small></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="site-section compact">
+    <div class="section-heading"><h2>Troubleshooting.</h2><div class="fleuron-row"><Fleuron /></div></div>
+    <div class="faq">
+      <details class="paper-card"><summary>BRAT rate limit or download failure</summary><div class="details-body"><p>Wait for the GitHub rate limit to reset, or use manual release assets. The plugin does not need BRAT at runtime.</p></div></details>
+      <details class="paper-card"><summary>Plugin is missing after copying files</summary><div class="details-body"><p>Check the lowercase folder path and confirm all three release files are directly inside <code>.obsidian/plugins/templar/</code>.</p></div></details>
+      <details class="paper-card"><summary>Obsidian shows an older version</summary><div class="details-body"><p>Disable Templar, replace all three files together, reload Obsidian, and enable it again.</p></div></details>
+      <details class="paper-card"><summary>Older supported Obsidian host</summary><div class="details-body"><p>Templar supports Obsidian {project.minAppVersion}+, but BRAT may require a newer host. Use manual installation in that case.</p></div></details>
+    </div>
+    <p class="canonical">For the complete update, reinstall, and removal procedures, read the <a href={url('/docs/start/installation/')}>canonical installation guide</a>.</p>
+  </section>
+</BaseLayout>
+<style>
+  .status-hero { display: grid; grid-template-columns: 1fr 0.8fr; gap: 50px; align-items: center; }
+  .status-hero h1 { font-size: clamp(2.4rem, 4.6vw, 4rem); }
+  .route-tabs { display: flex; gap: 10px; margin-bottom: 18px; }
+  .install-route { padding: 46px; }
+  .steps { gap: 1px; background: var(--line); }
+  .steps article { background: var(--paper-0); padding: 24px; }
+  .steps b { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--oxblood); color: #fff7ee; margin-bottom: 14px; font-family: var(--display); }
+  .steps h3 { margin-bottom: 9px; }
+  .steps p { font-size: 0.86rem; }
+  .route-actions { display: flex; align-items: center; gap: 18px; margin-top: 28px; }
+  .route-actions .code-line { flex: 1; }
+  .frozen { padding: 38px; display: grid; grid-template-columns: 1fr 330px; gap: 35px; align-items: center; }
+  .frozen p { margin-top: 10px; }
+  .manual-list { font-family: var(--display); font-size: 1.05rem; }
+  .manual-list li { margin: 13px 0; }
+  .manual-list code { font-family: var(--mono); font-size: 0.9em; }
+  .assets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 30px; }
+  .assets span { padding: 22px; background: rgba(255, 255, 255, 0.45); border: 1px solid var(--line); font: 600 1.02rem var(--mono); border-radius: 4px; }
+  .assets small { display: block; font: 12px var(--ui); color: var(--ink-muted); margin-top: 6px; }
+  .faq { display: grid; gap: 10px; }
+  .canonical { text-align: center; margin-top: 22px; }
+  .canonical a { color: var(--oxblood); font-weight: 700; }
+  @media (max-width: 850px) {
+    .status-hero, .frozen { grid-template-columns: 1fr; }
+    .route-actions { align-items: stretch; flex-direction: column; }
+    .route-actions .code-line { width: 100%; }
+    .assets { grid-template-columns: 1fr; }
+    .install-route { padding: 32px 22px; }
+  }
+  @media (max-width: 550px) {
+    .route-tabs { flex-direction: column; }
+  }
+</style>
+

@@ -1,0 +1,44 @@
+---
+// ShowcaseCard — an example-note card whose preview is a real live render
+// (bare chrome) rather than a screenshot.
+import LiveNote from './LiveNote.astro';
+import Icon from './Icon.astro';
+
+interface Props {
+  note: {
+    slug: string;
+    title: string;
+    styleName: string;
+    styleFolder: string;
+    styleDescription: string;
+    css: string;
+    html: string;
+    scopeId: string;
+  };
+  href: string;
+  tags: string[];
+  features?: string[];
+}
+const { note, href, tags, features } = Astro.props;
+---
+<article class="paper-card showcase-card">
+  <a href={href} class="showcase-preview" aria-label={note.title + ' rendered by Templar'} tabindex={-1}>
+    <LiveNote note={note} height="250px" chrome="bare" />
+  </a>
+  <h3>{note.title}</h3>
+  <p>{note.styleDescription}</p>
+  <div class="tag-row">{tags.map((tag) => <span class="tag">{tag}</span>)}</div>
+  <a class="text-link" href={href}>View source note <Icon name="arrow" size={16} /></a>
+</article>
+<style>
+  .showcase-card { padding: 12px 12px 22px; }
+  .showcase-preview { display: block; overflow: hidden; border: 1px solid var(--line); border-radius: 5px; pointer-events: none; }
+  .showcase-preview :global(.live-note-window) { border-radius: 0; border: 0; box-shadow: none; }
+  .showcase-preview :global(.ln-scroll) { padding: 18px 20px 30px; }
+  h3 { font-size: 1.3rem; margin: 16px 8px 8px; }
+  p { font-size: 0.9rem; margin: 0 8px 13px; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 8px 16px; }
+  .text-link { display: inline-flex; align-items: center; gap: 7px; margin: 0 8px; font-weight: 700; color: var(--oxblood); text-decoration: none; }
+  .text-link:hover { text-decoration: underline; }
+</style>
+

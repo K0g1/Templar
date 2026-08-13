@@ -1,0 +1,41 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Icon from '../components/Icon.astro';
+import Fleuron from '../components/art/Fleuron.astro';
+import { url, repo } from '../lib/site';
+---
+<BaseLayout title="Templar privacy & safety" description="No telemetry, no accounts, no runtime network traffic, and a fail-closed model for untrusted style data.">
+  <header class="page-hero paper-panel deckle">
+    <span class="eyebrow">Privacy &amp; safety</span>
+    <h1>Local by design.</h1>
+    <p>Templar has no account, telemetry, ads, API key, analytics, or runtime network traffic. Safety boundaries are documented as product contracts.</p>
+  </header>
+
+  <section class="site-section">
+    <div class="grid grid-4">
+      <article class="paper-card"><Icon name="eyeoff" class="card-icon" /><h3>No collection</h3><p>The plugin does not send note content or usage data anywhere.</p></article>
+      <article class="paper-card"><Icon name="lock" class="card-icon" /><h3>Vault APIs only</h3><p>It reads and writes through Obsidian’s browser-platform vault APIs.</p></article>
+      <article class="paper-card"><Icon name="layers" class="card-icon" /><h3>Leaf-scoped CSS</h3><p>Custom CSS is parsed, validated, compiled, and isolated to one leaf.</p></article>
+      <article class="paper-card"><Icon name="shield" class="card-icon" /><h3>Recovery first</h3><p>Unsupported, future, invalid, or protected data fails closed.</p></article>
+    </div>
+  </section>
+
+  <section class="site-section compact">
+    <div class="paper-panel policy">
+      <div class="fleuron-row center-fleuron"><Fleuron /></div>
+      <h2>This website collects nothing, too.</h2>
+      <p>There are no analytics scripts, advertising pixels, account forms, or Templar-hosted APIs. The optional light/dark desk preference is stored only in your browser. GitHub hosts the Pages site and external GitHub links are governed by GitHub’s policies.</p>
+      <div><a class="button primary" href={url('/docs/developers/security/')}>Read the security model <Icon name="arrow" /></a><a class="button" href={repo + '/security'}>Security policy <Icon name="github" /></a></div>
+    </div>
+  </section>
+</BaseLayout>
+<style>
+  .policy { padding: 50px; max-width: 900px; margin: auto; text-align: center; }
+  .center-fleuron { justify-content: center; margin-bottom: 18px; }
+  .policy p { font-family: var(--display); font-size: 1.1rem; line-height: 1.65; margin: 18px 0 26px; }
+  .policy > div:last-child { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  @media (max-width: 600px) {
+    .policy { padding: 32px 22px; }
+  }
+</style>
+

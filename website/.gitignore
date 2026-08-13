@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+
+# Rebuilt from the plugin's canonical metadata, docs, and changelog.
+src/data/*.generated.json
+src/content/docs/
+
+# Rebuilt from the canonical examples and plugin compiler.
+public/field-guide/
+src/data/field-guide.generated.json

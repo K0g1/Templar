@@ -1,0 +1,92 @@
+---
+// StyleDemo — an interactive style library: every swatch is a miniature real
+// render driven by the plugin's compiled stylesheet, and the preview note
+// swaps styles live.
+import fieldGuide from '../data/field-guide.generated.json';
+const samples = fieldGuide.styleSamples;
+const sampleHtml = fieldGuide.sampleHtml;
+---
+<div class="style-demo paper-panel" data-style-demo>
+  <div class="demo-library">
+    <div class="demo-tools"><strong>Page Styles</strong><span>Search · Recent · Favorites</span></div>
+    <div class="style-grid">
+      {samples.map((sample, index) => (
+        <button type="button" class:list={['style-swatch', { selected: index === 0 }]} data-style={sample.slug} aria-pressed={index === 0 ? 'true' : 'false'}>
+          <span class="swatch-paper">
+            <span class="live-note-scope" data-templar-scope={sample.scopeId} aria-hidden="true">
+              <style is:inline set:html={sample.css}></style>
+              <div class="templar-page"><div class="templar-page-content swatch-content" set:html={sampleHtml} /></div>
+            </span>
+          </span>
+          {sample.label}
+        </button>
+      ))}
+    </div>
+  </div>
+  <div class="demo-note-host">
+    {samples.map((sample, index) => (
+      <div class:list={['demo-note-pane', { active: index === 0 }]} data-demo-pane={sample.slug}>
+        <div class="demo-note-topline">
+          <span class="preview-state" data-preview-state>Previewing · no note changes</span>
+          <span class="state-chip applied" hidden>Applied · design copied into note</span>
+        </div>
+        <div class="demo-note-frame">
+          <div class="live-note-scope" data-templar-scope={sample.scopeId}>
+            <style is:inline set:html={sample.css}></style>
+            <div class="templar-page"><div class="templar-page-content" set:html={sampleHtml} /></div>
+          </div>
+        </div>
+        <button class="button primary" type="button" data-apply-style>Apply explicitly</button>
+      </div>
+    ))}
+  </div>
+</div>
+<script>
+  document.querySelectorAll<HTMLElement>('[data-style-demo]').forEach((demo) => {
+    const swatches = demo.querySelectorAll<HTMLButtonElement>('[data-style]');
+    const panes = demo.querySelectorAll<HTMLElement>('[data-demo-pane]');
+    swatches.forEach((swatch) => swatch.addEventListener('click', () => {
+      const slug = swatch.dataset.style;
+      swatches.forEach((entry) => {
+        const selected = entry === swatch;
+        entry.classList.toggle('selected', selected);
+        entry.setAttribute('aria-pressed', String(selected));
+      });
+      panes.forEach((pane) => {
+        const active = pane.dataset.demoPane === slug;
+        pane.classList.toggle('active', active);
+        if (active) {
+          const state = pane.querySelector<HTMLElement>('[data-preview-state]');
+          if (state) state.textContent = 'Previewing · no note changes';
+          const chip = pane.querySelector<HTMLElement>('.state-chip');
+          if (chip) chip.hidden = true;
+        }
+      });
+    }));
+    demo.querySelectorAll<HTMLButtonElement>('[data-apply-style]').forEach((button) => button.addEventListener('click', () => {
+      const pane = button.closest<HTMLElement>('[data-demo-pane]');
+      const state = pane?.querySelector<HTMLElement>('[data-preview-state]');
+      const chip = pane?.querySelector<HTMLElement>('.state-chip');
+      if (state) state.textContent = 'Applied · design copied into note';
+      if (chip) chip.hidden = false;
+    }));
+  });
+</script>
+<style>
+  .swatch-paper { display: block; height: 64px; margin-bottom: 8px; border: 1px solid rgba(0,0,0,0.1); overflow: hidden; position: relative; background: #fdfaf0; }
+  .swatch-paper .live-note-scope { position: absolute; inset: 0; }
+  .swatch-paper .templar-page { min-height: 0; height: auto; }
+  .swatch-paper .templar-page-content { transform: scale(0.28); transform-origin: top left; width: 357% !important; max-width: none !important; }
+  .demo-note-host { min-height: 380px; display: flex; flex-direction: column; }
+  .demo-note-pane { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  html.js .demo-note-pane { display: none; }
+  html.js .demo-note-pane.active { display: flex; }
+  html:not(.js) .demo-note-pane { margin-bottom: 28px; }
+  .demo-note-topline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .demo-note-frame { flex: 1; min-height: 280px; }
+  .demo-note-frame .live-note-scope { height: 100%; }
+  .demo-note-frame .templar-page { height: 100%; overflow: auto; }
+  .demo-note-frame .templar-page-content { box-shadow: 0 12px 28px rgba(45, 37, 28, 0.2); border: 1px solid rgba(40, 32, 20, 0.14); }
+  .demo-note-host .button { align-self: flex-start; }
+</style>
+

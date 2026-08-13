@@ -1,0 +1,73 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Icon from '../components/Icon.astro';
+import Fleuron from '../components/art/Fleuron.astro';
+import AlpineVignette from '../components/art/AlpineVignette.astro';
+import { url, repo } from '../lib/site';
+const principles = ['Markdown first','Note-scoped','Portable','Explicit writes','Local & private','Safe evolution','Browser-platform runtime'];
+---
+<BaseLayout title="About Templar" description="Why Templar exists, what it owns, and the principles that keep your notes portable and yours.">
+  <header class="page-hero paper-panel deckle">
+    <span class="eyebrow">About Templar</span>
+    <h1>Built for better notes.</h1>
+    <p>Templar helps Markdown notes gain intentional visual design without taking ownership of the writing beneath it.</p>
+    <div class="hero-ornament alpine"><AlpineVignette /></div>
+  </header>
+
+  <section class="site-section">
+    <div class="section-heading">
+      <h2>Why Templar exists.</h2>
+      <p>Obsidian is excellent at storing Markdown. Templar lets an individual note also feel like a journal page, study sheet, project brief, or field log — without turning presentation into a global theme.</p>
+      <div class="fleuron-row"><Fleuron /></div>
+    </div>
+    <div class="grid grid-3">
+      <article class="paper-card"><Icon name="file" class="card-icon" /><h3>Markdown first</h3><p>No hidden format. Remove Templar and the note is still ordinary Markdown.</p></article>
+      <article class="paper-card"><Icon name="layers" class="card-icon" /><h3>Note-scoped design</h3><p>The complete style belongs to one note and one exact rendering leaf.</p></article>
+      <article class="paper-card"><Icon name="shield" class="card-icon" /><h3>Portable and self-contained</h3><p>Everything needed to render the design travels in the note.</p></article>
+    </div>
+  </section>
+
+  <section class="site-section compact">
+    <div class="section-heading"><h2>Design principles.</h2><div class="fleuron-row"><Fleuron /></div></div>
+    <ol class="principles paper-panel">{principles.map((principle,index)=><li><b>{index+1}</b><span>{principle}</span></li>)}</ol>
+  </section>
+
+  <section class="site-section ownership">
+    <div class="paper-panel ownership-panel">
+      <div><h2>What Templar owns.</h2><ul><li>Visual styling rules that enhance your note.</li><li>Note-scoped configuration under one frontmatter property.</li><li>Safe library, preview, import, export, and synchronization workflows.</li></ul></div>
+      <div><h2>What Templar does not own.</h2><ul><li>Your Markdown body or unrelated frontmatter.</li><li>Your vault, global Obsidian interface, or workflow.</li><li>An account, cloud service, analytics, or advertising system.</li></ul></div>
+    </div>
+  </section>
+
+  <section class="site-section compact">
+    <div class="open-source paper-panel">
+      <div><span class="eyebrow">MIT licensed</span><h2>Open source by design.</h2><p>Inspect the implementation, read the contracts, report issues, or help make Templar better.</p></div>
+      <div><a class="button primary" href={repo}><Icon name="github" /> View on GitHub</a><a class="button" href={repo + '/blob/main/CONTRIBUTING.md'}>Contributing guide <Icon name="arrow" /></a><a class="button" href={url('/docs/developers/architecture/')}>Architecture <Icon name="arrow" /></a></div>
+    </div>
+  </section>
+</BaseLayout>
+<style>
+  .hero-ornament.alpine { right: 0; bottom: -30px; width: 320px; opacity: 0.85; }
+  .principles { list-style: none; padding: 20px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--line); }
+  .principles li { background: var(--paper-0); padding: 22px 12px; display: flex; flex-direction: column; gap: 12px; font-family: var(--display); }
+  .principles b { display: grid; place-items: center; background: var(--oxblood); color: #fff7ee; border-radius: 50%; width: 29px; height: 29px; }
+  .ownership-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+  .ownership-panel > div { background: var(--paper-0); padding: 42px; }
+  .ownership-panel h2 { font-size: 1.9rem; }
+  .ownership-panel ul { margin: 22px 0 0; padding-left: 22px; }
+  .ownership-panel li { margin: 10px 0; }
+  .open-source { padding: 42px; display: flex; justify-content: space-between; gap: 30px; align-items: center; }
+  .open-source p { margin-top: 12px; }
+  .open-source > div:last-child { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  @media (max-width: 900px) {
+    .principles { grid-template-columns: repeat(2, 1fr); }
+    .ownership-panel { grid-template-columns: 1fr; }
+    .open-source { align-items: flex-start; flex-direction: column; }
+    .open-source > div:last-child { justify-content: flex-start; }
+  }
+  @media (max-width: 520px) {
+    .principles { grid-template-columns: 1fr; }
+    .ownership-panel > div, .open-source { padding: 28px 22px; }
+  }
+</style>
+

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750">
+  <defs>
+    <linearGradient id="cream" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f1e8"/><stop offset="1" stop-color="#e8e3d2"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 L0 0 0 40" fill="none" stroke="#25282e" stroke-opacity="0.22" stroke-width="1"/>
+    </pattern>
+    <pattern id="gridMajor" width="200" height="200" patternUnits="userSpaceOnUse">
+      <path d="M200 0 L0 0 0 200" fill="none" stroke="#25282e" stroke-opacity="0.3" stroke-width="1.4"/>
+    </pattern>
+    <filter id="plateShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#20232a" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1200" height="750" fill="url(#cream)"/>
+  <rect width="1200" height="750" fill="url(#gridMajor)"/>
+  <rect width="1200" height="750" fill="url(#grid)"/>
+  <g filter="url(#plateShadow)">
+    <rect x="120" y="120" width="960" height="510" fill="#f7f4eb" stroke="#25282e" stroke-width="5"/>
+    <rect x="134" y="134" width="932" height="482" fill="none" stroke="#25282e" stroke-width="1.4"/>
+  </g>
+  <circle cx="420" cy="330" r="120" fill="#cf342d"/>
+  <circle cx="420" cy="330" r="120" fill="none" stroke="#25282e" stroke-width="3"/>
+  <path d="M540,300 L780,470 L540,470 Z" fill="#1d5593"/>
+  <path d="M540,300 L780,470 L540,470 Z" fill="none" stroke="#25282e" stroke-width="3"/>
+  <rect x="540" y="180" width="240" height="120" fill="#e2b924" stroke="#25282e" stroke-width="3"/>
+  <g stroke="#25282e" stroke-width="2.6">
+    <line x1="300" y1="200" x2="300" y2="530"/><line x1="160" y1="310" x2="920" y2="310"/>
+    <line x1="360" y1="200" x2="360" y2="530" stroke-opacity="0.5" stroke-width="1.4"/>
+  </g>
+  <g font-family="Futura, 'Avenir Next', system-ui, sans-serif" fill="#25282e">
+    <text x="600" y="630" font-size="64" font-weight="700" text-anchor="middle" letter-spacing="14">FORM + FUNCTION</text>
+    <text x="600" y="672" font-size="22" text-anchor="middle" letter-spacing="8">HOW A PAGE IS COMPILED</text>
+  </g>
+  <circle cx="905" cy="205" r="14" fill="#cf342d"/>
+  <rect x="212" y="512" width="70" height="70" fill="none" stroke="#1d5593" stroke-width="2.4" transform="rotate(12 247 547)"/>
+</svg>
