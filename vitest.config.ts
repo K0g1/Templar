@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-const benchmarkSourceCommit = 'b63adb76ed1843d17b680244370085a0002fc89a';
+const benchmarkSourceCommit = process.env.TEMPLAR_BENCHMARK_SOURCE_COMMIT ?? 'b63adb76ed1843d17b680244370085a0002fc89a';
 const instrumentationCommit = process.env.TEMPLAR_INSTRUMENTATION_COMMIT ?? 'test-harness';
 
 export default defineConfig({

@@ -176,7 +176,7 @@ async function runScenario(definition: ScenarioDefinition, runNumber: string): P
 describe('synthetic profile harness', () => {
   it('writes bounded raw captures for the reproducible scenario matrix', async () => {
     const runNumber = process.env.TEMPLAR_PROFILE_RUN ?? '1';
-    const root = resolve('perf-results/b63adb76/raw');
+    const root = resolve(process.env.TEMPLAR_PROFILE_ROOT ?? 'perf-results/b63adb76/raw');
     for (const definition of scenarios) {
       const capture = await runScenario(definition, runNumber);
       const directory = resolve(root, definition.category);
@@ -185,7 +185,7 @@ describe('synthetic profile harness', () => {
       await writeFile(file, `${JSON.stringify(capture, null, 2)}\n`);
       expect(capture.schemaVersion).toBe(1);
       expect(capture.profileInstrumentation).toBe(true);
-      expect(capture.sourceCommit).toBe('b63adb76ed1843d17b680244370085a0002fc89a');
+      expect(capture.sourceCommit).toBe(process.env.TEMPLAR_BENCHMARK_SOURCE_COMMIT ?? 'b63adb76ed1843d17b680244370085a0002fc89a');
       expect(capture.stateSnapshots.afterCleanup['PageRenderer.styledViews']).toBe(0);
     }
   }, 120_000);

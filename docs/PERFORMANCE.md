@@ -2,6 +2,8 @@
 
 The repository contains a repeatable benchmark suite for the high-risk paths identified in the audit. It is intentionally informational while the integration suite settles; it does not impose an arbitrary global threshold.
 
+The 2026-08-13 optimization pass is recorded in [`optimization-2026-08-13.md`](performance/optimization-2026-08-13.md). It keeps work-package commits independently revertible and treats structural work-count assertions as the primary gates.
+
 Run it with:
 
 ```bash
@@ -25,3 +27,13 @@ npm run test:coverage
 The report includes lines, statements, functions, and branches without claiming that a pure unit test substitutes for an Obsidian or physical-device check.
 
 Timings, operation rate, and allocation-sensitive behavior are informational trend evidence. Structural renderer cleanup assertions are CI gates: owned styles, Templar classes/properties, preview state, observers, and scheduled animation frames must be released on teardown. Heap measurements remain a manual diagnostic because a repeatable heap harness would require duplicating Obsidian runtime shims outside Vitest.
+
+The profile-only capture commands are compile-time gated and should be run only in a disposable vault. They do not change release defaults:
+
+```bash
+TEMPLAR_BENCHMARK_SOURCE_COMMIT=$(git rev-parse HEAD) \
+TEMPLAR_INSTRUMENTATION_COMMIT=$(git rev-parse HEAD) \
+npm run build:profile
+```
+
+Physical mobile thermal validation is not available in the repository test environment. A mobile result must include a real device, disabled/unstyled control, fixed brightness/power conditions, and raw profile evidence before a thermal claim is made.
