@@ -15,6 +15,7 @@ export function createObserverHarness(): ObserverHarness {
   const resizeInstances: ObserverHarness['resizeInstances'] = [];
   const mutationInstances: ObserverHarness['mutationInstances'] = [];
   const pendingAnimationFrames = new Set<number>();
+  const frameTimers = new Map<number, number>();
   let nextAnimationFrame = 1;
 
   class RealmResizeObserver {
@@ -63,16 +64,23 @@ export function createObserverHarness(): ObserverHarness {
       const frame = nextAnimationFrame;
       nextAnimationFrame += 1;
       pendingAnimationFrames.add(frame);
-      queueMicrotask(() => {
+      const timer = window.setTimeout(() => {
+        frameTimers.delete(frame);
         if (!pendingAnimationFrames.delete(frame)) return;
         callback(Date.now());
-      });
+      }, 0);
+      frameTimers.set(frame, timer);
       return frame;
     },
   });
   Object.defineProperty(window, 'cancelAnimationFrame', {
     configurable: true,
-    value: (frame: number): void => { pendingAnimationFrames.delete(frame); },
+    value: (frame: number): void => {
+      pendingAnimationFrames.delete(frame);
+      const timer = frameTimers.get(frame);
+      if (timer !== undefined) window.clearTimeout(timer);
+      frameTimers.delete(frame);
+    },
   });
   return { window, resizeInstances, mutationInstances, pendingAnimationFrames };
 }

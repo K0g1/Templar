@@ -177,7 +177,11 @@ describe('synthetic profile harness', () => {
   it('writes bounded raw captures for the reproducible scenario matrix', async () => {
     const runNumber = process.env.TEMPLAR_PROFILE_RUN ?? '1';
     const root = resolve(process.env.TEMPLAR_PROFILE_ROOT ?? 'perf-results/b63adb76/raw');
-    for (const definition of scenarios) {
+    const requestedScenario = process.env.TEMPLAR_PROFILE_SCENARIO;
+    const selectedScenarios = requestedScenario
+      ? scenarios.filter((definition) => definition.id === requestedScenario)
+      : scenarios;
+    for (const definition of selectedScenarios) {
       const capture = await runScenario(definition, runNumber);
       const directory = resolve(root, definition.category);
       await mkdir(directory, { recursive: true });
