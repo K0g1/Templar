@@ -226,6 +226,30 @@ export class PageRenderer {
     }
   }
 
+  public scheduleRefreshLeavesWithChangedRoots(reason: RefreshReason = 'layout-change'): void {
+    const leaves = this.app.workspace.getLeavesOfType('markdown');
+    const openLeaves = new Set(leaves);
+    for (const leaf of leaves) {
+      if (!(leaf.view instanceof MarkdownView)) continue;
+      const previous = this.styledViews.get(leaf);
+      const rootChanged = !previous ||
+        previous.contentEl !== leaf.view.contentEl ||
+        (previous.readingRoot !== null && !previous.readingRoot.isConnected) ||
+        (previous.sourceRoot !== null && !previous.sourceRoot.isConnected);
+      if (rootChanged) this.scheduleRefreshLeaf(leaf, reason);
+    }
+    for (const leaf of this.styledViews.keys()) {
+      if (!openLeaves.has(leaf)) this.clearLeaf(leaf);
+    }
+  }
+
+  public clearFile(filePath: string): void {
+    for (const [leaf, state] of this.styledViews) {
+      if (state.filePath === filePath) this.clearLeaf(leaf);
+    }
+    this.styleFingerprints.delete(filePath);
+  }
+
   public async refreshLeafNow(leaf: WorkspaceLeaf, reason: RefreshReason = 'explicit-refresh'): Promise<void> {
     await this.refreshLeaf(leaf, reason);
   }

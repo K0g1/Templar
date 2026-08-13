@@ -26,7 +26,7 @@ export function registerEvents(plugin: TemplarPlugin): void {
         }
         plugin.lastMarkdownLeaf = activeView.leaf;
       }
-      plugin.renderer.scheduleRefreshAll('active-leaf-change');
+      if (activeView) plugin.renderer.scheduleRefreshLeaf(activeView.leaf, 'active-leaf-change');
       plugin.refreshSidebars();
       plugin.updateStatusBar();
     }),
@@ -35,7 +35,8 @@ export function registerEvents(plugin: TemplarPlugin): void {
     plugin.app.workspace.on('file-open', () => {
       plugin.perf.counter('events.file-open.count');
       runBackgroundTask(() => plugin.preview.cancelMismatchedLeaves(), 'preview cleanup after file open');
-      plugin.renderer.scheduleRefreshAll('file-open');
+      const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+      if (activeView) plugin.renderer.scheduleRefreshLeaf(activeView.leaf, 'file-open');
       plugin.updateStatusBar();
     }),
   );
@@ -52,7 +53,7 @@ export function registerEvents(plugin: TemplarPlugin): void {
         const changed = await plugin.preview.cancelMissingLeaves(openLeaves);
         if (changed) plugin.refreshSidebars();
       }, 'preview cleanup after layout change');
-      plugin.renderer.scheduleRefreshAll('layout-change');
+      plugin.renderer.scheduleRefreshLeavesWithChangedRoots('layout-change');
     }),
   );
   registerEvent(plugin,
@@ -97,7 +98,9 @@ export function registerEvents(plugin: TemplarPlugin): void {
         }
         if (file.extension === 'md') runBackgroundTask(() => plugin.evaluateStyleRules(file, true), 'style rule evaluation after rename');
       }
-      plugin.renderer.scheduleRefreshAll('rename');
+      if (file instanceof TFile && file.extension === 'md') {
+        runBackgroundTask(() => plugin.renderer.refreshFile(file, 'rename'), 'renderer refresh after rename');
+      }
     }),
   );
   registerEvent(plugin,
@@ -107,7 +110,7 @@ export function registerEvents(plugin: TemplarPlugin): void {
       plugin.frontmatter.forget(file.path);
       plugin.renderer.forgetStyleFingerprint(file.path);
       if (plugin.usageIndex.isBuilt()) plugin.usageIndex.remove(file.path);
-      plugin.renderer.scheduleRefreshAll('delete');
+      plugin.renderer.clearFile(file.path);
     }),
   );
   registerEvent(plugin,
