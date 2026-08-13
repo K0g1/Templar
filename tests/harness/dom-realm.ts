@@ -11,7 +11,6 @@ export function createObserverHarness(): ObserverHarness {
   // happy-dom intentionally exposes a separate set of DOM types. The harness
   // casts only at this boundary so production code continues to use the
   // browser/Obsidian DOM contracts while the tests can create distinct realms.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- the lint service cannot resolve happy-dom's constructor type; the runtime class is correct and the cast is the documented harness boundary.
   const window = new HappyWindow() as unknown as Window;
   const resizeInstances: ObserverHarness['resizeInstances'] = [];
   const mutationInstances: ObserverHarness['mutationInstances'] = [];
