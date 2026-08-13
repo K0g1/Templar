@@ -75,6 +75,9 @@
   :root[data-theme='dark'] .sl-markdown-content h2,
   :root[data-theme='dark'] .sl-markdown-content h3,
   :root[data-theme='dark'] .sl-markdown-content h4 { color: #f2ead8; }
+  /* Splash heroes (docs index, 404) keep cream paper, so their text stays ink. */
+  :root[data-theme='dark'] .hero h1 { color: var(--ink-1); }
+  :root[data-theme='dark'] .hero .tagline { color: var(--ink-muted); }
   .hero {
     background-color: var(--paper-0);
     background-image:
@@ -89,7 +92,8 @@
     position: relative;
     overflow: hidden;
   }
-  .hero h1 { font-family: var(--display); letter-spacing: -0.03em; }
+  .hero h1 { font-family: var(--display); letter-spacing: -0.03em; color: var(--ink-1); }
+  .hero .tagline { color: var(--ink-muted); }
   .hero .tagline { font-family: var(--display); color: var(--ink-muted); font-size: 1.15rem; }
   .hero .sl-link-button.primary { background: linear-gradient(#8f4130, #7a3223); border-color: var(--oxblood-deep); color: #fff7ee; border-radius: var(--radius); }
   .hero .sl-link-button.secondary { border-color: var(--line-strong); color: var(--ink-1); border-radius: var(--radius); }

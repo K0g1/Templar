@@ -12,6 +12,11 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Templar Docs',
+      head: [
+        { tag: 'meta', attrs: { property: 'og:image', content: site + base + '/og.png' } },
+        { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+        { tag: 'meta', attrs: { name: 'twitter:image', content: site + base + '/og.png' } },
+      ],
       logo: { src: './src/assets/emblem.svg', alt: 'Templar' },
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/K0g1/Templar' }],
       customCss: ['./src/styles/tokens.css', './src/styles/docs.css'],

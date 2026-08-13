@@ -32,12 +32,14 @@ const og = new URL(url(image), Astro.site);
       // Progressive enhancement marker: reveal animations only run when JS exists.
       document.documentElement.classList.add('js');
       const root = document.documentElement;
-      const stored = localStorage.getItem('templar-theme');
+      // One shared theme preference across the site and the Starlight docs layout.
+      const stored = localStorage.getItem('templar-theme') || localStorage.getItem('starlight-theme');
       if (stored) root.dataset.theme = stored;
       const themeToggle = document.querySelector('[data-theme-toggle]');
       const setTheme = (next) => {
         root.dataset.theme = next;
         localStorage.setItem('templar-theme', next);
+        try { localStorage.setItem('starlight-theme', next); } catch { /* docs layout writes its own */ }
         const label = next === 'dark' ? 'Use light desk theme' : 'Use dark desk theme';
         themeToggle?.setAttribute('aria-label', label);
         themeToggle?.setAttribute('title', label);
@@ -53,10 +55,18 @@ const og = new URL(url(image), Astro.site);
         menu.setAttribute('aria-label', open ? 'Open menu' : 'Close menu');
         mobileNav?.classList.toggle('open', !open);
       });
-      const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
-        if (entry.isIntersecting) { entry.target.classList.add('revealed'); observer.unobserve(entry.target); }
-      }), { threshold: 0.08 });
-      document.querySelectorAll('[data-reveal]').forEach((el) => observer.observe(el));
+      // Scroll-reveal is progressive enhancement: if the observer is missing or
+      // throws, every section must stay visible rather than hidden forever.
+      const revealEls = document.querySelectorAll('[data-reveal]');
+      try {
+        if (typeof IntersectionObserver === 'undefined') throw new Error('no IntersectionObserver');
+        const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+          if (entry.isIntersecting) { entry.target.classList.add('revealed'); observer.unobserve(entry.target); }
+        }), { threshold: 0.08 });
+        revealEls.forEach((el) => observer.observe(el));
+      } catch {
+        revealEls.forEach((el) => el.classList.add('revealed'));
+      }
       document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(button.dataset.copy || '');
