@@ -34,7 +34,16 @@ const html = `<!doctype html>
   .button.primary { background: linear-gradient(#8f4130,#7a3223); color: #fff7ee; border-color: #6e2d21; }
   .fleuron { color: var(--brass); width: 220px; margin: 0 auto; opacity: .8; }
   a:focus-visible { outline: 3px solid color-mix(in srgb, var(--olive), white 25%); outline-offset: 3px; border-radius: 2px; }
+  html[data-theme='dark'] { background: #0b0907; }
+  html[data-theme='dark'] body { background: radial-gradient(1100px 640px at 18% -8%, rgba(214,170,104,.07), transparent 55%), linear-gradient(180deg, #171310, #0f0c09); }
+  html[data-theme='dark'] .card { box-shadow: 0 20px 46px rgba(0,0,0,.42), 0 3px 8px rgba(0,0,0,.32); }
 </style>
+<script>
+  try {
+    var t = localStorage.getItem('templar-theme') || localStorage.getItem('starlight-theme');
+    if (t) document.documentElement.dataset.theme = t;
+  } catch (e) { /* storage unavailable */ }
+</script>
 </head>
 <body>
   <main class="card">
