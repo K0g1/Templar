@@ -4,6 +4,8 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.2.0-alpha.3 — 2026-08-12
+
 ### Fixed
 
 - Preserved protected nested source snapshots during page-only edits and routed destructive note updates and synchronization through recovery.
