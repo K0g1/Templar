@@ -3,7 +3,7 @@
 > node scripts/run-profile-synthetic.mjs
 
 
- RUN  v3.2.7 /Users/kevindeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
+ RUN  v3.2.7 /Users/K0g1/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
 
  ✓ tests/profile-synthetic-harness.profile.ts (1 test) 3552ms
    ✓ synthetic profile harness > writes bounded raw captures for the reproducible scenario matrix  3551ms

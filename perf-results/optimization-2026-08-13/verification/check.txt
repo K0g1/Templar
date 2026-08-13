@@ -23,7 +23,7 @@
 > vitest run
 
 
- RUN  v3.2.7 /Users/kevindeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
+ RUN  v3.2.7 /Users/K0g1/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
 
  ✓ tests/performance-monitor.test.ts (5 tests) 62ms
  ✓ tests/recovery-service.test.ts (3 tests) 106ms

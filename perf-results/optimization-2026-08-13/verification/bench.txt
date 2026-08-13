@@ -5,7 +5,7 @@
 Benchmarking is an experimental feature.
 Breaking changes might not follow SemVer, please pin Vitest's version when using it.
 
- RUN  v3.2.7 /Users/kevindeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
+ RUN  v3.2.7 /Users/K0g1/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
 
 
  ✓ tests/performance.bench.ts > Templar pure performance fixtures 7946ms
