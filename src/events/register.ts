@@ -78,7 +78,7 @@ export function registerEvents(plugin: TemplarPlugin): void {
         fingerprintKnown: beforeFingerprint !== null,
         fingerprintChanged: beforeFingerprint === null ? null : beforeFingerprint !== afterFingerprint,
       });
-      runBackgroundTask(() => plugin.renderer.refreshFile(file, 'metadata-change'), 'renderer refresh after metadata change');
+      runBackgroundTask(() => plugin.renderer.refreshFileIfChanged(file, 'metadata-change'), 'renderer refresh after metadata change');
       if (plugin.activeFile()?.path === file.path) {
         plugin.refreshSidebars();
         plugin.updateStatusBar();
@@ -142,7 +142,5 @@ export function registerEvents(plugin: TemplarPlugin): void {
   plugin.registerMarkdownPostProcessor((element, context) => {
     plugin.perf.counter('events.markdown-postprocessor.count');
     plugin.renderer.registerReadingSection(element, context);
-    plugin.perf.counter('events.markdown-postprocessor.scheduleRefreshAll');
-    plugin.renderer.scheduleRefreshAll('markdown-postprocessor');
   });
 }

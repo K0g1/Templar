@@ -69,6 +69,78 @@ function styleAt(index: number): TemplarNoteStyle {
 }
 
 describe('PageRenderer integration lifecycle', () => {
+  it('skips unchanged metadata and differential controller work on a second refresh', async () => {
+    const harness = createObserverHarness();
+    const note = file('Notes/unchanged.md');
+    const leaf = leafFor(harness.window, note);
+    const style = styleAt(0);
+    const app = {
+      workspace: { getLeavesOfType: () => [leaf] },
+      vault: { getAbstractFileByPath: () => note },
+      metadataCache: { getFileCache: () => null },
+    };
+    const frontmatter = { getStyle: vi.fn(() => style), hasStyle: vi.fn(() => true) };
+    const renderer = new PageRenderer(
+      app as never,
+      { ...DEFAULT_SETTINGS, enableReadingView: true, enableLivePreview: false },
+      frontmatter as never,
+      { measurePage: vi.fn(async () => metrics()), clear: vi.fn() } as never,
+    );
+
+    await renderer.refreshAll();
+    const resizeCount = harness.resizeInstances.length;
+    const mutationCount = harness.mutationInstances.length;
+    const styleElement = ((leaf.view as unknown as { contentEl: HTMLElement }).contentEl)
+      .querySelector(':scope > style.templar-note-style');
+
+    await renderer.refreshFileIfChanged(note);
+    expect(harness.resizeInstances.length).toBe(resizeCount);
+    expect(harness.mutationInstances.length).toBe(mutationCount);
+    expect(((leaf.view as unknown as { contentEl: HTMLElement }).contentEl)
+      .querySelector(':scope > style.templar-note-style')).toBe(styleElement);
+
+    renderer.destroy();
+  });
+
+  it('keeps active postprocessor registration local to its owning leaf', async () => {
+    const harness = createObserverHarness();
+    const note = file('Notes/postprocessor.md');
+    const leaf = leafFor(harness.window, note);
+    const content = (leaf.view as unknown as { contentEl: HTMLElement }).contentEl;
+    const root = content.querySelector<HTMLElement>('.markdown-preview-view')!;
+    const sizer = root.querySelector<HTMLElement>('.markdown-preview-sizer')!;
+    const info = new Map<HTMLElement, { lineStart: number; lineEnd: number; text: string }>();
+    const context = {
+      sourcePath: note.path,
+      getSectionInfo: (element: HTMLElement) => info.get(element) ?? null,
+    };
+    const app = {
+      workspace: { getLeavesOfType: () => [leaf] },
+      vault: { getAbstractFileByPath: () => note },
+      metadataCache: { getFileCache: () => null },
+    };
+    const renderer = new PageRenderer(
+      app as never,
+      { ...DEFAULT_SETTINGS, enableReadingView: true, enableLivePreview: false },
+      { getStyle: vi.fn(() => styleAt(0)), hasStyle: vi.fn(() => true) } as never,
+      { measurePage: vi.fn(async () => metrics()), clear: vi.fn() } as never,
+    );
+    await renderer.refreshAll();
+    const globalRefresh = vi.spyOn(renderer, 'scheduleRefreshAll');
+
+    for (let index = 0; index < 100; index += 1) {
+      const section = harness.window.document.createElement('div');
+      section.className = 'markdown-preview-section';
+      section.append(harness.window.document.createElement('p'));
+      sizer.append(section);
+      info.set(section, { lineStart: index * 2, lineEnd: index * 2, text: '' });
+      renderer.registerReadingSection(section, context as never);
+    }
+
+    expect(globalRefresh).not.toHaveBeenCalled();
+    renderer.destroy();
+  });
+
   it('keeps Reading View whitespace identical for preview, persisted apply, and style removal', async () => {
     const harness = createObserverHarness();
     const note = file('Notes/reading-whitespace.md');

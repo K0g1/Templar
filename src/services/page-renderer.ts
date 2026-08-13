@@ -23,6 +23,7 @@ import { PaperOriginController } from './rendering/paper-origin-controller';
 import { ReadingWhitespaceController } from './rendering/reading-whitespace-controller';
 import { OwnedStyleHost } from './rendering/style-host';
 import { VariableBlockRhythmController } from './rendering/variable-block-rhythm-controller';
+import { noteStyleFingerprint, stableFingerprint } from './style-fingerprint';
 import {
   DEFAULT_PERF_FEATURE_MASK,
   TEMPLAR_PERF_ENABLED,
@@ -50,6 +51,16 @@ export type RefreshReason =
 interface StyledView {
   contentEl: HTMLElement;
   filePath: string;
+  styleFingerprint: string;
+  cssFingerprint: string;
+  readingRoot: HTMLElement | null;
+  sourceRoot: HTMLElement | null;
+  controllerKeys: {
+    pageLayout: string;
+    rhythm: string;
+    imageSnap: string;
+    paperOrigin: string;
+  };
 }
 
 interface LeafIssueState {
@@ -66,6 +77,8 @@ interface PreviewState {
 export class PageRenderer {
   private destroyed = false;
   private scheduled = false;
+  private pendingGlobalRefresh = false;
+  private readonly pendingLeaves = new Set<WorkspaceLeaf>();
   private scheduledReason: RefreshReason = 'unknown';
   private readonly leafGenerations = new WeakMap<WorkspaceLeaf, number>();
   private readonly leafScopeIds = new WeakMap<WorkspaceLeaf, number>();
@@ -105,22 +118,44 @@ export class PageRenderer {
 
   public scheduleRefreshAll(reason: RefreshReason = 'unknown'): void {
     this.performanceMonitor?.counter('renderer.scheduleRefreshAll.attempt', 1, { reason });
-    if (this.destroyed || this.scheduled) {
+    if (this.destroyed) {
       this.performanceMonitor?.counter('renderer.scheduleRefreshAll.deduped', 1, { reason });
       return;
     }
+    this.pendingGlobalRefresh = true;
     this.performanceMonitor?.counter('renderer.scheduleRefreshAll.accepted', 1, { reason });
+    this.queueScheduledRefresh(reason);
+  }
+
+  public scheduleRefreshLeaf(leaf: WorkspaceLeaf, reason: RefreshReason = 'unknown'): void {
+    if (this.destroyed) return;
+    this.pendingLeaves.add(leaf);
+    this.performanceMonitor?.counter('renderer.scheduleRefreshLeaf.accepted', 1, { reason });
+    this.queueScheduledRefresh(reason);
+  }
+
+  private queueScheduledRefresh(reason: RefreshReason): void {
+    if (this.scheduled) {
+      this.performanceMonitor?.counter('renderer.scheduleRefresh.deduped', 1, { reason });
+      return;
+    }
     this.scheduled = true;
     this.scheduledReason = reason;
     queueMicrotask(() => {
       this.scheduled = false;
-      if (!this.destroyed) {
-        const scheduledReason = this.scheduledReason;
-        this.scheduledReason = 'unknown';
-        this.refreshAll(scheduledReason).catch((error: unknown) => {
-          console.error('[Templar] Scheduled renderer refresh failed', error);
-        });
-      }
+      if (this.destroyed) return;
+      const scheduledReason = this.scheduledReason;
+      this.scheduledReason = 'unknown';
+      const global = this.pendingGlobalRefresh;
+      this.pendingGlobalRefresh = false;
+      const leaves = [...this.pendingLeaves];
+      this.pendingLeaves.clear();
+      const task = global
+        ? this.refreshAll(scheduledReason)
+        : Promise.all(leaves.map((leaf) => this.refreshLeaf(leaf, scheduledReason))).then(() => undefined);
+      task.catch((error: unknown) => {
+        console.error('[Templar] Scheduled renderer refresh failed', error);
+      });
     });
   }
 
@@ -163,6 +198,31 @@ export class PageRenderer {
         return;
       }
       await this.refreshLeaf(leaf, reason);
+    }
+  }
+
+  public async refreshFileIfChanged(file: TFile, reason: RefreshReason = 'metadata-change'): Promise<void> {
+    if (this.destroyed) return;
+    const leaves = this.app.workspace
+      .getLeavesOfType('markdown')
+      .filter((leaf) => leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path);
+    for (const leaf of leaves) {
+      if (this.destroyed) return;
+      const style = this.resolvedStyle(leaf);
+      const fingerprint = style ? noteStyleFingerprint(style) : null;
+      const rendered = this.styledViews.get(leaf);
+      const hasPreview = this.previews.has(leaf);
+      const unchanged = rendered?.filePath === file.path &&
+        rendered.contentEl === (leaf.view as MarkdownView).contentEl &&
+        !hasPreview &&
+        fingerprint !== null &&
+        this.styleFingerprints.get(file.path) === fingerprint;
+      this.performanceMonitor?.counter(
+        unchanged ? 'renderer.refreshFileIfChanged.skipped' : 'renderer.refreshFileIfChanged.refreshed',
+        1,
+        { reason },
+      );
+      if (!unchanged) await this.refreshLeaf(leaf, reason);
     }
   }
 
@@ -239,6 +299,14 @@ export class PageRenderer {
     context: MarkdownPostProcessorContext,
   ): void {
     this.readingWhitespace.registerSection(element, context);
+    const root = element.closest<HTMLElement>('.markdown-preview-view');
+    if (root?.hasClass(TEMPLAR_PAGE_CLASS)) return;
+    const leaf = this.app.workspace.getLeavesOfType('markdown').find((candidate) =>
+      candidate.view instanceof MarkdownView &&
+      candidate.view.file?.path === context.sourcePath &&
+      candidate.view.contentEl.contains(element),
+    );
+    if (leaf) this.scheduleRefreshLeaf(leaf, 'markdown-postprocessor');
   }
 
   public setFeatureMask(mask: Partial<PerfFeatureMask>, refresh = true): PerfFeatureMask {
@@ -309,6 +377,8 @@ export class PageRenderer {
     this.fontMetrics.clear();
     this.issuesByLeaf.clear();
     this.styleFingerprints.clear();
+    this.pendingLeaves.clear();
+    this.pendingGlobalRefresh = false;
   }
 
   private async refreshLeaf(leaf: WorkspaceLeaf, reason: RefreshReason): Promise<void> {
@@ -346,9 +416,7 @@ export class PageRenderer {
       return;
     }
 
-    if (typeof this.frontmatter.inspect === 'function') {
-      this.styleFingerprints.set(file.path, this.frontmatter.inspect(file).fingerprint);
-    }
+    this.styleFingerprints.set(file.path, noteStyleFingerprint(style));
     this.performanceMonitor?.counter('renderer.refreshLeaf.count', 1, {
       reason,
       leafCount: this.app.workspace.getLeavesOfType('markdown').length,
@@ -373,11 +441,10 @@ export class PageRenderer {
       return;
     }
 
-    if (this.performanceMonitor) {
-      this.performanceMonitor.measureSync('renderer.refreshLeaf.prepareRoots', () => this.prepareViewRoots(view.contentEl));
-    } else {
-      this.prepareViewRoots(view.contentEl);
-    }
+    const previous = this.styledViews.get(leaf);
+    const roots = this.performanceMonitor
+      ? this.performanceMonitor.measureSync('renderer.refreshLeaf.prepareRoots', () => this.prepareViewRoots(view.contentEl, previous))
+      : this.prepareViewRoots(view.contentEl, previous);
     let leafScopeId = this.leafScopeIds.get(leaf);
     if (leafScopeId === undefined) {
       leafScopeId = this.nextLeafScopeId;
@@ -400,57 +467,91 @@ export class PageRenderer {
     }
 
     const styleEl = this.styleHost.ensure(view.contentEl);
-    this.performanceMonitor?.counter('renderer.refreshLeaf.styleHostWrite');
-    styleEl.textContent = compiled.css;
-    this.styledViews.set(leaf, { contentEl: view.contentEl, filePath: file.path });
-    if (this.featureMask.paperOrigin) {
+    if (styleEl.textContent !== compiled.css) {
+      this.performanceMonitor?.counter('renderer.refreshLeaf.styleHostWrite');
+      styleEl.textContent = compiled.css;
+    } else {
+      this.performanceMonitor?.counter('renderer.phase.css.skipped');
+    }
+    const styleFingerprint = noteStyleFingerprint(style);
+    const controllerKeys = this.controllerKeys(style, metrics);
+    const sameRoots = previous?.contentEl === view.contentEl &&
+      previous.readingRoot === roots.readingRoot &&
+      previous.sourceRoot === roots.sourceRoot;
+    const sameKey = (name: keyof StyledView['controllerKeys']): boolean =>
+      sameRoots && previous?.controllerKeys[name] === controllerKeys[name];
+    if (this.featureMask.paperOrigin && !sameKey('paperOrigin')) {
       this.paperOrigin.configure(leaf, view.contentEl, style, metrics);
-    } else {
+    } else if (!this.featureMask.paperOrigin) {
       this.paperOrigin.clear(leaf);
+    } else {
+      this.performanceMonitor?.counter('renderer.phase.paperOrigin.skipped');
     }
-    if (this.featureMask.imageSnap) {
+    if (this.featureMask.imageSnap && !sameKey('imageSnap')) {
       this.imageSnap.configure(leaf, view.contentEl, style);
-    } else {
+    } else if (!this.featureMask.imageSnap) {
       this.imageSnap.clear(leaf);
+    } else {
+      this.performanceMonitor?.counter('renderer.phase.imageSnap.skipped');
     }
-    if (this.featureMask.variableRhythm) {
+    if (this.featureMask.variableRhythm && !sameKey('rhythm')) {
       this.rhythm.configure(leaf, view.contentEl, style);
-    } else {
+    } else if (!this.featureMask.variableRhythm) {
       this.rhythm.clear(leaf);
-    }
-    if (this.featureMask.pageLayout) {
-      this.pageLayout.configure(leaf, view.contentEl, style);
     } else {
-      this.pageLayout.clear(leaf);
+      this.performanceMonitor?.counter('renderer.phase.rhythm.skipped');
     }
-    const readingRoot = view.contentEl.querySelector<HTMLElement>(
-      ':scope > .markdown-reading-view > .markdown-preview-view, :scope > .markdown-preview-view',
-    );
+    if (this.featureMask.pageLayout && !sameKey('pageLayout')) {
+      this.pageLayout.configure(leaf, view.contentEl, style);
+    } else if (!this.featureMask.pageLayout) {
+      this.pageLayout.clear(leaf);
+    } else {
+      this.performanceMonitor?.counter('renderer.phase.pageLayout.skipped');
+    }
+    this.styledViews.set(leaf, {
+      contentEl: view.contentEl,
+      filePath: file.path,
+      styleFingerprint,
+      cssFingerprint: compiled.css,
+      readingRoot: roots.readingRoot,
+      sourceRoot: roots.sourceRoot,
+      controllerKeys,
+    });
+    const readingRoot = roots.readingRoot;
     if (this.featureMask.readingWhitespace && this.settings.enableReadingView && readingRoot) {
       this.performanceMonitor?.counter('renderer.refreshLeaf.readingPrepare');
-      this.readingWhitespace.prepareCachedSections(readingRoot, file);
-      this.performanceMonitor?.counter('renderer.refreshLeaf.readingActivate');
-      this.readingWhitespace.activateRoot(readingRoot, file);
+      if (!sameRoots || previous?.readingRoot !== readingRoot) {
+        this.readingWhitespace.prepareCachedSections(readingRoot, file);
+        this.performanceMonitor?.counter('renderer.refreshLeaf.readingActivate');
+        this.readingWhitespace.activateRoot(readingRoot, file);
+      } else {
+        this.performanceMonitor?.counter('renderer.phase.readingWhitespace.skipped');
+      }
     } else if (readingRoot) {
       if (this.featureMask.readingWhitespace) this.readingWhitespace.deactivateRoot(readingRoot);
       else this.readingWhitespace.clearRoot(readingRoot);
     }
   }
 
-  private prepareViewRoots(contentEl: HTMLElement): void {
-    for (const element of contentEl.querySelectorAll(`.${TEMPLAR_PAGE_CLASS}`)) {
-      element.removeClass(TEMPLAR_PAGE_CLASS);
-    }
-    for (const element of contentEl.querySelectorAll(`.${TEMPLAR_CONTENT_CLASS}`)) {
-      element.removeClass(TEMPLAR_CONTENT_CLASS);
-    }
-
+  private prepareViewRoots(contentEl: HTMLElement, previous?: StyledView): {
+    readingRoot: HTMLElement | null;
+    sourceRoot: HTMLElement | null;
+  } {
     const readingRoot = contentEl.querySelector<HTMLElement>(
       ':scope > .markdown-reading-view > .markdown-preview-view, :scope > .markdown-preview-view',
     );
     const sourceRoot = contentEl.querySelector<HTMLElement>(
       ':scope > .markdown-source-view.mod-cm6',
     );
+    for (const oldRoot of [previous?.readingRoot, previous?.sourceRoot]) {
+      if (oldRoot && oldRoot !== readingRoot && oldRoot !== sourceRoot) oldRoot.removeClass(TEMPLAR_PAGE_CLASS);
+    }
+    if (previous?.readingRoot && previous.readingRoot !== readingRoot) {
+      previous.readingRoot.querySelector(':scope > .markdown-preview-sizer')?.removeClass(TEMPLAR_CONTENT_CLASS);
+    }
+    if (previous?.sourceRoot && previous.sourceRoot !== sourceRoot) {
+      previous.sourceRoot.querySelector(':scope > .cm-sizer')?.removeClass(TEMPLAR_CONTENT_CLASS);
+    }
     if (this.settings.enableReadingView && readingRoot) {
       readingRoot.addClass(TEMPLAR_PAGE_CLASS);
       readingRoot
@@ -468,6 +569,16 @@ export class PageRenderer {
         ?.querySelector(':scope > .cm-sizer')
         ?.addClass(TEMPLAR_CONTENT_CLASS);
     }
+    return { readingRoot, sourceRoot };
+  }
+
+  private controllerKeys(style: TemplarNoteStyle, metrics: unknown): StyledView['controllerKeys'] {
+    return {
+      pageLayout: stableFingerprint({ page: style.page, layout: style.layout, baseline: style.baseline }),
+      rhythm: stableFingerprint({ baseline: style.baseline }),
+      imageSnap: stableFingerprint({ baseline: style.baseline.enabled, mode: style.baseline.mode, unit: style.baseline.unit, snapImages: style.baseline.snapImages }),
+      paperOrigin: stableFingerprint({ baseline: style.baseline, metrics }),
+    };
   }
 
   private observeFontDocument(document: Document): void {
