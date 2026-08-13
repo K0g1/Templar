@@ -348,10 +348,25 @@ export class ReadingWhitespaceController {
       return;
     }
     if (topIndex >= 0) state.topLevelSections.splice(topIndex, 1);
-    const topInsert = state.topLevelSections.findIndex((section) =>
-      (this.sectionInfo(state, section)?.lineStart ?? 0) > range.lineStart,
-    );
-    state.topLevelSections.splice(topInsert < 0 ? state.topLevelSections.length : topInsert, 0, current);
+    const lastTopLevel = state.topLevelSections[state.topLevelSections.length - 1];
+    const lastTopLevelLine = lastTopLevel
+      ? this.sectionInfo(state, lastTopLevel)?.lineStart ?? 0
+      : Number.NEGATIVE_INFINITY;
+    if (range.lineStart >= lastTopLevelLine) {
+      this.performanceMonitor?.counter('reading.topLevel.fastAppend');
+      state.topLevelSections.push(current);
+    } else {
+      this.performanceMonitor?.counter('reading.topLevel.binaryInsert');
+      let low = 0;
+      let high = state.topLevelSections.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        const middleInfo = this.sectionInfo(state, state.topLevelSections[middle]!);
+        if ((middleInfo?.lineStart ?? 0) <= range.lineStart) low = middle + 1;
+        else high = middle;
+      }
+      state.topLevelSections.splice(low, 0, current);
+    }
     const index = state.topLevelSections.indexOf(current);
     if (index === 0) this.reconcileLeadingSpacer(state, current);
     else this.reconcileGapSpacer(state, state.topLevelSections[index - 1]!, current);
