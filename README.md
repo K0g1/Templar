@@ -8,7 +8,7 @@ Templar turns ordinary Obsidian notes into polished journals, study sheets, proj
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 > [!IMPORTANT]
-> Templar is alpha software. BRAT is a supported alpha installation path under final clean-vault validation; this project does not call it recommended until the release E2E matrix is recorded. Manual installation remains available. Back up important vaults before testing prerelease software.
+> Templar is beta software. BRAT and manual release assets are supported prerelease installation paths. Back up important vaults before testing prerelease software; physical iOS and Android validation remains a beta reporting target.
 
 ## See what your notes can become
 
@@ -38,7 +38,7 @@ Templar includes **132 built-in styles** organized into themed folders, with ins
 - **Print-ready output:** prepare fonts, images, pagination, paper, patterns, watermarks, and page sizes before handing the styled note to Obsidian's print dialog.
 - **Desktop and mobile:** the same self-contained note design works across Obsidian desktop and mobile.
 
-## Alpha installation via BRAT
+## Beta installation via BRAT
 
 1. Install **Obsidian42 - BRAT** from Community Plugins and enable it.
 2. Run **BRAT: Add a beta plugin for testing** from the command palette.
@@ -47,7 +47,7 @@ Templar includes **132 built-in styles** organized into themed folders, with ins
 
 [Add Templar to BRAT](obsidian://brat?plugin=K0g1/Templar)
 
-For reproducible bug reports, run **BRAT: Add a beta plugin with frozen version based on a release tag**, enter `K0g1/Templar`, and use `1.2.0-alpha.5`. Frozen installs do not follow later releases automatically. BRAT's current minimum Obsidian version is documented as 1.11.4; Templar itself supports Obsidian 1.8.0, so use manual installation on older supported Obsidian versions.
+For reproducible bug reports, run **BRAT: Add a beta plugin with frozen version based on a release tag**, enter `K0g1/Templar`, and use `1.2.0-beta.1`. Frozen installs do not follow later releases automatically. BRAT's current minimum Obsidian version is documented as 1.11.4; Templar itself supports Obsidian 1.8.0, so use manual installation on older supported Obsidian versions.
 
 See the full [installation guide](docs/INSTALLATION.md) for updates, reinstalling, troubleshooting, and manual installation.
 

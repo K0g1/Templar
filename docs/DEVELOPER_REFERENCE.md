@@ -1,6 +1,6 @@
 # Developer reference and handoff
 
-This is the current implementation reference for Templar. It is deliberately more operational than the landing-page README: a future contributor should be able to use this document to find the source of a behavior, understand the persistence contract, run the release gates, and identify the remaining alpha limitations.
+This is the current implementation reference for Templar. It is deliberately more operational than the landing-page README: a future contributor should be able to find the source of a behavior, understand the persistence contract, run the release gates, and identify the remaining beta limitations.
 
 ## Current snapshot
 
@@ -8,16 +8,16 @@ This is the current implementation reference for Templar. It is deliberately mor
 | --- | --- |
 | Product | Templar, an Obsidian plugin that gives each Markdown note a portable visual page style |
 | Repository | [`K0g1/Templar`](https://github.com/K0g1/Templar) |
-| Current release | `1.2.0-alpha.5` (published remediation validation candidate) |
+| Current release | `1.2.0-beta.1` (published beta compatibility target) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
-| Installation channel | BRAT supported for alpha testing under final clean-vault validation; manual release artifacts remain supported; not listed in Community Plugins yet |
+| Installation channel | BRAT and manual release artifacts supported for beta testing; not listed in Community Plugins yet |
 | Built-in catalog | 132 styles: 28 hand-tuned core styles plus 104 data-driven pack styles |
 | Themed packs | 13 folders/packs, including Essentials, Color Stories, Seasons, Celebrations & Occasions, Academia, Professional, Journaling & Wellness, Travel, Nature, Vintage & Editorial, Dark & Neon, Fantasy & Whimsy, and Pastels |
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
 | Test status at this snapshot | Run `npm test` for the current pure plus targeted DOM integration count; `npm run check` and `npm run verify:ship -- <version>` are the required gates |
 
-`1.2.0-alpha.5` validates the remediation contracts: recovery-backed protected writes, migration-aware reads/imports, compare-and-swap automatic rules, restored explicit batch semantics, stricter custom-CSS isolation/readability checks, and full PageRenderer lifecycle evidence. It corrects the prior immutable tags’ release-workflow handoff without moving them. The release note is [`releases/1.2.0-alpha.5.md`](releases/1.2.0-alpha.5.md).
+`1.2.0-beta.1` freezes the remediation compatibility contracts: recovery-backed protected writes, migration-aware reads/imports, compare-and-swap automatic rules, explicit batch semantics, stricter custom-CSS isolation/readability checks, and full PageRenderer lifecycle evidence. It retains the v1 note/template schema and never repoints the earlier immutable alpha tags. The release note is [`releases/1.2.0-beta.1.md`](releases/1.2.0-beta.1.md).
 
 ### Source-of-truth rules
 
@@ -367,10 +367,10 @@ npm test                    # pure plus targeted DOM integration tests
 npm run test:coverage       # V8 lines/statements/functions/branches report
 npm run build               # runtime tsc, production browser bundle, mobile/privacy guards
 npm run check               # lint + test-inclusive tsc + test + build + BRAT verifier
-npm run verify:ship -- 1.2.0-alpha.5
+npm run verify:ship -- 1.2.0-beta.1
 npm run verify:mobile       # scan the generated main.js directly
-npm run verify:release -- 1.2.0-alpha.5
-npm run verify:brat -- 1.2.0-alpha.5
+npm run verify:release -- 1.2.0-beta.1
+npm run verify:brat -- 1.2.0-beta.1
 git diff --check
 ```
 
@@ -402,7 +402,7 @@ Never repoint an existing release tag. If a released artifact is wrong, incremen
 
 ## Known limitations and intentional behavior
 
-- Templar is alpha software and is not searchable in Obsidian's Community Plugins browser. BRAT is a supported alpha install/update channel under final clean-vault validation; it remains unlabelled as recommended until the release E2E matrix is recorded. Manual assets remain supported.
+- Templar is beta software and is not searchable in Obsidian's Community Plugins browser. BRAT and manual assets are supported prerelease install/update channels. Physical iOS and Android device validation remains a tracked beta limitation.
 - Physical iOS and Android release smoke testing is still a maintainer gate. The bundle guard and responsive CSS are automated checks, not proof of every device behavior.
 - A style is a self-contained snapshot copied into each note. Changing a source never changes notes automatically; provenance makes explicit review/merge/replace possible. Older notes without provenance receive conservative legacy choices.
 - Folder organization is one display level. It does not create or infer vault folders, and folder separators are flattened.
