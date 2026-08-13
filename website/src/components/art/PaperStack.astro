@@ -1,0 +1,65 @@
+---
+// A layered stack of ruled papers for the hero backdrop. Pure SVG, torn edges.
+const { tone = 'cream' } = Astro.props;
+---
+<svg class="art paper-stack" viewBox="0 0 640 560" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <linearGradient id="ps-kraft" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d9c39a"/><stop offset="1" stop-color="#c4a97c"/>
+    </linearGradient>
+    <linearGradient id="ps-paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffdf6"/><stop offset="1" stop-color="#f6eeda"/>
+    </linearGradient>
+    <linearGradient id="ps-paper2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fcf8ec"/><stop offset="1" stop-color="#efe4cc"/>
+    </linearGradient>
+    <filter id="ps-shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#2e2618" flood-opacity="0.24"/>
+    </filter>
+    <filter id="ps-shadow-soft" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="7" stdDeviation="12" flood-color="#2e2618" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <!-- bottom kraft sheet -->
+  <g transform="rotate(-3.2 320 300)" filter="url(#ps-shadow)">
+    <path d="M84 96 L556 76 L566 470 C567 486 553 495 539 494 L98 512 C84 513 76 501 77 487 Z" fill="url(#ps-kraft)"/>
+    <path d="M566 470 C567 486 553 495 539 494 L98 512 C84 513 76 501 77 487 Z" fill="url(#ps-kraft)"/>
+  </g>
+  <!-- middle ruled sheet -->
+  <g transform="rotate(1.6 320 300)" filter="url(#ps-shadow-soft)">
+    <path d="M92 128 L550 112 L566 448 C567 464 553 472 539 471 L106 490 C92 491 84 480 85 466 Z" fill="url(#ps-paper2)"/>
+    <g stroke="#5b84a0" stroke-opacity="0.35">
+      <line x1="98" y1="170" x2="556" y2="156"/><line x1="98" y1="204" x2="557" y2="190"/><line x1="98" y1="238" x2="558" y2="224"/>
+      <line x1="98" y1="272" x2="559" y2="258"/><line x1="99" y1="306" x2="559" y2="292"/><line x1="99" y1="340" x2="560" y2="326"/><line x1="100" y1="374" x2="561" y2="360"/><line x1="101" y1="408" x2="561" y2="394"/><line x1="102" y1="442" x2="562" y2="428"/>
+    </g>
+    <line x1="178" y1="152" x2="182" y2="452" stroke="#df6b62" stroke-opacity="0.6"/>
+    <g stroke="#3d4a57" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round">
+      <line x1="196" y1="196" x2="330" y2="190"/>
+      <line x1="196" y1="252" x2="286" y2="248"/>
+    </g>
+  </g>
+  <!-- top sheet: notes + polaroid + tape -->
+  <g filter="url(#ps-shadow)">
+    <path d="M106 70 L530 62 L544 388 C545 403 531 412 518 410 L120 428 C107 429 100 418 101 405 Z" fill="url(#ps-paper)"/>
+    <g stroke="#b5b09f" stroke-opacity="0.5" stroke-width="2.6" stroke-linecap="round">
+      <line x1="132" y1="118" x2="252" y2="112"/>
+      <line x1="132" y1="150" x2="368" y2="144"/>
+      <line x1="132" y1="182" x2="330" y2="176"/>
+      <line x1="132" y1="214" x2="288" y2="208"/>
+    </g>
+    <g transform="rotate(-2.4 382 218)">
+      <rect x="338" y="138" width="96" height="120" fill="#f2eee2" stroke="#d8d2bf"/>
+      <rect x="346" y="146" width="80" height="80" fill="#8fa6ad"/>
+      <path d="M346 196 l22 -14 l16 20 l20 -26 l22 20 v30 h-80 z" fill="#5d7d6e"/>
+      <circle cx="392" cy="166" r="9" fill="#f5d78e"/>
+      <rect x="346" y="234" width="80" height="16" fill="none" stroke="#c9c3ae"/>
+    </g>
+    <!-- washi tape -->
+    <g transform="rotate(-7 158 84)">
+      <path d="M100 60 h96 l8 -12 l6 10 l8 -8 l8 10 l8 -9 l10 10 l8 -11 l8 11 h30 l10 -8 l10 10 l9 -10 v26 h-219 l7 -12 l8 11 z" fill="#8a3b2c" fill-opacity="0.88"/>
+      <g stroke="#6e2d21" stroke-opacity="0.35" stroke-width="0.8">
+        <path d="M100 60 h96 M196 60 l8 -12 M204 48 l6 10 M210 58 l8 -8 M218 50 l8 10 M226 60 l8 -9 M234 51 l10 10 M244 61 l8 -11 M252 50 l8 11 M260 61 h30 M290 61 l10 -8 M300 53 l10 10 M310 63 l9 -10"/>
+      </g>
+    </g>
+  </g>
+</svg>

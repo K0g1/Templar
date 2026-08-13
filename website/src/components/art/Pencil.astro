@@ -1,0 +1,29 @@
+---
+interface Props { class?: string }
+const { class: className } = Astro.props;
+---
+<svg class={'art pencil ' + (className ?? '')} viewBox="0 0 260 60" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="pc-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d98a4f"/><stop offset="0.45" stop-color="#c8713a"/><stop offset="1" stop-color="#a8582a"/>
+    </linearGradient>
+    <linearGradient id="pc-brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d8b877"/><stop offset="1" stop-color="#8a6a30"/>
+    </linearGradient>
+    <filter id="pc-shadow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#221a10" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <g transform="rotate(-8 130 30)" filter="url(#pc-shadow)">
+    <path d="M8 22 L196 8 L244 18 L248 24 L52 42 Z" fill="url(#pc-body)"/>
+    <path d="M8 22 L196 8 L244 18 L248 24 L52 42 Z" fill="none" stroke="#7c3f1d" stroke-width="1.2"/>
+    <path d="M196 8 L244 18 L240 20 L190 11 Z" fill="#e8d9b8"/>
+    <path d="M244 18 L248 24 L243 24.5 L240 20 Z" fill="#2b2620"/>
+    <path d="M249 25.4 C255 27 258 30 257 33.4 C256.6 35.6 254 36.4 252 35 L247.6 32.8 Z" fill="#2b2620"/>
+    <path d="M8 22 L52 42 L48 44 L4 24 Z" fill="url(#pc-brass)"/>
+    <line x1="16" y1="24" x2="56" y2="41" stroke="#f5e3b2" stroke-opacity="0.7" stroke-width="1.6"/>
+    <g stroke="#7c3f1d" stroke-opacity="0.5" stroke-width="1">
+      <line x1="20" y1="24" x2="60" y2="40"/><line x1="30" y1="22" x2="70" y2="38"/>
+    </g>
+  </g>
+</svg>

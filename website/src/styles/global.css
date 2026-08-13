@@ -1,0 +1,104 @@
+@layer reset {
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body, h1, h2, h3, h4, h5, h6, p, figure, blockquote, ul, ol, dl, dd { margin: 0; }
+  img, svg { display: block; }
+  img { max-width: 100%; height: auto; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: inherit; }
+  button { background: none; border: 0; }
+  ul, ol { padding-inline-start: 1.2em; }
+}
+
+@layer base {
+  html { background: var(--desk-1); color-scheme: light; }
+  html[data-theme='dark'] { background: #0b0907; color-scheme: dark; }
+
+  body {
+    min-width: 320px;
+    color: var(--desk-ink-1);
+    font-family: var(--ui);
+    line-height: 1.55;
+    background:
+      radial-gradient(1200px 700px at 18% -8%, var(--desk-glow), transparent 55%),
+      radial-gradient(900px 600px at 95% 12%, var(--desk-glow), transparent 60%),
+      linear-gradient(180deg, var(--desk-0), var(--desk-1));
+    background-attachment: fixed;
+    transition: background var(--motion-base) ease;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: var(--paper-grain);
+    opacity: var(--desk-grain-opacity);
+    z-index: -1;
+  }
+
+  h1, h2, h3, h4, .brand { font-family: var(--display); font-weight: 600; line-height: 1.06; text-wrap: balance; color: var(--desk-ink-1); }
+  h1 { font-size: clamp(2.9rem, 5.6vw, 4.9rem); letter-spacing: -0.035em; }
+  h2 { font-size: clamp(2rem, 3.8vw, 3.3rem); letter-spacing: -0.025em; }
+  h3 { font-size: 1.32rem; }
+  p { color: var(--desk-ink-2); }
+  a { text-underline-offset: 3px; }
+  code { font-family: var(--mono); }
+  :focus-visible { outline: 3px solid color-mix(in srgb, var(--olive), white 25%); outline-offset: 3px; border-radius: 2px; }
+  ::selection { background: rgba(163, 124, 60, 0.28); }
+
+  main { overflow: clip; }
+  .site-section { width: min(var(--content), calc(100% - 36px)); margin: 0 auto; padding: 92px 0; }
+  .site-section.compact { padding: 54px 0; }
+  .site-section.wide { width: min(1280px, calc(100% - 36px)); }
+
+  .section-heading { max-width: 760px; margin-bottom: 38px; }
+  .section-heading.center { margin-inline: auto; text-align: center; }
+  .section-heading p { font-family: var(--display); font-size: 1.16rem; line-height: 1.6; margin-top: 14px; color: var(--desk-ink-muted); }
+  .section-heading .fleuron-row { display: flex; justify-content: flex-start; margin-top: 18px; color: var(--brass); }
+  .section-heading.center .fleuron-row { justify-content: center; }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font: 700 0.74rem/1 var(--ui);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--desk-accent);
+    background: rgba(138, 59, 44, 0.08);
+    border: 1px solid rgba(138, 59, 44, 0.22);
+    padding: 8px 12px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  .eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--oxblood); opacity: 0.7; }
+
+  .screen-reader { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  .prose-note { font-size: 0.82rem; color: var(--ink-muted); }
+}
+
+@layer utilities {
+  .grid { display: grid; gap: 24px; }
+  .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .serif { font-family: var(--display); }
+  .muted { color: var(--ink-muted); }
+  .center { text-align: center; }
+  .mono { font-family: var(--mono); }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  @media (max-width: 900px) {
+    .grid-4, .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: 1fr; }
+    .site-section { padding: 68px 0; }
+  }
+  @media (max-width: 600px) {
+    .grid-4, .grid-3 { grid-template-columns: 1fr; }
+    .site-section { width: min(100% - 24px, var(--content)); padding: 52px 0; }
+    h1 { font-size: clamp(2.5rem, 13vw, 3.6rem); }
+  }
+}
+

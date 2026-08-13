@@ -1,0 +1,101 @@
+---
+// LiveNote — renders a field-guide note inside a drawn Obsidian-style window.
+// The note HTML and the scoped stylesheet come from the real plugin compiler
+// (field-guide.generated.json); the window chrome around it is pure CSS/SVG.
+import { url } from '../lib/site';
+import Icon from './Icon.astro';
+
+interface GuideNote {
+  slug: string;
+  basename?: string;
+  title: string;
+  styleName: string;
+  styleFolder?: string;
+  css: string;
+  html: string;
+  scopeId: string;
+  paperColor?: string;
+}
+interface Props {
+  note: GuideNote;
+  notes?: GuideNote[];
+  height?: string;
+  chrome?: 'full' | 'note' | 'bare';
+  label?: string;
+}
+const { note, notes = [note], height = '640px', chrome = 'full', label } = Astro.props;
+const resolvedHtml = note.html.replaceAll('src="field-guide/', 'src="' + url('/field-guide/'));
+const activeIndex = Math.max(0, notes.findIndex((entry) => entry.slug === note.slug));
+const folderFiles = notes.slice(0, 3);
+---
+
+<div class="live-note-window live-note-chrome-{chrome}" style={'--ln-height: ' + height} data-live-note>
+  {chrome === 'full' && (
+    <div class="ln-titlebar" aria-hidden="true">
+      <div class="ln-traffic"><span></span><span></span><span></span></div>
+      <div class="ln-window-title">{note.title} — Lightweight Vault — Obsidian</div>
+      <div class="ln-window-icon"><Icon name="moon" size={13} /></div>
+    </div>
+  )}
+  <div class="ln-body">
+    {chrome === 'full' && (
+      <aside class="ln-sidebar" aria-hidden="true">
+        <div class="ln-vault">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+          Lightweight Vault
+        </div>
+        <span class="ln-file folder">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+          Templar Field Guide
+        </span>
+        {notes.map((entry, index) => (
+          <span class:list={['ln-file', { active: index === activeIndex }]}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
+            {entry.title}
+          </span>
+        ))}
+        <span class="ln-file">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
+          Assets
+        </span>
+      </aside>
+    )}
+    <div class="ln-main">
+      {chrome !== 'bare' && (
+        <div class="ln-tabs" aria-hidden="true">
+          <span class="ln-tab active">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
+            {note.title}
+          </span>
+          {folderFiles.filter((entry) => entry.slug !== note.slug).slice(0, 2).map((entry) => (
+            <span class="ln-tab">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
+              {entry.title}
+            </span>
+          ))}
+        </div>
+      )}
+      <div class="ln-viewport">
+        <div class="ln-scroll">
+          {label && <div class="ln-label">{label}</div>}
+          <div class="live-note-scope" data-templar-scope={note.scopeId}>
+            <style is:inline set:html={note.css}></style>
+            <div class="markdown-reading-view">
+              <div class="markdown-preview-view markdown-rendered node-insert-event is-readable-line-width allow-fold-headings allow-fold-lists templar-page">
+                <div class="markdown-preview-sizer markdown-preview-section templar-page-content" set:html={resolvedHtml} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {chrome === 'full' && (
+        <div class="ln-statusbar" aria-hidden="true">
+          <span>{note.styleName}</span>
+          <span>0 errors · templar</span>
+          <span class="ln-right"><span>Ln 1, Col 1</span><span>UTF-8</span><span>Markdown</span></span>
+        </div>
+      )}
+    </div>
+  </div>
+</div>
+

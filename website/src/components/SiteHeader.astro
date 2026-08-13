@@ -1,0 +1,38 @@
+---
+import Icon from './Icon.astro';
+import project from '../data/project.generated.json';
+import { url, repo } from '../lib/site';
+const path = Astro.url.pathname;
+const nav = [
+  ['/', 'Home'], ['/about/', 'About'], ['/examples/', 'Examples'], ['/docs/', 'Docs'],
+  ['/installation/', 'Installation'], ['/changelog/', 'Changelog']
+];
+function active(href: string) {
+  const target = url(href);
+  return href === '/' ? path === target || path === target + '/' : path.startsWith(target);
+}
+---
+<header class="site-header" data-header>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="header-inner">
+    <a class="brand" href={url('/')} aria-label="Templar home">
+      <img src={url('/favicon.svg')} alt="" width="42" height="42" />
+      <span>Templar<small>Visual identity for Markdown</small></span>
+    </a>
+    <nav class="desktop-nav" aria-label="Primary navigation">
+      {nav.map(([href, label]) => <a href={url(href)} aria-current={active(href) ? 'page' : undefined}>{label}</a>)}
+      <a href={repo}>GitHub</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-button theme-toggle" type="button" aria-label="Use dark desk theme" title="Use dark desk theme" data-theme-toggle><Icon name="moon" /></button>
+      <a class="button primary header-install" href={url('/installation/')}>Install {project.stage === 'stable' ? '' : 'Beta'} <Icon name="download" size={17} /></a>
+      <button class="icon-button menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav" data-menu-toggle><Icon name="menu" /></button>
+    </div>
+  </div>
+  <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation" data-mobile-nav>
+    {nav.map(([href, label]) => <a href={url(href)} aria-current={active(href) ? 'page' : undefined}>{label}</a>)}
+    <a href={repo}>GitHub</a>
+    <a class="button primary" href={url('/installation/')}>Install Templar</a>
+  </nav>
+</header>
+

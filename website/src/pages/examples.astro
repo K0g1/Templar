@@ -1,0 +1,85 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ShowcaseCard from '../components/ShowcaseCard.astro';
+import Icon from '../components/Icon.astro';
+import Fleuron from '../components/art/Fleuron.astro';
+import BotanicalCorner from '../components/art/BotanicalCorner.astro';
+import fieldGuide from '../data/field-guide.generated.json';
+import { bratUrl, repo, url } from '../lib/site';
+import project from '../data/project.generated.json';
+
+const notes = fieldGuide.notes;
+const cardTags: Record<string, string[]> = {
+  'templar-field-manual': ['Academia', 'Ruled', 'Quickstart'],
+  'the-style-library': ['Editorial', 'Library', 'Packs'],
+  'how-a-page-is-compiled': ['Technical', 'Graph', 'Internals'],
+  'night-shift-notes': ['Dark & Neon', 'Paged', 'Mobile'],
+};
+const cardFeatures: Record<string, string[]> = {
+  'templar-field-manual': ['Command map as a styled table', 'Tip and warning callouts', 'Checklist of design controls', 'Highlighted ==exact== text and code'],
+  'the-style-library': ['Pack table across six moods', 'Quote and success callouts', 'Exported pack formats', 'A drop cap, like the real style'],
+  'how-a-page-is-compiled': ['Real YAML and CSS in code fences', 'Safety boundary table', 'Example callouts', 'The scoped-selector model'],
+  'night-shift-notes': ['Pageless vs paged comparison', 'Print, mobile, and sync checklist', 'A midnight quote callout', 'The fixed-canvas contract'],
+};
+---
+<BaseLayout title="Templar field guide" description="Templar notes about Templar — real Markdown notes, rendered live with the plugin's own compiled stylesheets.">
+  <header class="page-hero paper-panel deckle">
+    <span class="eyebrow">The field guide</span>
+    <h1>Notes about the plugin,<br />written in the plugin.</h1>
+    <p>Four display notes that document Templar while exercising its features — callouts, tables, task lists, highlights, code, embeds, and six heading levels. Each one carries a real <code>templar</code> frontmatter block and is rendered here with the same compiled stylesheet the plugin generates inside Obsidian.</p>
+    <div class="hero-ornament"><BotanicalCorner /></div>
+  </header>
+
+  <section class="site-section">
+    <div class="grid grid-2 field-guide-cards">
+      {notes.map((note) => (
+        <ShowcaseCard
+          note={note}
+          href={repo + '/blob/main/examples/Templar%20Field%20Guide/' + note.basename + '.md'}
+          tags={cardTags[note.slug] ?? [note.styleFolder]}
+        />
+      ))}
+    </div>
+  </section>
+
+  <section class="site-section compact">
+    <div class="section-heading">
+      <h2>What each note demonstrates.</h2>
+      <div class="fleuron-row"><Fleuron /></div>
+    </div>
+    <div class="grid grid-4">
+      {notes.map((note, index) => (
+        <article class="paper-card">
+          <h3>{note.title}</h3>
+          <ul class="feature-list">
+            {(cardFeatures[note.slug] ?? []).map((feature) => (
+              <li><Icon name="check" size={16} />{feature}</li>
+            ))}
+            <li><Icon name="check" size={16} />Style: {note.styleName} ({note.styleFolder})</li>
+          </ul>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="site-section compact">
+    <div class="paper-panel cta">
+      <div><h2>Build your own visual identity.</h2><p>Install the beta, browse {project.builtInStyleCount} styles, then make any one of them your own.</p></div>
+      <div><a class="button primary" href={bratUrl}>Install Beta <Icon name="download" /></a><a class="button" href={url('/docs/')}>Explore Docs <Icon name="book" /></a></div>
+    </div>
+  </section>
+</BaseLayout>
+<style>
+  .page-hero code { font-family: var(--mono); font-size: 0.95em; }
+  .field-guide-cards { gap: 26px; }
+  .feature-list { padding: 0; list-style: none; }
+  .feature-list li { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.88rem; }
+  .feature-list li :global(.icon) { color: var(--olive); flex: none; }
+  .cta { display: flex; align-items: center; justify-content: space-between; gap: 30px; padding: 38px 44px; }
+  .cta p { margin-top: 10px; }
+  .cta > div:last-child { display: flex; gap: 10px; flex-wrap: wrap; }
+  @media (max-width: 750px) {
+    .cta { align-items: flex-start; flex-direction: column; padding: 30px 22px; }
+  }
+</style>
+

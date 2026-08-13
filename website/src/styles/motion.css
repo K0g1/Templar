@@ -1,0 +1,14 @@
+@layer motion {
+  html.js [data-reveal] { opacity: 0; transform: translateY(14px); transition: opacity 480ms var(--ease-out), transform 480ms var(--ease-out); }
+  html.js [data-reveal].revealed { opacity: 1; transform: none; }
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root) { animation: fade-out 120ms ease both; }
+  ::view-transition-new(root) { animation: fade-in 240ms var(--ease-out) both; }
+  @keyframes fade-out { to { opacity: 0; } }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    html.js [data-reveal] { opacity: 1; transform: none; }
+  }
+}
+

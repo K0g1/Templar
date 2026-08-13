@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d0a24"/><stop offset="0.45" stop-color="#2a1450"/><stop offset="0.75" stop-color="#7b2d7e"/><stop offset="1" stop-color="#ff7a3d"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe066"/><stop offset="0.55" stop-color="#ff9e3d"/><stop offset="1" stop-color="#ff4d6d"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#241539"/><stop offset="1" stop-color="#0d0922"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffb3d1" stop-opacity="0.5"/><stop offset="1" stop-color="#ffb3d1" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="bloom" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+  <rect width="1200" height="750" fill="url(#sky)"/>
+  <g stroke="#ffffff" stroke-opacity="0.5">
+    <circle cx="140" cy="120" r="2" fill="#fff" stroke="none"/><circle cx="330" cy="70" r="1.6" fill="#fff" stroke="none"/>
+    <circle cx="520" cy="140" r="2.2" fill="#fff" stroke="none"/><circle cx="980" cy="90" r="1.8" fill="#fff" stroke="none"/>
+    <circle cx="1100" cy="200" r="2" fill="#fff" stroke="none"/><circle cx="760" cy="60" r="1.4" fill="#fff" stroke="none"/>
+    <circle cx="90" cy="260" r="1.5" fill="#fff" stroke="none"/><circle cx="210" cy="200" r="1.2" fill="#fff" stroke="none"/>
+  </g>
+  <circle cx="600" cy="545" r="260" fill="url(#glow)" filter="url(#bloom)"/>
+  <g>
+    <circle cx="600" cy="545" r="180" fill="url(#sun)"/>
+    <g fill="#2a1450">
+      <rect x="470" y="470" width="260" height="10"/><rect x="446" y="496" width="308" height="13"/><rect x="426" y="524" width="348" height="16"/>
+      <rect x="414" y="554" width="372" height="19"/><rect x="406" y="586" width="388" height="22"/>
+    </g>
+  </g>
+  <g fill="#171034">
+    <path d="M0,620 L180,520 L330,600 L470,540 L600,610 L760,530 L900,600 L1050,545 L1200,600 L1200,750 L0,750 Z"/>
+  </g>
+  <path d="M0,660 L200,640 L380,668 L560,645 L760,670 L960,648 L1200,668 L1200,750 L0,750 Z" fill="url(#floor)"/>
+  <g stroke="#f04bb3" stroke-opacity="0.85" stroke-width="2">
+    <g transform="translate(0,632)">
+      <line x1="0" y1="0" x2="1200" y2="110"/><line x1="0" y1="24" x2="1200" y2="134"/><line x1="0" y1="48" x2="1200" y2="158"/>
+      <line x1="0" y1="72" x2="1200" y2="182"/><line x1="0" y1="96" x2="1200" y2="206"/><line x1="0" y1="118" x2="1200" y2="228"/>
+    </g>
+    <g transform="translate(0,632)">
+      <line x1="0" y1="0" x2="0" y2="120"/><line x1="200" y1="0" x2="200" y2="122"/><line x1="400" y1="0" x2="400" y2="124"/>
+      <line x1="600" y1="0" x2="600" y2="126"/><line x1="800" y1="0" x2="800" y2="128"/><line x1="1000" y1="0" x2="1000" y2="130"/><line x1="1200" y1="0" x2="1200" y2="132"/>
+    </g>
+  </g>
+  <g font-family="Futura, 'Avenir Next', system-ui, sans-serif" fill="#ffffff">
+    <text x="600" y="120" font-size="58" font-weight="700" text-anchor="middle" letter-spacing="18">NIGHT SHIFT</text>
+    <text x="600" y="166" font-size="20" text-anchor="middle" letter-spacing="10" fill="#f04bb3">NOTES AFTER DARK</text>
+  </g>
+</svg>

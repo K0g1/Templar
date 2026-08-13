@@ -1,0 +1,197 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Icon from '../components/Icon.astro';
+import LiveNote from '../components/LiveNote.astro';
+import FieldGuideSection from '../components/FieldGuideSection.astro';
+import StyleDemo from '../components/StyleDemo.astro';
+import PageModeDemo from '../components/PageModeDemo.astro';
+import PaperStack from '../components/art/PaperStack.astro';
+import DeskClip from '../components/art/DeskClip.astro';
+import WashiTape from '../components/art/WashiTape.astro';
+import Pencil from '../components/art/Pencil.astro';
+import CoffeeRing from '../components/art/CoffeeRing.astro';
+import Fleuron from '../components/art/Fleuron.astro';
+import Flourish from '../components/art/Flourish.astro';
+import project from '../data/project.generated.json';
+import fieldGuide from '../data/field-guide.generated.json';
+import { url, bratUrl, repo } from '../lib/site';
+
+const heroNote = fieldGuide.notes.find((note) => note.slug === 'templar-field-manual') ?? fieldGuide.notes[0];
+const heroNotes = fieldGuide.notes;
+---
+<BaseLayout title="Templar — Give every Markdown note its own visual identity" description="Templar gives each Obsidian note a self-contained visual page design while the note stays Markdown.">
+  <section class="site-section hero">
+    <div class="hero-copy">
+      <span class="eyebrow">{project.stage} · {project.version} · {project.builtInStyleCount} built-in styles</span>
+      <h1>Give every Markdown note its own <em>visual identity.</em></h1>
+      <div class="hero-flourish"><Flourish /></div>
+      <p class="hero-lead">Templar gives each note a self-contained visual page design — paper, type, grids, and rules — while the note stays pure Markdown. The design travels with the file, and nothing about the writing changes.</p>
+      <div class="hero-actions">
+        <a class="button primary" href={bratUrl}><Icon name="download" /> Install Beta</a>
+        <a class="button" href={url('/docs/')}><Icon name="book" /> Explore Docs</a>
+      </div>
+      <div class="trust-strip">
+        <span class="trust-item"><Icon name="eyeoff" size={16} />No telemetry</span>
+        <span class="trust-item"><Icon name="heart" size={16} />Open source</span>
+        <span class="trust-item"><Icon name="layers" size={16} />Note-scoped</span>
+        <span class="trust-item"><Icon name="file" size={16} />Markdown stays Markdown</span>
+      </div>
+    </div>
+    <div class="hero-visual" aria-label="The Templar Field Manual note rendered by Templar's stylesheet">
+      <div class="hero-desk">
+        <PaperStack />
+        <CoffeeRing class="hero-coffee" />
+        <Pencil class="hero-pencil" />
+        <div class="hero-window-wrap">
+          <div class="hero-tape"><WashiTape variant="oxblood" /></div>
+          <LiveNote note={heroNote} notes={heroNotes} height="560px" chrome="full" />
+          <div class="hero-clip"><DeskClip /></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <FieldGuideSection />
+
+  <section class="site-section process-section" data-reveal>
+    <div class="section-heading">
+      <span class="eyebrow">Explicit by design</span>
+      <h2>From Markdown to designed page.</h2>
+      <p>Trying a style is temporary. Applying it is a clear, deliberate action.</p>
+      <div class="fleuron-row"><Fleuron /></div>
+    </div>
+    <div class="process-grid">
+      <article class="paper-card">
+        <span class="step-no">1</span><h3>Write normally</h3>
+        <pre>{'# Daily Note\n\nToday was great.\n- Hiked 🥾\n- Took photos 📷'}</pre>
+      </article>
+      <span class="process-arrow" aria-hidden="true">→</span>
+      <article class="paper-card">
+        <span class="step-no">2</span><h3>Preview a style</h3>
+        <p>The library previews a style on your real note. Nothing is written yet.</p>
+        <span class="state-chip">Temporary · leaf-local</span>
+      </article>
+      <span class="process-arrow" aria-hidden="true">→</span>
+      <article class="paper-card">
+        <span class="step-no">3</span><h3>Apply explicitly</h3>
+        <pre>{'templar:\n  style: alpine-log\n  version: 1'}</pre>
+        <span class="state-chip applied">Written only on Apply</span>
+      </article>
+      <span class="process-arrow" aria-hidden="true">→</span>
+      <article class="paper-card">
+        <span class="step-no">4</span><h3>The design travels</h3>
+        <p>The complete design is stored with the note. The Markdown body remains yours.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="site-section" data-reveal>
+    <div class="section-heading">
+      <span class="eyebrow">Style library</span>
+      <h2>{project.builtInStyleCount} styles today. Your own tomorrow.</h2>
+      <p>Search, favorites, folders, three browsing densities, instant preview, explicit Apply, and portable packs.</p>
+    </div>
+    <StyleDemo />
+  </section>
+
+  <section class="site-section page-modes" data-reveal>
+    <div class="section-heading">
+      <span class="eyebrow">Accurate page behavior</span>
+      <h2>One design. Two ways to read it.</h2>
+      <p>Pageless notes reflow naturally. Paged notes keep a fixed canvas and scale as a whole sheet on narrow screens.</p>
+    </div>
+    <PageModeDemo />
+  </section>
+
+  <section class="site-section" data-reveal>
+    <div class="section-heading">
+      <span class="eyebrow">Built for real notes</span>
+      <h2>Expressive, without becoming fragile.</h2>
+      <div class="fleuron-row"><Fleuron /></div>
+    </div>
+    <div class="grid grid-4 feature-grid">
+      {[['book','Rich Markdown','Headings, lists, tasks, tables, callouts, code, embeds, Mermaid, and images.'],['ruler','Baseline-aware','Real browser font measurement keeps type and paper patterns aligned.'],['layers','Paged + pageless','Natural reflow or A4, Letter, and custom fixed-canvas pages.'],['wand','Note-only control','Customize one note without changing the source style or global theme.'],['arrow','Safe evolution','Review source changes and merge them with note-specific edits.'],['pack','Portable formats','Export one .templar style or a validated multi-style .templar-pack.'],['shield','Scoped custom CSS','Validated virtual selectors compile into one exact Markdown leaf.'],['print','Print preparation','Fonts, images, pagination, patterns, and paper settle before print.']].map(([icon,title,copy]) => <article class="feature-card"><Icon name={icon} /><h3>{title}</h3><p>{copy}</p></article>)}
+    </div>
+  </section>
+
+  <section class="site-section sync-section" data-reveal>
+    <div class="sync-copy">
+      <span class="eyebrow">Stay in control</span>
+      <h2>Customize without losing the source.</h2>
+      <p>A note remembers the source snapshot it received. When that source changes, Templar can compare the applied snapshot, the current source, and your local edits — so updates are reviewable, not silent.</p>
+      <a class="button" href={url('/docs/developers/developer-reference/#note-state-synchronization-and-automation')}>How synchronization works <Icon name="arrow" /></a>
+    </div>
+    <div class="merge-visual paper-panel">
+      <div class="merge-card source">Applied snapshot</div>
+      <div class="merge-card current">Current source</div>
+      <div class="merge-card local">Your note edits</div>
+      <div class="merge-result">Three-way merge<br /><small>Keep safe changes. Review conflicts.</small></div>
+    </div>
+  </section>
+
+  <section class="site-section" data-reveal>
+    <div class="section-heading">
+      <span class="eyebrow">Local &amp; private</span>
+      <h2>Your notes, your data.</h2>
+      <p>Privacy and safety are product contracts, not a badge added later.</p>
+    </div>
+    <div class="grid grid-4 safety-grid">
+      <article class="paper-card"><Icon name="eyeoff" class="card-icon" /><h3>No network traffic</h3><p>The plugin makes no runtime network requests.</p></article>
+      <article class="paper-card"><Icon name="lock" class="card-icon" /><h3>No telemetry or account</h3><p>No ads, analytics, API keys, or cloud service.</p></article>
+      <article class="paper-card"><Icon name="layers" class="card-icon" /><h3>CSS stays in one leaf</h3><p>Even two panes showing the same note remain isolated.</p></article>
+      <article class="paper-card"><Icon name="shield" class="card-icon" /><h3>Protected data fails closed</h3><p>Future, invalid, or unsupported styles are never silently rewritten.</p></article>
+    </div>
+    <p class="security-link"><a href={url('/privacy/')}>Read Privacy &amp; Safety <Icon name="arrow" size={17} /></a></p>
+  </section>
+
+  <section class="site-section install-cta" data-reveal>
+    <div class="paper-panel install-panel">
+      <div>
+        <span class="eyebrow">{project.stage} release</span>
+        <h2>Ready to style your first note?</h2>
+        <p>Install Templar {project.version} with BRAT, or use the exact manual release assets.</p>
+        <p class="install-status">Requires Obsidian {project.minAppVersion}+ · Back up important vaults before testing prerelease software.</p>
+      </div>
+      <div class="install-buttons">
+        <a class="button primary" href={bratUrl}><Icon name="download" /> Install with BRAT</a>
+        <a class="button" href={url('/installation/')}>Installation guide <Icon name="arrow" /></a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+<style>
+  .hero { display: grid; grid-template-columns: 0.92fr 1.08fr; align-items: center; gap: 30px; padding-top: 60px; }
+  .hero h1 { font-size: clamp(2.9rem, 4.9vw, 4.5rem); }
+  .hero h1 em { font-style: italic; color: var(--oxblood); }
+  .hero-flourish { color: var(--brass); width: 230px; margin: 14px 0 4px; }
+  .hero-lead { font-family: var(--display); font-size: clamp(1.12rem, 1.5vw, 1.32rem); line-height: 1.6; max-width: 560px; margin-top: 20px; }
+  .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+
+  .hero-visual { position: relative; min-width: 0; }
+  .hero-desk { position: relative; padding: 30px 40px 10px; }
+  .hero-desk :global(.paper-stack) { position: absolute; inset: 0 0 -8px 0; width: 100%; height: 100%; }
+  .hero-window-wrap { position: relative; z-index: 2; transform: rotate(-0.4deg); }
+  .hero-tape { position: absolute; z-index: 5; top: -16px; left: 24%; width: 130px; transform: rotate(-3deg); }
+  .hero-tape :global(svg) { width: 100%; height: auto; filter: drop-shadow(0 3px 4px rgba(40, 28, 12, 0.3)); }
+  .hero-clip { position: absolute; z-index: 5; top: -26px; right: -12px; width: 74px; transform: rotate(7deg); }
+  .hero-coffee { position: absolute; z-index: 1; bottom: -16px; right: -18px; width: 210px; opacity: 0.5; transform: rotate(14deg); }
+  .hero-pencil { position: absolute; z-index: 3; bottom: 26px; left: -14px; width: 230px; opacity: 0.9; }
+  .hero-desk :global(.live-note-window) { max-height: 620px; }
+
+  @media (max-width: 1020px) {
+    .hero { grid-template-columns: 1fr; padding-top: 44px; }
+    .hero-copy { text-align: center; }
+    .hero-lead { margin-inline: auto; }
+    .hero-actions, .hero .trust-strip { justify-content: center; }
+    .hero-flourish { margin-inline: auto; }
+  }
+  @media (max-width: 600px) {
+    .hero { padding-top: 30px; }
+    .hero-desk { padding: 18px 12px 4px; }
+    .hero-tape { width: 96px; left: 14%; }
+    .hero-clip { width: 54px; right: -2px; top: -18px; }
+    .hero-coffee { width: 130px; }
+    .hero-pencil { width: 140px; left: -6px; }
+  }
+</style>
+

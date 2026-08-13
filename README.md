@@ -6,6 +6,7 @@ Templar turns ordinary Obsidian notes into polished journals, study sheets, proj
 
 [![Release](https://img.shields.io/github/v/release/K0g1/Templar?include_prereleases&sort=semver&style=for-the-badge)](https://github.com/K0g1/Templar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Website](https://img.shields.io/badge/Website-k0g1.github.io%2FTemplar-8a3b2c?style=for-the-badge)](https://k0g1.github.io/Templar/)
 
 > [!IMPORTANT]
 > Templar is beta software. BRAT and manual release assets are supported prerelease installation paths. Back up important vaults before testing prerelease software; physical iOS and Android validation remains a beta reporting target.
@@ -16,7 +17,7 @@ Templar turns ordinary Obsidian notes into polished journals, study sheets, proj
 | :---: | :---: | :---: |
 | [![A botanical journal note in Obsidian with fern photography, warm paper, a heading, highlighted text, a table, and checklist](docs/assets/gallery/botanical-field-notes.webp)](docs/assets/gallery/botanical-field-notes.webp) | [![An alpine travel note in Obsidian with mountain photography, cool paper styling, highlighted route notes, a numbered list, and a table](docs/assets/gallery/alpine-field-log.webp)](docs/assets/gallery/alpine-field-log.webp) | [![A dark neon creative brief in Obsidian with cyberpunk photography, magenta and cyan accents, code, a palette table, checklist, and callouts](docs/assets/gallery/neon-night-brief.webp)](docs/assets/gallery/neon-night-brief.webp) |
 
-These are real Markdown notes rendered by Templar inside Obsidian—not mockups. The example notes and original artwork are included in [`examples/`](examples/).
+These are real Markdown notes rendered by Templar inside Obsidian—not mockups. The example notes and original artwork are included in [`examples/`](examples/). The [project website](https://k0g1.github.io/Templar/) renders the field-guide notes in `examples/Templar Field Guide/` live, using Templar's own compiled stylesheets.
 
 ## A style library you can actually explore
 

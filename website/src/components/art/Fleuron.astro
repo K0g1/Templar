@@ -1,0 +1,24 @@
+---
+// Engraved fleuron divider.
+interface Props { class?: string }
+const { class: className } = Astro.props;
+---
+<svg class={'art fleuron ' + (className ?? '')} viewBox="0 0 320 64" fill="none" aria-hidden="true">
+  <g stroke="currentColor" stroke-width="1.6" fill="none">
+    <path d="M8 32 H118" stroke-opacity="0.65"/>
+    <path d="M202 32 H312" stroke-opacity="0.65"/>
+    <g stroke-width="1.3">
+      <path d="M160 12 C162 20 162 26 160 32 C158 38 158 44 160 52"/>
+      <path d="M148 16 C150 24 151 28 152 32 C151 36 150 40 148 48"/>
+      <path d="M172 16 C170 24 169 28 168 32 C169 36 170 40 172 48"/>
+    </g>
+    <path d="M160 6 l4.5 4.5 L160 15 l-4.5 -4.5 Z" fill="currentColor"/>
+    <path d="M160 49 l4.5 4.5 L160 58 l-4.5 -4.5 Z" fill="currentColor"/>
+    <circle cx="160" cy="32" r="3.4" fill="currentColor"/>
+    <g stroke-opacity="0.5" stroke-width="1">
+      <path d="M132 22 C136 27 138 30 139 32 C138 34 136 37 132 42"/>
+      <path d="M188 22 C184 27 182 30 181 32 C182 34 184 37 188 42"/>
+    </g>
+    <circle cx="160" cy="32" r="9" stroke-opacity="0.35"/>
+  </g>
+</svg>

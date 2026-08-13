@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fdfaf0"/><stop offset="1" stop-color="#f3ead6"/>
+    </linearGradient>
+    <radialGradient id="wash" cx="0.62" cy="0.42" r="0.55">
+      <stop offset="0" stop-color="#df6b62" stop-opacity="0.16"/><stop offset="0.6" stop-color="#df6b62" stop-opacity="0.05"/><stop offset="1" stop-color="#df6b62" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d5a6e"/><stop offset="1" stop-color="#23394a"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9a765"/><stop offset="1" stop-color="#8c6c33"/>
+    </linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#2b2a26" flood-opacity="0.25"/></filter>
+  </defs>
+  <rect width="1200" height="750" fill="url(#paper)"/>
+  <rect width="1200" height="750" fill="url(#wash)"/>
+  <g stroke="#5b84a0" stroke-opacity="0.5" stroke-width="1">
+    <line x1="0" y1="60" x2="1200" y2="60"/><line x1="0" y1="120" x2="1200" y2="120"/><line x1="0" y1="180" x2="1200" y2="180"/>
+    <line x1="0" y1="240" x2="1200" y2="240"/><line x1="0" y1="300" x2="1200" y2="300"/>
+  </g>
+  <g transform="translate(640,392)" filter="url(#shadow)">
+    <circle r="236" fill="#fbf6e8" stroke="url(#brass)" stroke-width="7"/>
+    <circle r="210" fill="none" stroke="url(#ink)" stroke-width="1.4" stroke-opacity="0.65"/>
+    <circle r="186" fill="none" stroke="url(#ink)" stroke-width="1" stroke-opacity="0.4"/>
+    <g stroke="url(#ink)" stroke-opacity="0.55">
+      <line x1="0" y1="-236" x2="0" y2="236"/><line x1="-236" y1="0" x2="236" y2="0"/>
+      <line x1="-167" y1="-167" x2="167" y2="167"/><line x1="167" y1="-167" x2="-167" y2="167"/>
+    </g>
+    <g fill="none" stroke="url(#ink)" stroke-width="1.1">
+      <circle r="226"/><circle r="146"/><circle r="96"/><circle r="52"/>
+    </g>
+    <g transform="translate(0,-196)">
+      <polygon points="0,-46 13,0 0,16 -13,0" fill="url(#ink)"/>
+      <polygon points="0,-46 13,0 -13,0" fill="#e8eef2" opacity="0.35"/>
+    </g>
+    <g transform="translate(0,196) rotate(180)">
+      <polygon points="0,-46 13,0 0,16 -13,0" fill="#b9c8d2"/>
+      <polygon points="0,-46 13,0 -13,0" fill="#eef4f7" opacity="0.5"/>
+    </g>
+    <g transform="translate(196,0) rotate(90)">
+      <polygon points="0,-30 9,0 0,11 -9,0" fill="url(#ink)" opacity="0.85"/>
+    </g>
+    <g transform="translate(-196,0) rotate(-90)">
+      <polygon points="0,-30 9,0 0,11 -9,0" fill="url(#ink)" opacity="0.5"/>
+    </g>
+    <g transform="translate(0,-210) rotate(45)">
+      <polygon points="0,-18 7,0 0,8 -7,0" fill="#df6b62"/>
+    </g>
+    <g transform="translate(0,-210) rotate(135)">
+      <polygon points="0,-18 7,0 0,8 -7,0" fill="#df6b62" opacity="0.55"/>
+    </g>
+    <circle r="10" fill="#df6b62"/>
+    <circle r="10" fill="none" stroke="url(#brass)" stroke-width="2.5"/>
+  </g>
+  <g font-family="Georgia, 'Times New Roman', serif" text-anchor="middle" fill="#23394a">
+    <text x="640" y="700" font-size="30" letter-spacing="8">ORIENT</text>
+    <text x="640" y="736" font-size="15" letter-spacing="12" fill="#8a7250">FIELD MANUAL N&#176; 01</text>
+  </g>
+  <g transform="translate(130,86)" stroke="#df6b62" stroke-width="1.2" fill="none" opacity="0.8">
+    <path d="M0,0 L64,0 M0,14 L64,14 M0,28 L42,28"/>
+  </g>
+  <g transform="translate(1006,664) rotate(180)" stroke="#df6b62" stroke-width="1.2" fill="none" opacity="0.8">
+    <path d="M0,0 L64,0 M0,14 L64,14 M0,28 L42,28"/>
+  </g>
+</svg>
