@@ -11,11 +11,11 @@ This is the current implementation reference for Templar. It is deliberately mor
 | Current release | `1.2.0-alpha.2` (renderer and baseline audit prerelease) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
-| Installation channel | Manual release artifacts; not listed in Community Plugins yet |
+| Installation channel | BRAT supported for alpha testing under final clean-vault validation; manual release artifacts remain supported; not listed in Community Plugins yet |
 | Built-in catalog | 132 styles: 28 hand-tuned core styles plus 104 data-driven pack styles |
 | Themed packs | 13 folders/packs, including Essentials, Color Stories, Seasons, Celebrations & Occasions, Academia, Professional, Journaling & Wellness, Travel, Nature, Vintage & Editorial, Dark & Neon, Fantasy & Whimsy, and Pastels |
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
-| Test status at this snapshot | 108 Vitest tests; `npm run check` and `npm audit` are the required gates |
+| Test status at this snapshot | Run `npm test` for the current pure plus targeted DOM integration count; `npm run check` and `npm run verify:ship -- <version>` are the required gates |
 
 `1.2.0-alpha.2` audits the UX expansion at the renderer boundary: measured cross-view paper origins, margin-contained variable-block snapping, exact Reading whitespace, corrected pattern geometry, leaf-unique scopes, settled print preparation, stricter untrusted-input handling, and catalog-wide render regressions. The release note is [`releases/1.2.0-alpha.2.md`](releases/1.2.0-alpha.2.md).
 
@@ -75,8 +75,8 @@ One-click apply preserves all page options and attachments on a styled note. An 
 
 - Current Note distinguishes Normal, Applied, Previewing, Modified, Update available, their combined state, and Source missing. Missing sources never affect ordinary rendering.
 - The inspector edits a draft copy live and writes once on Save. Reset Section uses the current source where available, or the opening state for a missing source; Discard restores the opening style.
-- Synchronization compares the note design, its embedded source snapshot, and the current library source. Clean notes replace safely; modified notes can recursively three-way merge unchanged fields, replace, or skip; legacy notes do not claim a safe merge.
-- Ordered style rules support folder (optional descendants), normalized tag, filename starts/ends/contains/exact, and simple frontmatter equality. Conditions within a rule are AND; the first enabled match wins. Automatic triggers react to vault/metadata events and only style unstyled Markdown notes.
+- Synchronization compares the note design, its embedded source snapshot, and the current library source. Clean notes replace safely; modified notes can recursively three-way merge unchanged fields, replace, or skip; legacy or protected nested snapshots do not claim a safe merge and route to Recovery.
+- Ordered style rules support folder (optional descendants), normalized tag, filename starts/ends/contains/exact, and simple frontmatter equality. Conditions within a rule are AND; the first enabled match wins. Automatic triggers react to vault/metadata events and only style unstyled Markdown notes; the exact raw fingerprint captured during absence inspection is rechecked at write time.
 - Existing-note rule application is a dry-run plus explicit chunked bulk action. Synchronization/bulk confirmation reports exact safe/merge/replace/skip or eligible/styled/invalid counts.
 
 ### Template authoring and portability
@@ -148,7 +148,7 @@ templar:
   css: ''
 ```
 
-`FrontmatterService` reads MetadataCache with a small optimistic write-through map, then writes with `FileManager.processFrontMatter()`. It replaces only `frontmatter.templar`; unrelated properties and the Markdown body are preserved. Applying another template preserves page and attachments unless explicit page options are supplied. `removeStyle()` deletes that property. Metadata-cache, rename, and delete events settle or move the optimistic entry.
+`FrontmatterService` classifies MetadataCache data before exposing a small optimistic write-through runtime style, then writes with `FileManager.processFrontMatter()`. Reads can render an in-memory supported migration but never persist it. It replaces only `frontmatter.templar`; unrelated properties and the Markdown body are preserved. Applying another template preserves page and attachments unless explicit page options are supplied. `removeStyle()` deletes that property. Protected outer data and destructive nested source-snapshot changes require Recovery; reviewed writes recheck their raw fingerprint inside the callback. Metadata-cache, rename, and delete events settle or move the optimistic entry.
 
 Reusable exports use `templar-template` and omit `page`, `attachments`, and `provenance`. Import accepts `templar-template`, `templar`, or the inner mapping. Packs use a versioned `templar-pack` wrapper and an array of the same normalized template mappings. `normalizeTemplate()` accepts persisted kebab-case aliases and internal camel-case form, fills defaults for older v1 styles, clamps bounded values, drops unknown fields, and normalizes folder labels. `normalizeNoteStyle()` adds note page options, attachment overrides, and provenance.
 
@@ -264,7 +264,9 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 
 | Path | Responsibility |
 | --- | --- |
-| `src/services/frontmatter.ts` | Obsidian MetadataCache/process-frontmatter boundary and optimistic style state. |
+| `src/services/frontmatter.ts` | Obsidian MetadataCache/process-frontmatter boundary, per-file serialized queue, generation-aware optimistic state, and cache settlement. |
+| `src/services/settings-store.ts` | Serialized settings transactions that publish only after `saveData()` succeeds. |
+| `src/services/style-application.ts` | Single apply/write/remove/batch contract for frontmatter, Recent, usage index, and renderer refresh. |
 | `src/services/template-library.ts` | Built-in/custom catalog snapshots, folder discovery, IDs, save/duplicate/remove, and favorites. |
 | `src/services/preview-session.ts` | Owner/leaf-scoped draft preview sessions, frame coalescing, restore, and cleanup. |
 | `src/services/synchronization.ts` | Provenance snapshots, status classification, safe replacement, legacy handling, and recursive three-way merge. |
@@ -273,10 +275,10 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | `src/services/template-pack.ts` | Bounded pack parse/export, per-member review, duplicate-ID rejection, and conflict-copy IDs. |
 | `src/services/print-layout.ts` | Pure `@page` size selection for pageless/A4/Letter/custom output. |
 | `src/services/print-service.ts` | Renderer/font/image/page settlement, temporary print CSS, host invocation, and restoration. |
-| `src/services/style-compiler.ts` | Structured template → scoped CSS, paper patterns, typography/baseline, blocks, images, watermark, metadata hiding, and page guards. |
+| `src/services/style-compiler.ts` / `src/services/style-compiler/` | Stable compiler barrel and ordered pure structured compiler fragments for paper, typography, headings, lists, blocks, images, attachments, page, and watermark. |
 | `src/services/css-validator.ts` | AST validation for custom CSS selectors, at-rules, values, geometry, resources, and performance hazards. |
 | `src/services/css-compiler.ts` | Virtual-selector expansion, per-leaf scope replacement, and keyframe namespacing. |
-| `src/services/page-renderer.ts` | Leaf discovery, scoped style lifecycle, font-generation guards, Reading sections/spacers, image and variable-block compensation, and PageLayout ownership. |
+| `src/services/page-renderer.ts` / `src/services/rendering/` | Leaf orchestration plus focused style-host, realm, observer, paper-origin, whitespace, and compensation ownership primitives. |
 | `src/services/page-layout.ts` | Paged scale, geometry detection, rendered-block fitting, observers, and page-break cleanup. |
 | `src/services/font-metrics.ts` | Browser font loading, baseline probes, Canvas diagnostics, and bounded LRU measurements. |
 | `src/services/paper-origin.ts` | Pure Source/Live Preview/Reading rhythm-target selection and measured paper-origin calculation. |
@@ -288,7 +290,8 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | --- | --- |
 | `src/ui/styles-view.ts` | Current Note states/actions, four library sections, search/folder/usage/density, lightweight cards, live preview, and roving keyboard navigation. |
 | `src/ui/settings-tab.ts` | Rendering toggles, default style/page flow, rules, library/creator/import, diagnostics, authoring kit, selector reference, issues, and reset. |
-| `src/ui/modals.ts` | Pick/apply/create/page flows, draft inspector, standalone/pack import, pack export, synchronization, rules/dry runs, raw editor, creator, chunked batch apply, and confirmation. |
+| `src/ui/modals.ts` | Compatibility barrel for the workflow modules under `src/ui/modals/`. |
+| `src/ui/modals/*.ts` | Focused modal workflows; shared controls live in `src/ui/modals/shared.ts`, with composition-root coordination in `src/services/plugin-ui-controller.ts`. |
 | `src/ui/template-preview.ts` | Isolated sample content using the production compiler. |
 | `src/ui/issues.ts` | Human-readable validation issue rendering. |
 | `src/editor/hide-metadata.ts` | CodeMirror 6 line decorations for the root `templar:` YAML block; never mutates document text. |
@@ -300,14 +303,24 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | `src/utils/grid.ts` | Grid fitting, heading/image/variable-block correction, page-gap alignment, and geometry scale helpers. |
 | `src/utils/scope.ts` | Collision-free runtime leaf scope values for renderer CSS isolation. |
 | `src/utils/value.ts` | Safe unknown-value coercion, enum/array handling, cloning, slugification, CSS attribute escaping, and rounding. |
-| `src/utils/clipboard.ts` | Browser/mobile-safe clipboard write with a selection fallback. |
+| `src/utils/clipboard.ts` | Browser/mobile-safe clipboard write with a selection fallback and owner-document focus restoration. |
+| `src/services/settings-store.ts` | Serialized settings transactions; publish only after durable persistence succeeds. |
+| `src/services/style-application.ts` | Single note-application contract for frontmatter, recents, usage index, batch results, and renderer refresh. |
+| `src/services/dom-realm.ts` | Derives DOM constructors, timers, and windows from the target leaf. |
+| `src/services/rendering/` | Focused renderer ownership primitives and compatibility re-exports for stylesheet, observer, whitespace, and paper-origin concerns. |
+| `src/services/style-compiler/` | Structured compiler entry point plus pure fragment modules; `src/services/style-compiler.ts` remains a stable barrel. |
+| `tests/*integration.test.ts` | happy-dom/fake-owner lifecycle coverage; these tests are not a substitute for a real Obsidian smoke test. |
+| `tests/performance.bench.ts`, `tests/renderer-performance.bench.ts`, `tests/page-renderer-performance.bench.ts` | Pure, controller, and full-renderer workload fixtures; run with `npm run bench`. |
 | `tests/*.test.ts` | Pure schema/catalog/CSS/compiler/grid/font/whitespace plus synchronization, rules, index, settings, packs, and print regression suites. |
 | `scripts/verify-mobile-bundle.mjs` | Scans generated `main.js` for Node/Electron imports and runtime globals. |
-| `scripts/verify-release.mjs` | Confirms a release tag, package/manifest/versions metadata, and matching release-notes file agree. |
+| `scripts/verify-release.mjs` | Confirms a release tag, package/manifest/lockfile/versions metadata, and matching release-notes file agree. |
+| `scripts/verify-brat-release.mjs` | Verifies exact BRAT artifact names, manifest identity/version, SemVer, casing, and non-empty release assets. |
+| `scripts/verify-runtime-policy.mjs` | Fails on Node/Electron/network/adapter APIs in production source. |
+| `scripts/verify-ship.mjs` | Authoritative local lint/type/test/build/audit/release/BRAT gate and checksum generator. |
 | `version-bump.mjs` | Synchronizes `manifest.json` and `versions.json` from `package.json` during `npm version`. |
 | `esbuild.config.mjs` | Browser-targeted production/development bundle configuration; `main.js` is generated output. |
 | `.github/workflows/ci.yml` | Runs `npm ci` and `npm run check` on pushes to `main` and pull requests. |
-| `.github/workflows/release.yml` | Verifies metadata, installs dependencies, runs lint/test/build, and attaches the three manual-install artifacts to a tag release. |
+| `.github/workflows/release.yml` | Read-only build/verify job, verified artifact transfer, checksum recheck, draft release creation, and final publish. All Actions are full-SHA pinned. |
 
 ## Extension recipes
 
@@ -335,7 +348,7 @@ Use this order so no boundary is skipped:
 
 ### Add a virtual CSS element or Obsidian adapter
 
-The public vocabulary is declared in `src/constants.ts`. Live Preview expansion is localized to `src/services/css-compiler.ts`; root/content discovery is localized to `PageRenderer.prepareViewRoots()`. Keep Obsidian class names out of the template contract, add a focused compiler regression, and inspect Reading plus Live Preview on desktop and mobile.
+The public vocabulary is declared in `src/constants.ts`. Live Preview expansion is localized to `src/services/css/selector-transform.ts`; root/content discovery is localized to `PageRenderer.prepareViewRoots()`. The structured compiler is entered through `src/services/style-compiler.ts` and ordered in `src/services/style-compiler/index.ts`. Keep Obsidian class names out of the template contract, add a focused compiler regression, and inspect Reading plus Live Preview on desktop and mobile.
 
 ### Add a command or setting
 
@@ -347,17 +360,21 @@ From the plugin root:
 
 ```bash
 npm install                 # first setup; npm ci is preferred in CI
-npm audit                   # zero known vulnerabilities is the release expectation
+npm audit --audit-level=moderate
+npm audit --omit=dev --audit-level=moderate
 npm run lint                # Obsidian-aware ESLint
-npm test                    # 108 pure Vitest tests at this snapshot
-npm run build               # strict tsc, production browser bundle, mobile guard
-npm run check               # lint + test + build
+npm test                    # pure plus targeted DOM integration tests
+npm run test:coverage       # V8 lines/statements/functions/branches report
+npm run build               # runtime tsc, production browser bundle, mobile/privacy guards
+npm run check               # lint + test-inclusive tsc + test + build + BRAT verifier
+npm run verify:ship -- 1.2.0-alpha.2
 npm run verify:mobile       # scan the generated main.js directly
 npm run verify:release -- 1.2.0-alpha.2
+npm run verify:brat -- 1.2.0-alpha.2
 git diff --check
 ```
 
-`npm run dev` starts the esbuild watcher and emits a development bundle. Production/manual-install artifacts are produced by `npm run build`: `main.js`, `manifest.json`, and `styles.css`. The source repository ignores `main.js`, but a release and a local vault install require all three files.
+`npm run dev` starts the esbuild watcher and emits a development bundle. Production/BRAT/manual-install artifacts are produced by `npm run build`: `main.js`, `manifest.json`, and `styles.css`; `npm run verify:ship` additionally generates `SHA256SUMS.txt`. The source repository ignores generated artifacts, but a release and a local vault install require the three plugin files.
 
 ### Local live-vault smoke test
 
@@ -375,17 +392,17 @@ The current development setup uses a vault named **Lightweight Vault**. The path
 
 1. Use `npm version <exact-version> --no-git-tag-version`; the version script synchronizes `manifest.json` and `versions.json`.
 2. Move shipped entries from **Unreleased** into a dated `CHANGELOG.md` heading and add `docs/releases/<exact-version>.md`.
-3. Run `npm audit`, `npm run check`, `npm run verify:release -- <exact-version>`, and `git diff --check`.
-4. Complete the desktop Reading/Live Preview and mobile/emulation smoke gates; record pending physical-device gates in the release notes when shipping an alpha.
+3. Run both `npm audit --audit-level=moderate` and `npm audit --omit=dev --audit-level=moderate`, then `npm run check`, `npm run verify:release -- <exact-version>`, `npm run verify:ship -- <exact-version>`, and `git diff --check`.
+4. Complete the desktop Reading/Live Preview and mobile/emulation smoke gates. A prerelease may record pending physical-device checks in its release note; stable/community-candidate releases require recorded iOS and Android device results.
 5. Commit and push the release state.
 6. Create and push a tag that exactly equals the manifest version and has no `v` prefix.
-7. Confirm the release workflow publishes `main.js`, `manifest.json`, and `styles.css`, and mark hyphenated prereleases as prereleases.
+7. Confirm the release workflow publishes `main.js`, `manifest.json`, `styles.css`, and `SHA256SUMS.txt`, and mark hyphenated prereleases as prereleases.
 
 Never repoint an existing release tag. If a released artifact is wrong, increment the prerelease suffix and publish a corrective release.
 
 ## Known limitations and intentional behavior
 
-- Templar is alpha software and manual-install only; it is not searchable in Obsidian's Community Plugins browser.
+- Templar is alpha software and is not searchable in Obsidian's Community Plugins browser. BRAT is a supported alpha install/update channel under final clean-vault validation; it remains unlabelled as recommended until the release E2E matrix is recorded. Manual assets remain supported.
 - Physical iOS and Android release smoke testing is still a maintainer gate. The bundle guard and responsive CSS are automated checks, not proof of every device behavior.
 - A style is a self-contained snapshot copied into each note. Changing a source never changes notes automatically; provenance makes explicit review/merge/replace possible. Older notes without provenance receive conservative legacy choices.
 - Folder organization is one display level. It does not create or infer vault folders, and folder separators are flattened.

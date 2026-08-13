@@ -32,7 +32,10 @@ describe('template synchronization', () => {
     latest.paper.color = '#111111';
     latest.typography.bodySize = 22;
     latest.blocks.calloutVariants = { warning: { accent: '#ff0000' } };
-    const merged = mergeTemplateUpdate(note, latest);
+    const mergedResult = mergeTemplateUpdate(note, latest);
+    expect(mergedResult.ok).toBe(true);
+    if (!mergedResult.ok) return;
+    const merged = mergedResult.style;
     expect(merged.paper.color).toBe('#abcdef');
     expect(merged.typography.bodySize).toBe(22);
     expect(merged.blocks.calloutVariants.warning?.accent).toBe('#ff0000');
@@ -63,5 +66,18 @@ describe('template synchronization', () => {
       info: { accent: '#112233' },
     };
     expect(synchronizationStatus(note, source).state).toBe('up-to-date');
+  });
+
+  it('rejects a cross-field invalid merge after complete candidate validation', () => {
+    const source = clone(BUILT_IN_TEMPLATES[0]!);
+    const note = templateToNoteStyle(source);
+    note.layout.paddingLeft = 150;
+    const latest = clone(source);
+    latest.layout.paddingRight = 100;
+
+    const mergedResult = mergeTemplateUpdate(note, latest);
+    expect(mergedResult.ok).toBe(false);
+    if (mergedResult.ok) return;
+    expect(mergedResult.issues.some((issue) => issue.path === 'layout')).toBe(true);
   });
 });

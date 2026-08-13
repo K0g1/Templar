@@ -1,5 +1,8 @@
-import type { TemplarNoteStyle, TemplarTemplate } from '../types';
+import type { TemplarNoteStyle, TemplarTemplate, ValidationIssue } from '../types';
 import { clone } from '../utils/value';
+import { deepEqual } from '../utils/equality';
+import { normalizeTemplate } from '../templates/schema';
+import { validateCompleteTemplate } from '../templates/validation';
 
 export type SynchronizationState =
   | 'up-to-date'
@@ -20,27 +23,6 @@ function snapshot(template: TemplarTemplate): TemplarTemplate {
   const result = clone(template);
   delete result.builtIn;
   return result;
-}
-
-function equal(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) {
-    return true;
-  }
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === right.length &&
-      left.every((value, index) => equal(value, right[index]));
-  }
-  if (!isRecord(left) || !isRecord(right)) {
-    return false;
-  }
-  const leftKeys = Object.keys(left).sort();
-  const rightKeys = Object.keys(right).sort();
-  return leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key, index) => key === rightKeys[index] && equal(left[key], right[key]),
-    );
 }
 
 export function templateSnapshot(template: TemplarTemplate): TemplarTemplate {
@@ -70,7 +52,7 @@ export function synchronizationStatus(
   if (!currentSource) {
     return {
       state: 'source-missing',
-      modified: base ? !equal(noteTemplateSnapshot(style), snapshot(base)) : false,
+      modified: base ? !deepEqual(noteTemplateSnapshot(style), snapshot(base)) : false,
       updateAvailable: false,
       legacy: !base,
     };
@@ -78,7 +60,7 @@ export function synchronizationStatus(
   const current = noteTemplateSnapshot(style);
   const latest = snapshot(currentSource);
   if (!base) {
-    if (equal(current, latest)) {
+    if (deepEqual(current, latest)) {
       return { state: 'up-to-date', modified: false, updateAvailable: false, legacy: true };
     }
     return {
@@ -89,8 +71,8 @@ export function synchronizationStatus(
     };
   }
   const normalizedBase = snapshot(base);
-  const modified = !equal(current, normalizedBase);
-  const updateAvailable = !equal(normalizedBase, latest);
+  const modified = !deepEqual(current, normalizedBase);
+  const updateAvailable = !deepEqual(normalizedBase, latest);
   const state = modified && updateAvailable
     ? 'modified-update-available'
     : modified
@@ -103,6 +85,10 @@ export function synchronizationStatus(
 
 const missing = Symbol('missing');
 
+export type MergeTemplateUpdateResult =
+  | { ok: true; style: TemplarNoteStyle }
+  | { ok: false; issues: ValidationIssue[] };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -112,7 +98,7 @@ function mergeValue(
   current: unknown,
   latest: unknown,
 ): unknown {
-  if (equal(current === missing ? undefined : current, base === missing ? undefined : base)) {
+  if (deepEqual(current === missing ? undefined : current, base === missing ? undefined : base)) {
     return latest;
   }
   if (isRecord(base) && isRecord(current) && isRecord(latest)) {
@@ -136,10 +122,17 @@ function mergeValue(
 export function mergeTemplateUpdate(
   style: TemplarNoteStyle,
   latestSource: TemplarTemplate,
-): TemplarNoteStyle {
+): MergeTemplateUpdateResult {
   const base = style.provenance?.sourceSnapshot;
   if (!base) {
-    throw new Error('This older note does not contain a safe merge baseline.');
+    return {
+      ok: false,
+      issues: [{
+        severity: 'error',
+        path: 'provenance.sourceSnapshot',
+        message: 'This older note does not contain a safe merge baseline.',
+      }],
+    };
   }
   const merged = mergeValue(
     snapshot(base),
@@ -147,22 +140,41 @@ export function mergeTemplateUpdate(
     snapshot(latestSource),
   );
   if (!isRecord(merged)) {
-    throw new Error('The template update could not be merged.');
+    return {
+      ok: false,
+      issues: [{ severity: 'error', path: 'merge', message: 'The template update could not be merged.' }],
+    };
   }
-  const result = {
-    ...(clone(merged) as unknown as TemplarTemplate),
-    page: clone(style.page),
-    sourceTemplateId: latestSource.id,
-    provenance: {
-      sourceSnapshot: snapshot(latestSource),
-      ...(style.provenance?.appliedByRule
-        ? { appliedByRule: clone(style.provenance.appliedByRule) }
-        : {}),
-    },
-    ...(style.attachments ? { attachments: clone(style.attachments) } : {}),
-  } as TemplarNoteStyle;
-  delete result.builtIn;
-  return result;
+  try {
+    const mergedTemplate = normalizeTemplate(merged);
+    const issues = validateCompleteTemplate(mergedTemplate);
+    if (issues.some((issue) => issue.severity === 'error')) {
+      return { ok: false, issues };
+    }
+    const result = {
+      ...clone(mergedTemplate),
+      page: clone(style.page),
+      sourceTemplateId: latestSource.id,
+      provenance: {
+        sourceSnapshot: snapshot(latestSource),
+        ...(style.provenance?.appliedByRule
+          ? { appliedByRule: clone(style.provenance.appliedByRule) }
+          : {}),
+      },
+      ...(style.attachments ? { attachments: clone(style.attachments) } : {}),
+    } as TemplarNoteStyle;
+    delete result.builtIn;
+    return { ok: true, style: result };
+  } catch (error) {
+    return {
+      ok: false,
+      issues: [{
+        severity: 'error',
+        path: 'merge',
+        message: `The merged template could not be normalized: ${errorMessage(error)}`,
+      }],
+    };
+  }
 }
 
 export function replaceWithLatestTemplate(
@@ -182,4 +194,8 @@ export function replaceWithLatestTemplate(
     latest.attachments = clone(style.attachments);
   }
   return latest;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

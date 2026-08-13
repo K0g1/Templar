@@ -1,11 +1,13 @@
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
-import { DEFAULT_TEMPLATE_ID, VIRTUAL_SELECTORS } from '../constants';
+import { CURRENT_SETTINGS_DATA_VERSION, DEFAULT_TEMPLATE_ID, VIRTUAL_SELECTORS } from '../constants';
 import type TemplarPlugin from '../main';
 import { DEFAULT_SETTINGS } from '../templates/defaults';
 import { clone } from '../utils/value';
 import { ConfirmationModal } from './modals';
 import { renderIssues } from './issues';
 import { renderTemplatePreview } from './template-preview';
+import { writeTextToClipboard } from '../utils/clipboard';
+import { runBackgroundTask, runUserAction } from './async-actions';
 
 export class TemplarSettingTab extends PluginSettingTab {
   public constructor(
@@ -24,34 +26,67 @@ export class TemplarSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass('templar-settings');
 
+    const protectedSettings = this.plugin.protectedSettings();
+    if (protectedSettings) {
+      new Setting(containerEl).setName('Protected data').setHeading();
+      containerEl.createEl('p', {
+        text: 'Templar loaded safe defaults because the stored settings cannot be safely interpreted. The original data is protected and will not be overwritten automatically.',
+      });
+      containerEl.createEl('p', {
+        text: `Status: ${protectedSettings.status}. Current settings-data version: ${String(CURRENT_SETTINGS_DATA_VERSION)}.`,
+      });
+      const raw = JSON.stringify(protectedSettings.raw, null, 2) ?? String(protectedSettings.raw);
+      new Setting(containerEl)
+        .setName('Recovery actions')
+        .setDesc('Copy or export the original raw settings before deliberately replacing them with current safe defaults.')
+        .addButton((button) => button.setButtonText('Copy raw settings').onClick(() => runUserAction(async () => {
+          await writeTextToClipboard(raw);
+          new Notice('Copied protected templar data.');
+        }, 'Could not copy protected settings')))
+        .addButton((button) => button.setButtonText('Export recovery').onClick(() => runUserAction(async () => {
+          const path = await this.plugin.exportProtectedSettingsRecovery();
+          new Notice(`Created a recovery copy at “${path}”.`);
+        }, 'Could not export protected settings')))
+        .addButton((button) => {
+          button.setButtonText('Reset after recovery…');
+          button.buttonEl.addClass('mod-warning');
+          button.onClick(() => new ConfirmationModal(
+            this.plugin,
+            'Reset protected Templar settings?',
+            'Templar will first create a new recovery copy of the protected raw settings. It will then replace the stored settings with the current safe defaults.',
+            async () => {
+              const path = await this.plugin.resetProtectedSettingsAfterRecovery();
+              this.render();
+              new Notice(`Created a recovery copy at “${path}” and reset Templar settings.`);
+            },
+            'Back up and reset settings',
+          ).open());
+        });
+      return;
+    }
+
     new Setting(containerEl)
       .setName('Style reading view')
       .setDesc('Render styled notes in reading view.')
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.enableReadingView).onChange(async (value) => {
-          this.plugin.settings.enableReadingView = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshEverything();
+        toggle.setValue(this.plugin.settings.enableReadingView).onChange((value) => {
+          void this.commitSetting('reading view setting', (draft) => { draft.enableReadingView = value; }, { refresh: true });
         }),
       );
     new Setting(containerEl)
       .setName('Style live preview')
       .setDesc('Render the same page style while editing Markdown.')
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.enableLivePreview).onChange(async (value) => {
-          this.plugin.settings.enableLivePreview = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshEverything();
+        toggle.setValue(this.plugin.settings.enableLivePreview).onChange((value) => {
+          void this.commitSetting('Live Preview setting', (draft) => { draft.enableLivePreview = value; }, { refresh: true });
         }),
       );
     new Setting(containerEl)
       .setName('Hide templar metadata')
       .setDesc('Collapse the templar YAML block during ordinary editing. Use “edit raw style” to inspect it.')
       .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.hideStyleMetadata).onChange(async (value) => {
-          this.plugin.settings.hideStyleMetadata = value;
-          await this.plugin.saveSettings();
-          this.plugin.refreshEverything();
+        toggle.setValue(this.plugin.settings.hideStyleMetadata).onChange((value) => {
+          void this.commitSetting('metadata visibility setting', (draft) => { draft.hideStyleMetadata = value; }, { refresh: true });
         }),
       );
 
@@ -67,9 +102,8 @@ export class TemplarSettingTab extends PluginSettingTab {
         dropdown
           .addOptions(options)
           .setValue(this.plugin.settings.defaultTemplateId)
-          .onChange(async (value) => {
-            this.plugin.settings.defaultTemplateId = value;
-            await this.plugin.saveSettings();
+          .onChange((value) => {
+            void this.commitSetting('default page style', (draft) => { draft.defaultTemplateId = value; });
           }),
       );
     new Setting(containerEl)
@@ -78,7 +112,11 @@ export class TemplarSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => dropdown
         .addOptions({ pageless: 'Pageless', 'paged-a4': 'Paged A4', 'paged-letter': 'Paged Letter' })
         .setValue(this.plugin.settings.defaultNewPageFlow)
-        .onChange(async (value) => { this.plugin.settings.defaultNewPageFlow = value as typeof this.plugin.settings.defaultNewPageFlow; await this.plugin.saveSettings(); }));
+        .onChange((value) => {
+          void this.commitSetting('default page flow', (draft) => {
+            draft.defaultNewPageFlow = value as typeof draft.defaultNewPageFlow;
+          });
+        }));
 
     new Setting(containerEl).setName('Template library').setHeading();
     containerEl.createEl('p', {
@@ -88,7 +126,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setName('Open page styles')
       .setDesc('Preview, apply, customize, duplicate, export, and delete styles.')
       .addButton((button) =>
-        button.setButtonText('Open library').onClick(() => void this.plugin.openStylesView()),
+        button.setButtonText('Open library').onClick(() => runUserAction(() => this.plugin.openStylesView(), 'Could not open Page Styles')),
       );
     new Setting(containerEl)
       .setName('Create a page style')
@@ -120,9 +158,8 @@ export class TemplarSettingTab extends PluginSettingTab {
         slider
           .setLimits(16, 60, 1)
           .setValue(this.plugin.settings.defaultGridUnit)
-          .onChange(async (value) => {
-            this.plugin.settings.defaultGridUnit = value;
-            await this.plugin.saveSettings();
+          .onChange((value) => {
+            void this.commitSetting('default vertical rhythm', (draft) => { draft.defaultGridUnit = value; });
           }),
       );
     new Setting(containerEl)
@@ -132,9 +169,8 @@ export class TemplarSettingTab extends PluginSettingTab {
         slider
           .setLimits(16, 256, 8)
           .setValue(this.plugin.settings.fontCacheSize)
-          .onChange(async (value) => {
-            this.plugin.settings.fontCacheSize = value;
-            await this.plugin.saveSettings();
+          .onChange((value) => {
+            void this.commitSetting('font calibration cache size', (draft) => { draft.fontCacheSize = value; });
           }),
       )
       .addButton((button) =>
@@ -151,7 +187,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       this.plugin.library.get(this.plugin.settings.defaultTemplateId) ??
       this.plugin.library.get(DEFAULT_TEMPLATE_ID);
     if (selected) {
-      void renderTemplatePreview(preview, selected, this.plugin.fontMetrics);
+      runBackgroundTask(() => renderTemplatePreview(preview, selected, this.plugin.fontMetrics), 'Could not render the settings preview');
     }
 
     new Setting(containerEl).setName('AI / LLM template builder').setHeading();
@@ -162,10 +198,10 @@ export class TemplarSettingTab extends PluginSettingTab {
       .setName('Template authoring skill')
       .setDesc('Includes the v1 schema, selectors, safety rules, performance guidance, and a complete example.')
       .addButton((button) =>
-        button.setButtonText('Copy instructions').setCta().onClick(() => void this.plugin.copyAuthoringKit()),
+        button.setButtonText('Copy instructions').setCta().onClick(() => runUserAction(() => this.plugin.copyAuthoringKit(), 'Could not copy the authoring instructions')),
       )
       .addButton((button) =>
-        button.setButtonText('Export to vault').onClick(() => void this.plugin.exportAuthoringKit()),
+        button.setButtonText('Export to vault').onClick(() => runUserAction(() => this.plugin.exportAuthoringKit(), 'Could not export the authoring instructions')),
       );
     new Setting(containerEl)
       .setName('Import AI-generated template')
@@ -186,6 +222,43 @@ export class TemplarSettingTab extends PluginSettingTab {
       const issues = this.plugin.renderer.issuesFor(file);
       const issueContainer = containerEl.createDiv();
       renderIssues(issueContainer, issues);
+    }
+    if (this.plugin.quarantinedTemplates.length > 0) {
+      new Setting(containerEl).setName('Invalid saved styles').setHeading();
+      containerEl.createEl('p', {
+        text: `${String(this.plugin.quarantinedTemplates.length)} saved style entr${this.plugin.quarantinedTemplates.length === 1 ? 'y was' : 'ies were'} quarantined and will not be loaded until you explicitly remove them.`,
+      });
+      for (const entry of this.plugin.quarantinedTemplates) {
+        const raw = JSON.stringify(entry.raw, null, 2) ?? String(entry.raw);
+        const warning = entry.kind === 'future-version'
+          ? 'This appears to come from a newer Templar version; it is protected until you make a recovery-backed removal.'
+          : `${entry.kind.replace(/-/g, ' ')}: ${entry.message}`;
+        new Setting(containerEl)
+          .setName(entry.templateId ? `Entry ${entry.templateId}` : `Entry ${String(entry.index + 1)}`)
+          .setDesc(`${warning} Raw data is retained until you choose an action.`)
+          .addButton((button) => button.setButtonText('Copy raw data').onClick(() => {
+            writeTextToClipboard(raw)
+              .then(() => new Notice('Copied quarantined style data.'))
+              .catch((error) => new Notice(error instanceof Error ? error.message : String(error)));
+          }))
+          .addButton((button) => button.setButtonText('Remove invalid saved entry').onClick(() => {
+            new ConfirmationModal(
+              this.plugin,
+              'Remove invalid saved style entry?',
+              'Templar will first create a recovery copy of this raw entry. Only if that backup succeeds will the entry be removed from Templar settings.',
+              async () => {
+                try {
+                  await this.plugin.removeQuarantinedTemplate(entry.index);
+                  this.render();
+                  new Notice('Removed invalid saved style entry.');
+                } catch (error) {
+                  new Notice(`Templar could not remove the saved entry: ${error instanceof Error ? error.message : String(error)}`);
+                }
+              },
+              'Remove invalid saved entry',
+            ).open();
+          }));
+      }
     }
     const selectorDetails = containerEl.createEl('details');
     selectorDetails.createEl('summary', { text: 'Templar selector reference' });
@@ -217,14 +290,29 @@ export class TemplarSettingTab extends PluginSettingTab {
       'Every option returns to its default value. Custom page styles are kept; favorites, recents, and style rules are cleared.',
       async () => {
         const defaults = clone(DEFAULT_SETTINGS);
-        defaults.userTemplates = this.plugin.settings.userTemplates;
-        Object.assign(this.plugin.settings, defaults);
-        await this.plugin.saveSettings();
-        this.plugin.refreshEverything();
-        this.render();
-        new Notice('Templar settings restored to defaults.');
+        const committed = await this.commitSetting('settings reset', (draft) => {
+          defaults.userTemplates = clone(draft.userTemplates);
+          Object.assign(draft, defaults);
+        }, { refresh: true });
+        if (committed) new Notice('Templar settings restored to defaults.');
       },
       'Reset settings',
     ).open();
+  }
+
+  private async commitSetting(
+    description: string,
+    mutate: (draft: TemplarPlugin['settings']) => void,
+    options: { refresh?: boolean } = {},
+  ): Promise<boolean> {
+    try {
+      await this.plugin.updateSettings(mutate);
+      if (options.refresh) this.plugin.refreshEverything();
+      return true;
+    } catch (error) {
+      new Notice(`Templar could not save ${description}: ${error instanceof Error ? error.message : String(error)}`);
+      this.render();
+      return false;
+    }
   }
 }

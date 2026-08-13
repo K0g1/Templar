@@ -46,4 +46,17 @@ describe('style rules', () => {
     expect(pageFlowOptions('paged-letter')).toMatchObject({ mode: 'paged', size: 'letter', width: 816 });
     expect(pageFlowOptions('pageless').mode).toBe('pageless');
   });
+
+  it('uses locale-independent machine folding for Turkish I variants', () => {
+    const rule: StyleRule = {
+      id: 'istanbul',
+      name: 'Istanbul',
+      enabled: true,
+      templateId: 'classic-ruled',
+      pageFlow: 'pageless',
+      conditions: [{ type: 'folder', folder: 'istanbul', includeSubfolders: false }],
+    };
+    expect(ruleMatches(rule, { ...facts, folder: 'Istanbul' })).toBe(true);
+    expect(ruleMatches(rule, { ...facts, folder: 'İSTANBUL' })).toBe(false);
+  });
 });

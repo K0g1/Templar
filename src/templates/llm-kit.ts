@@ -35,7 +35,7 @@ Pseudo-classes, pseudo-elements, attribute selectors, and descendant selectors m
 
 ## Schema
 
-\`version\`: must be 1.
+\`version\`: must be 1. Do not omit or guess this field; never emit an unsupported future version.
 
 \`style-name\`: human-readable name.
 

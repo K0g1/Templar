@@ -23,4 +23,33 @@ describe('usage index', () => {
     expect(index.count(style.sourceTemplateId!)).toBe(0);
     expect(index.entriesForTemplate(style.sourceTemplateId!)).toEqual([]);
   });
+
+  it('does not publish a partial build when the source throws', () => {
+    const index = new NoteStyleIndex();
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    let calls = 0;
+    expect(() => index.ensureBuilt(function* () {
+      yield { path: 'one.md', folder: '', style };
+      calls += 1;
+      throw new Error('source failed');
+    })).toThrow('source failed');
+    expect(calls).toBe(1);
+    expect(index.isBuilt()).toBe(false);
+    expect(index.count(style.sourceTemplateId!)).toBe(0);
+
+    index.ensureBuilt(() => [{ path: 'one.md', folder: '', style }]);
+    expect(index.isBuilt()).toBe(true);
+    expect(index.count(style.sourceTemplateId!)).toBe(1);
+  });
+
+  it('does not expose mutable style state to callers', () => {
+    const index = new NoteStyleIndex();
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    index.update({ path: 'one.md', folder: '', style });
+    style.paper.color = '#000000';
+    const entries = index.allEntries();
+    entries[0]!.style!.paper.color = '#ffffff';
+    expect(index.allEntries()[0]!.style!.paper.color).not.toBe('#000000');
+    expect(index.allEntries()[0]!.style!.paper.color).not.toBe('#ffffff');
+  });
 });

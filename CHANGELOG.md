@@ -4,6 +4,33 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+### Fixed
+
+- Preserved protected nested source snapshots during page-only edits and routed destructive note updates and synchronization through recovery.
+- Made automatic style-rule and reviewed batch writes compare-and-swap guarded, so a note changed after review is skipped instead of overwritten.
+- Completed Reading View preview/apply/removal parity and renderer root/observer cleanup coverage.
+
+### Security
+
+- Blocked virtual-root sibling escapes and broad descendant rules that can hide or collapse all readable content, including transparent text and zero/tiny typography.
+- Extended the browser-runtime policy scanner to inspect executable template interpolations as well as ordinary source text.
+
+### Compatibility
+
+- Classified note styles, templates, pack wrappers/members, settings, and nested source snapshots before normalization. Supported older schemas migrate in memory; future, malformed, and unsupported data remain protected.
+
+### Recovery
+
+- Added explicit protected-settings recovery actions, recovery-backed destructive note writes, and stale-fingerprint checks inside the frontmatter mutation callback.
+
+### Testing
+
+- Added regression coverage for CSS trust boundaries, migration/recovery paths, automatic-rule races, renderer ownership, and representative full `PageRenderer` workloads.
+
+### Release engineering
+
+- Added full-renderer benchmarks and documented their informational use. Automated checks remain prerequisite evidence; BRAT, desktop, and physical-device matrices are still release-maintainer gates.
+
 ## 1.2.0-alpha.2 — 2026-08-11
 
 - Fixed Live Preview pointer hit-testing so clicking styled paragraphs, headings, lists, and text around blank-line runs places the caret on the visible source line. Generated editor CSS now keeps every CodeMirror line margin-free and uses measured line-box padding for heading spacing.

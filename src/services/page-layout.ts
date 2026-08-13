@@ -2,8 +2,10 @@ import type { WorkspaceLeaf } from 'obsidian';
 import type { TemplarNoteStyle } from '../types';
 import { alignedPageGap, measuredGeometryScale } from '../utils/grid';
 import { round } from '../utils/value';
+import { realmFor, type DomRealm } from './dom-realm';
 
 interface PageLayoutState {
+  realm: DomRealm;
   resizeObserver: ResizeObserver;
   mutationObserver: MutationObserver;
   frame: number | null;
@@ -32,17 +34,23 @@ export class PageLayoutService {
       return;
     }
     const pagePairs = this.pagePairs(scopeEl);
-    const view = scopeEl.ownerDocument.defaultView;
-    if (pagePairs.length === 0 || !view || typeof ResizeObserver === 'undefined') {
+    let realm: DomRealm;
+    try {
+      realm = realmFor(scopeEl);
+    } catch {
+      return;
+    }
+    if (pagePairs.length === 0 || !realm.ResizeObserver || !realm.MutationObserver) {
       return;
     }
 
     const state: PageLayoutState = {
+      realm,
       frame: null,
       observedResizeTargets: new Set(),
       scopeEl,
-      resizeObserver: new ResizeObserver(() => this.schedule(leaf, style)),
-      mutationObserver: new MutationObserver(() => {
+      resizeObserver: new realm.ResizeObserver(() => this.schedule(leaf, style)),
+      mutationObserver: new realm.MutationObserver(() => {
         this.observeResizeTargets(state);
         this.schedule(leaf, style);
       }),
@@ -66,9 +74,8 @@ export class PageLayoutService {
       state.resizeObserver.disconnect();
       state.mutationObserver.disconnect();
       state.observedResizeTargets.clear();
-      const view = state.scopeEl.ownerDocument.defaultView;
-      if (state.frame !== null && view) {
-        view.cancelAnimationFrame(state.frame);
+      if (state.frame !== null) {
+        state.realm.window.cancelAnimationFrame(state.frame);
       }
       state.scopeEl.style.removeProperty('--templar-page-scale');
       for (const { pageContent } of this.pagePairs(state.scopeEl)) {
@@ -116,11 +123,10 @@ export class PageLayoutService {
 
   private schedule(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
     const state = this.states.get(leaf);
-    const view = state?.scopeEl.ownerDocument.defaultView;
-    if (!state || !view || state.frame !== null) {
+    if (!state || state.frame !== null) {
       return;
     }
-    state.frame = view.requestAnimationFrame(() => {
+    state.frame = state.realm.window.requestAnimationFrame(() => {
       state.frame = null;
       this.layout(state.scopeEl, style);
     });

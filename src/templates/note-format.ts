@@ -1,4 +1,5 @@
 import type { NotePageOptions, TemplarNoteStyle, TemplarTemplate } from '../types';
+import { CURRENT_TEMPLAR_FORMAT_VERSION } from '../constants';
 import { clone } from '../utils/value';
 import { normalizeNoteStyle, normalizeTemplate } from './schema';
 import { DEFAULT_PAGE_OPTIONS } from './defaults';
@@ -19,7 +20,7 @@ export function templateToNoteStyle(
 
 function templateFieldsToFrontmatter(style: TemplarTemplate): Record<string, unknown> {
   return {
-    version: 1,
+    version: CURRENT_TEMPLAR_FORMAT_VERSION,
     'style-name': style.name,
     'template-id': style.id,
     metadata: clone(style.metadata),

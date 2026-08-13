@@ -185,36 +185,39 @@ export class FontMetricsService {
     ruler.append(text, marker);
     document.body.append(ruler);
 
-    const rulerRect = ruler.getBoundingClientRect();
-    const markerRect = marker.getBoundingClientRect();
-    const baseline = baselineOffsetFromMarker(
-      rulerRect.top,
-      markerRect.bottom,
-      request.lineHeight,
-      request.fontSize,
-    );
+    try {
+      const rulerRect = ruler.getBoundingClientRect();
+      const markerRect = marker.getBoundingClientRect();
+      const baseline = baselineOffsetFromMarker(
+        rulerRect.top,
+        markerRect.bottom,
+        request.lineHeight,
+        request.fontSize,
+      );
 
-    let ascent = baseline;
-    let descent = Math.max(0, request.lineHeight - baseline);
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (context) {
-      context.font = `${String(request.fontWeight)} ${String(request.fontSize)}px ${request.family}`;
-      const canvasMetrics = context.measureText('Hgpx');
-      if (canvasMetrics.actualBoundingBoxAscent > 0) {
-        ascent = canvasMetrics.actualBoundingBoxAscent;
-        descent = canvasMetrics.actualBoundingBoxDescent;
+      let ascent = baseline;
+      let descent = Math.max(0, request.lineHeight - baseline);
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.font = `${String(request.fontWeight)} ${String(request.fontSize)}px ${request.family}`;
+        const canvasMetrics = context.measureText('Hgpx');
+        if (canvasMetrics.actualBoundingBoxAscent > 0) {
+          ascent = canvasMetrics.actualBoundingBoxAscent;
+          descent = canvasMetrics.actualBoundingBoxDescent;
+        }
       }
-    }
-    ruler.remove();
 
-    return {
-      baseline: round(baseline),
-      ascent: round(ascent),
-      descent: round(descent),
-      lineHeight: renderedLineBoxHeight(request.lineHeight, rulerRect.height),
-      measuredAt: Date.now(),
-    };
+      return {
+        baseline: round(baseline),
+        ascent: round(ascent),
+        descent: round(descent),
+        lineHeight: renderedLineBoxHeight(request.lineHeight, rulerRect.height),
+        measuredAt: Date.now(),
+      };
+    } finally {
+      ruler.remove();
+    }
   }
 
   private cacheKey(request: FontMetricRequest, document: Document): string {

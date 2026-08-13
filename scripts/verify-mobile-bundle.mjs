@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { builtinModules } from 'node:module';
 
@@ -26,4 +27,21 @@ if (matches.length > 0 || forbiddenGlobals.length > 0) {
   throw new Error(
     `Mobile bundle check failed: main.js contains desktop runtime imports: ${unique}`,
   );
+}
+
+const metafileUrl = new URL('../main.js.meta.json', import.meta.url);
+if (existsSync(metafileUrl)) {
+  const metafile = JSON.parse(await readFile(metafileUrl, 'utf8'));
+  const graphImports = Object.values(metafile.inputs ?? {})
+    .flatMap((input) => input.imports ?? [])
+    .map((entry) => entry.path)
+    .filter((path) => typeof path === 'string');
+  const forbiddenGraphImports = graphImports.filter((path) =>
+    path === 'electron' || path.startsWith('node:') || forbiddenModules.has(path),
+  );
+  if (forbiddenGraphImports.length > 0) {
+    throw new Error(
+      `Mobile import graph check failed: ${[...new Set(forbiddenGraphImports)].join(', ')}`,
+    );
+  }
 }

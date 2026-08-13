@@ -1,75 +1,90 @@
 import {
   MarkdownView,
-  Menu,
   Notice,
   Platform,
   Plugin,
   TFile,
   TFolder,
-  getAllTags,
   normalizePath,
   stringifyYaml,
   type WorkspaceLeaf,
 } from 'obsidian';
 import { createHideMetadataExtension } from './editor/hide-metadata';
+import { registerCommands } from './commands/register';
+import { registerEvent as registerPluginEvent, registerEvents } from './events/register';
 import {
-  DEFAULT_TEMPLATE_ID,
   TEMPLAR_ICON,
   TEMPLAR_VIEW_TYPE,
 } from './constants';
 import { FrontmatterService } from './services/frontmatter';
+import { RecoveryService } from './services/recovery-service';
 import { FontMetricsService } from './services/font-metrics';
 import { PageRenderer } from './services/page-renderer';
 import { PreviewSessionService } from './services/preview-session';
+import { bindPreviewEscape } from './services/preview-keyboard';
 import { NoteStyleIndex } from './services/note-style-index';
 import { PrintService } from './services/print-service';
-import { firstMatchingRule, pageFlowOptions } from './services/style-rules';
+import { SettingsStore } from './services/settings-store';
+import { StyleApplicationService } from './services/style-application';
+import { StyleRuleEngine } from './services/style-rule-engine';
+import { AuthoringKitService } from './services/authoring-kit-service';
 import { noteTemplateSnapshot } from './services/synchronization';
 import { TemplateLibrary } from './services/template-library';
-import { DEFAULT_PAGE_OPTIONS, DEFAULT_SETTINGS } from './templates/defaults';
-import { TEMPLAR_LLM_AUTHORING_KIT } from './templates/llm-kit';
-import { normalizeSettings } from './templates/settings';
+import { DEFAULT_SETTINGS } from './templates/defaults';
+import { settingsToPersistedData, type QuarantinedTemplate } from './templates/settings';
+import { loadVersionedSettings } from './migrations/settings-loader';
 import { templateToExportObject } from './templates/note-format';
 import { templatePackToExportObject } from './services/template-pack';
 import type { NotePageOptions, TemplarNoteStyle, TemplarSettings, TemplarTemplate } from './types';
-import { writeTextToClipboard } from './utils/clipboard';
 import { clone, slugify } from './utils/value';
-import {
-  BatchApplyModal,
-  ApplyStyleModal,
-  CreateStyledNoteModal,
-  CurrentNoteInspectorModal,
-  PageModeModal,
-  RawStyleModal,
-  StylePickerModal,
-  TemplateCreatorModal,
-  TemplateImportModal,
-  TemplatePackExportModal,
-  SynchronizationReviewModal,
-  StyleRulesModal,
-} from './ui/modals';
+import { PluginUiController } from './ui/plugin-ui-controller';
 import { TemplarSettingTab } from './ui/settings-tab';
 import { TemplarStylesView } from './ui/styles-view';
+import { reportSingleFileOperation, runBackgroundTask, runUserAction } from './ui/async-actions';
 
 export default class TemplarPlugin extends Plugin {
   public settings: TemplarSettings = clone(DEFAULT_SETTINGS);
+  public settingsStore!: SettingsStore;
   public library!: TemplateLibrary;
   public frontmatter!: FrontmatterService;
+  public recovery!: RecoveryService;
   public fontMetrics!: FontMetricsService;
   public renderer!: PageRenderer;
   public preview!: PreviewSessionService;
   public usageIndex = new NoteStyleIndex();
   public printService!: PrintService;
+  public application!: StyleApplicationService;
+  public ui!: PluginUiController;
+  public quarantinedTemplates: QuarantinedTemplate[] = [];
 
   private statusBarEl: HTMLElement | null = null;
-  private lastMarkdownLeaf: WorkspaceLeaf | null = null;
+  public lastMarkdownLeaf: WorkspaceLeaf | null = null;
   private rulesReady = false;
+  private settingsLoadIssueCount = 0;
+  private pendingSettingsMigration = false;
+  private pendingSettingsMigrationRaw: unknown = null;
+  private protectedSettingsRaw: unknown = null;
+  private protectedSettingsStatus: 'unsupported-future' | 'invalid' | 'migration-failed' | null = null;
+  private lastSettingsRecoveryPath: string | null = null;
+  private authoringKit!: AuthoringKitService;
+  private ruleEngine!: StyleRuleEngine;
+  private readonly keyboardCleanups = new Map<Document, () => void>();
 
   public async onload(): Promise<void> {
     await this.loadSettings();
+    this.recovery = new RecoveryService(this.app, this.manifest.version);
+    this.settingsStore = new SettingsStore(this.settings, async (value) => this.persistSettingsCandidate(value));
+    if (this.settingsLoadIssueCount > 0) {
+      new Notice(`${String(this.settingsLoadIssueCount)} saved Templar style entr${this.settingsLoadIssueCount === 1 ? 'y was' : 'ies were'} quarantined because it was invalid.`);
+    }
+    if (this.protectedSettingsRaw !== null) {
+      new Notice('Templar could not safely interpret stored settings. Safe defaults are active and the original data will not be overwritten automatically.');
+    } else if (this.pendingSettingsMigration) {
+      new Notice('Templar loaded older settings in compatibility mode. Finalize migration to write versioned settings. A recovery copy will be created first.');
+    }
     this.frontmatter = new FrontmatterService(this.app);
     this.fontMetrics = new FontMetricsService(() => this.settings.fontCacheSize);
-    this.library = new TemplateLibrary(this.settings, async () => this.saveSettings());
+    this.library = new TemplateLibrary(this.settings, this.settingsStore);
     this.renderer = new PageRenderer(
       this.app,
       this.settings,
@@ -81,7 +96,34 @@ export default class TemplarPlugin extends Plugin {
       this.frontmatter,
       this.renderer,
     );
+    this.application = new StyleApplicationService({
+      frontmatter: this.frontmatter,
+      library: this.library,
+      usageIndex: this.usageIndex,
+      settings: this.settings,
+      refreshFile: (file) => this.renderer.refreshFile(file),
+      refreshDeferred: () => this.renderer.scheduleRefreshAll(),
+      getCurrentFile: (path) => {
+        const candidate = this.app.vault.getAbstractFileByPath(path);
+        return candidate instanceof TFile && candidate.extension === 'md' ? candidate : null;
+      },
+    });
     this.printService = new PrintService(this.frontmatter, this.renderer);
+    this.ui = new PluginUiController(this);
+    this.authoringKit = new AuthoringKitService(this.app);
+    this.ruleEngine = new StyleRuleEngine({
+      app: this.app,
+      settings: this.settings,
+      library: this.library,
+      frontmatter: this.frontmatter,
+      isReady: () => this.rulesReady,
+      apply: ({ template, file, pageOptions, appliedByRule, guard }) => this.applyTemplate(
+        template,
+        file,
+        pageOptions,
+        { recordRecent: false, appliedByRule, guard },
+      ),
+    });
 
     this.registerView(
       TEMPLAR_VIEW_TYPE,
@@ -91,19 +133,18 @@ export default class TemplarPlugin extends Plugin {
       createHideMetadataExtension(() => this.settings.hideStyleMetadata),
     );
     this.addSettingTab(new TemplarSettingTab(this.app, this));
-    this.registerCommands();
-    this.registerEvents();
-    this.registerDomEvent(document, 'keydown', (event) => {
-      if (event.defaultPrevented || event.key !== 'Escape') return;
-      const session = this.preview.current();
-      if (!session) return;
-      event.preventDefault();
-      void this.preview.cancel(session.owner).then(() => this.refreshSidebars());
-    });
+    registerCommands(this);
+    registerEvents(this);
+    const mainDocument = this.app.workspace.containerEl.ownerDocument;
+    this.bindKeyboardDocument(mainDocument);
+    registerPluginEvent(this, this.app.workspace.on('window-open', (_workspaceWindow, ownerWindow) => {
+      this.bindKeyboardDocument(ownerWindow.document);
+    }));
+    registerPluginEvent(this, this.app.workspace.on('window-close', (_workspaceWindow, ownerWindow) => {
+      this.unbindKeyboardDocument(ownerWindow.document);
+    }));
 
-    this.addRibbonIcon(TEMPLAR_ICON, 'Open page styles', () => {
-      void this.openStylesView();
-    });
+    this.addRibbonIcon(TEMPLAR_ICON, 'Open page styles', () => runUserAction(() => this.openStylesView(), 'Could not open Page Styles'));
     if (!Platform.isMobile) {
       this.statusBarEl = this.addStatusBarItem();
       this.statusBarEl.addClass('templar-status');
@@ -121,8 +162,10 @@ export default class TemplarPlugin extends Plugin {
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (activeView) this.lastMarkdownLeaf = activeView.leaf;
       this.rulesReady = true;
-      this.registerEvent(this.app.vault.on('create', (file) => {
-        if (file instanceof TFile && file.extension === 'md') void this.evaluateStyleRules(file, false);
+      registerPluginEvent(this, this.app.vault.on('create', (file) => {
+        if (file instanceof TFile && file.extension === 'md') {
+          runBackgroundTask(() => this.evaluateStyleRules(file, false), 'Could not evaluate style rules for the new note');
+        }
       }));
       this.renderer.scheduleRefreshAll();
       this.updateStatusBar();
@@ -130,17 +173,129 @@ export default class TemplarPlugin extends Plugin {
   }
 
   public onunload(): void {
+    for (const cleanup of [...this.keyboardCleanups.values()]) cleanup();
     this.printService.destroy();
     this.preview.destroy();
     this.renderer.destroy();
   }
 
   public async loadSettings(): Promise<void> {
-    this.settings = normalizeSettings(await this.loadData());
+    const result = loadVersionedSettings(await this.loadData());
+    this.settings = result.settings;
+    this.quarantinedTemplates = result.issues;
+    this.settingsLoadIssueCount = result.issues.length;
+    this.pendingSettingsMigration = result.status === 'migrated';
+    this.pendingSettingsMigrationRaw = this.pendingSettingsMigration ? clone(result.raw) : null;
+    this.protectedSettingsRaw = result.protectedRaw ?? null;
+    this.protectedSettingsStatus = result.protectedRaw !== undefined &&
+      (result.status === 'unsupported-future' || result.status === 'invalid' || result.status === 'migration-failed')
+      ? result.status
+      : null;
   }
 
   public async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    if (!this.settingsStore) {
+      await this.persistSettingsCandidate(this.settings);
+      return;
+    }
+    await this.settingsStore.persistCurrent();
+  }
+
+  public updateSettings<T>(mutate: (draft: TemplarSettings) => T): Promise<T> {
+    if (!this.settingsStore) {
+      throw new Error('Templar settings are not ready yet.');
+    }
+    return this.settingsStore.transaction(mutate);
+  }
+
+  public async removeQuarantinedTemplate(index: number): Promise<void> {
+    const previous = this.quarantinedTemplates;
+    const entry = previous.find((candidate) => candidate.index === index);
+    this.quarantinedTemplates = previous.filter((entry) => entry.index !== index);
+    try {
+      if (entry) {
+        await this.recovery.backupRaw(
+          'template-import',
+          entry.raw,
+          entry.templateId ?? `quarantined-${String(index)}`,
+          typeof entry.raw === 'object' && entry.raw !== null && !Array.isArray(entry.raw) &&
+            typeof (entry.raw as Record<string, unknown>).version === 'number'
+            ? (entry.raw as Record<string, unknown>).version as number
+            : null,
+          'manual-remove',
+        );
+      }
+      await this.settingsStore.persistCurrent();
+    } catch (error) {
+      this.quarantinedTemplates = previous;
+      throw error;
+    }
+  }
+
+  public async finalizeSettingsMigration(): Promise<string | null> {
+    if (!this.pendingSettingsMigration) return null;
+    this.lastSettingsRecoveryPath = null;
+    if (this.settingsStore) {
+      await this.settingsStore.persistCurrent();
+    } else {
+      await this.persistSettingsCandidate(this.settings);
+    }
+    return this.lastSettingsRecoveryPath;
+  }
+
+  public protectedSettings(): { raw: unknown; status: string } | null {
+    return this.protectedSettingsRaw === null || this.protectedSettingsStatus === null
+      ? null
+      : { raw: clone(this.protectedSettingsRaw), status: this.protectedSettingsStatus };
+  }
+
+  public async exportProtectedSettingsRecovery(): Promise<string> {
+    const protectedSettings = this.protectedSettings();
+    if (!protectedSettings) throw new Error('There is no protected Templar settings data to export.');
+    return this.recovery.backupSettings(protectedSettings.raw, 'manual-replace');
+  }
+
+  public async resetProtectedSettingsAfterRecovery(): Promise<string> {
+    const protectedSettings = this.protectedSettings();
+    if (!protectedSettings) throw new Error('There is no protected Templar settings data to reset.');
+    const recoveryPath = await this.recovery.backupSettings(protectedSettings.raw, 'manual-replace');
+    await this.saveData(settingsToPersistedData(this.settings, this.quarantinedTemplates));
+    this.protectedSettingsRaw = null;
+    this.protectedSettingsStatus = null;
+    return recoveryPath;
+  }
+
+  private async persistSettingsCandidate(value: TemplarSettings): Promise<void> {
+    if (this.protectedSettingsRaw !== null) {
+      throw new Error('Templar could not safely interpret stored settings. Safe defaults are active and the original data will not be overwritten automatically. Export recovery data and reset settings before saving changes.');
+    }
+    const data = settingsToPersistedData(value, this.quarantinedTemplates);
+    if (this.pendingSettingsMigration) {
+      const recoveryPath = await this.recovery.backupSettings(this.pendingSettingsMigrationRaw, 'migration');
+      await this.saveData(data);
+      this.pendingSettingsMigration = false;
+      this.pendingSettingsMigrationRaw = null;
+      this.lastSettingsRecoveryPath = recoveryPath;
+      return;
+    }
+    await this.saveData(data);
+  }
+
+  private bindKeyboardDocument(ownerDocument: Document): void {
+    if (this.keyboardCleanups.has(ownerDocument)) return;
+    const unbind = bindPreviewEscape(ownerDocument, this.preview, () => this.activeMarkdownLeaf(), () => this.refreshSidebars());
+    const cleanup = (): void => {
+      unbind();
+      if (this.keyboardCleanups.get(ownerDocument) === cleanup) {
+        this.keyboardCleanups.delete(ownerDocument);
+      }
+    };
+    this.keyboardCleanups.set(ownerDocument, cleanup);
+    this.register(cleanup);
+  }
+
+  private unbindKeyboardDocument(ownerDocument: Document): void {
+    this.keyboardCleanups.get(ownerDocument)?.();
   }
 
   public activeFile(): TFile | null {
@@ -166,39 +321,31 @@ export default class TemplarPlugin extends Plugin {
     template: TemplarTemplate,
     file = this.activeFile(),
     pageOptions?: NotePageOptions,
-    options: { recordRecent?: boolean; notify?: boolean; appliedByRule?: { id: string; name: string } } = {},
+    options: {
+      recordRecent?: boolean;
+      notify?: boolean;
+      appliedByRule?: { id: string; name: string };
+      guard?: import('./services/frontmatter').FrontmatterWriteGuard;
+    } = {},
   ): Promise<void> {
     if (!file) {
       new Notice('Open a Markdown note before applying a page style.');
       return;
     }
     if (!options.appliedByRule) await this.preview.cancelAll();
-    const existing = this.frontmatter.getStyle(file);
-    const defaultFlow = pageFlowOptions(this.settings.defaultNewPageFlow);
-    const resolvedPageOptions = pageOptions ?? existing?.page ?? {
-      ...clone(DEFAULT_PAGE_OPTIONS),
-      ...defaultFlow,
-    };
-    await this.frontmatter.applyTemplate(
+    const result = await this.application.apply({
       file,
       template,
-      resolvedPageOptions,
-      options.appliedByRule,
-    );
-    if (options.recordRecent !== false && !options.appliedByRule) {
-      await this.library.recordRecent(template.id);
-    }
-    if (this.usageIndex.isBuilt()) {
-      this.usageIndex.update({
-        path: file.path,
-        folder: file.parent?.path ?? '',
-        style: this.frontmatter.getStyle(file),
-      });
-    }
-    await this.renderer.refreshFile(file);
+      pageOptions,
+      appliedByRule: options.appliedByRule,
+      recordRecent: options.recordRecent,
+      refresh: 'immediate',
+      guard: options.guard,
+    });
     this.refreshSidebars();
     this.updateStatusBar();
-    if (options.notify !== false) new Notice(`Applied “${template.name}” to ${file.basename}.`);
+    if (options.notify !== false) reportSingleFileOperation(result, `Applied “${template.name}” to ${file.basename}.`);
+    else for (const warning of result.warnings) new Notice(warning.message);
   }
 
   public async removeStyle(file = this.activeFile()): Promise<void> {
@@ -206,94 +353,66 @@ export default class TemplarPlugin extends Plugin {
       new Notice('The active note does not have a page style.');
       return;
     }
-    await this.frontmatter.removeStyle(file);
-    if (this.usageIndex.isBuilt()) {
-      this.usageIndex.update({ path: file.path, folder: file.parent?.path ?? '', style: null });
-    }
-    await this.renderer.refreshFile(file);
+    const result = await this.application.removeStyle(file);
     this.refreshSidebars();
     this.updateStatusBar();
-    new Notice(`Removed Templar styling from ${file.basename}.`);
+    reportSingleFileOperation(result, `Removed Templar styling from ${file.basename}.`);
   }
 
   public showStylePicker(file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before choosing a page style.');
-      return;
-    }
-    new StylePickerModal(this, file, 'apply').open();
+    this.ui.showStylePicker(file);
   }
 
   public showApplyTemplate(template: TemplarTemplate, file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before applying a page style.');
-      return;
-    }
-    void this.applyTemplate(template, file);
+    this.ui.showApplyTemplate(template, file);
   }
 
   public showApplyWithOptions(template: TemplarTemplate, file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before applying a page style.');
-      return;
-    }
-    new ApplyStyleModal(this, file, template).open();
+    this.ui.showApplyWithOptions(template, file);
   }
 
   public showNewNoteStylePicker(): void {
-    new StylePickerModal(this, null, 'create').open();
+    this.ui.showNewNoteStylePicker();
   }
 
   public showCreateStyledNote(template: TemplarTemplate): void {
-    new CreateStyledNoteModal(this, template).open();
+    this.ui.showCreateStyledNote(template);
   }
 
   public showPageMode(file = this.activeFile()): void {
-    const style = file ? this.frontmatter.getStyle(file) : null;
-    if (!file || !style) {
-      new Notice('Apply a page style before changing page mode.');
-      return;
-    }
-    new PageModeModal(this, file, style).open();
+    this.ui.showPageMode(file);
   }
 
   public showTemplateCreator(template?: TemplarTemplate): void {
-    new TemplateCreatorModal(this, template).open();
+    this.ui.showTemplateCreator(template);
   }
 
   public showTemplateImporter(): void {
-    new TemplateImportModal(this).open();
+    this.ui.showTemplateImporter();
   }
 
   public showPackExporter(templates?: TemplarTemplate[]): void {
-    new TemplatePackExportModal(this, templates).open();
+    this.ui.showPackExporter(templates);
   }
 
   public showSynchronizationReview(templateId?: string): void {
-    new SynchronizationReviewModal(this, templateId).open();
+    this.ui.showSynchronizationReview(templateId);
   }
 
   public showStyleRules(): void {
-    new StyleRulesModal(this).open();
+    this.ui.showStyleRules();
   }
 
   public showRawStyleEditor(file = this.activeFile()): void {
-    if (!file) {
-      new Notice('Open a Markdown note before editing its raw style.');
-      return;
-    }
-    const style = this.frontmatter.getStyle(file);
-    if (!style) {
-      new Notice('Apply a page style to this note first.');
-      return;
-    }
-    void this.preview.cancelAll().then(() => new RawStyleModal(this, file, style).open());
+    this.ui.showRawStyleEditor(file);
   }
 
   public showCurrentNoteInspector(file = this.activeFile()): void {
-    const style = file ? this.frontmatter.getStyle(file) : null;
-    if (!file || !style) return;
-    new CurrentNoteInspectorModal(this, file, style).open();
+    this.ui.showCurrentNoteInspector(file);
+  }
+
+  public showRecovery(file = this.activeFile()): void {
+    this.ui.showRecovery(file);
   }
 
   public async printStyledNote(file = this.activeFile()): Promise<void> {
@@ -310,59 +429,34 @@ export default class TemplarPlugin extends Plugin {
   }
 
   public showBatchApply(): void {
-    new BatchApplyModal(this).open();
+    this.ui.showBatchApply();
   }
 
   public async openStylesView(): Promise<void> {
-    let leaf: WorkspaceLeaf | null = this.app.workspace.getLeavesOfType(TEMPLAR_VIEW_TYPE)[0] ?? null;
-    if (!leaf) {
-      leaf = this.app.workspace.getRightLeaf(false);
-      if (!leaf) {
-        return;
-      }
-      await leaf.setViewState({ type: TEMPLAR_VIEW_TYPE, active: true });
-    }
-    await this.app.workspace.revealLeaf(leaf);
+    await this.ui.openStylesView();
   }
 
   public async focusStyleSearch(): Promise<void> {
-    await this.openStylesView();
-    const leaf = this.app.workspace.getLeavesOfType(TEMPLAR_VIEW_TYPE)[0];
-    if (leaf?.view instanceof TemplarStylesView) leaf.view.focusSearch();
+    await this.ui.focusStyleSearch();
   }
 
   public async cycleFavouritePreview(direction: 1 | -1): Promise<void> {
-    await this.openStylesView();
-    const leaf = this.app.workspace.getLeavesOfType(TEMPLAR_VIEW_TYPE)[0];
-    if (leaf?.view instanceof TemplarStylesView) leaf.view.previewNextFavourite(direction);
+    await this.ui.cycleFavouritePreview(direction);
   }
 
-  public async applyCurrentPreview(): Promise<void> {
-    const session = this.preview.current();
+  public async applyCurrentPreview(leaf = this.activeMarkdownLeaf()): Promise<void> {
+    const session = leaf ? this.preview.currentForLeaf(leaf) : null;
     if (!session) return;
     await this.preview.cancel(session.owner);
     await this.applyTemplate(noteTemplateSnapshot(session.style), session.file, session.style.page);
   }
 
   public async copyAuthoringKit(): Promise<void> {
-    try {
-      await writeTextToClipboard(TEMPLAR_LLM_AUTHORING_KIT);
-      new Notice('Template authoring skill copied.');
-    } catch (error) {
-      new Notice(error instanceof Error ? error.message : String(error));
-    }
+    await this.authoringKit.copy();
   }
 
   public async exportAuthoringKit(): Promise<void> {
-    const base = 'Templar Template Authoring Skill';
-    let path = normalizePath(`${base}.md`);
-    let suffix = 2;
-    while (this.app.vault.getAbstractFileByPath(path)) {
-      path = normalizePath(`${base} ${String(suffix)}.md`);
-      suffix += 1;
-    }
-    await this.app.vault.create(path, TEMPLAR_LLM_AUTHORING_KIT);
-    new Notice(`Exported ${path}.`);
+    await this.authoringKit.export();
   }
 
   public async exportTemplate(template: TemplarTemplate): Promise<void> {
@@ -418,297 +512,27 @@ export default class TemplarPlugin extends Plugin {
     }
   }
 
-  private async writeAndRefresh(file: TFile, style: TemplarNoteStyle): Promise<void> {
-    await this.frontmatter.writeStyle(file, style);
-    await this.renderer.refreshFile(file);
+  public async writeAndRefresh(file: TFile, style: TemplarNoteStyle): Promise<void> {
+    const result = await this.application.writeStyle(file, style);
+    for (const warning of result.warnings) new Notice(warning.message);
     this.refreshSidebars();
     this.updateStatusBar();
   }
 
-  private async evaluateStyleRules(file: TFile, metadataReady: boolean): Promise<void> {
-    if (!this.rulesReady || this.frontmatter.hasStyle(file)) return;
-    const cache = this.app.metadataCache.getFileCache(file);
-    const rule = firstMatchingRule(this.settings.styleRules, {
-      path: file.path,
-      basename: file.basename,
-      folder: file.parent?.path ?? '',
-      tags: cache ? getAllTags(cache) ?? [] : [],
-      frontmatter: cache?.frontmatter ?? {},
-      metadataReady: metadataReady && cache !== null,
-    });
-    if (!rule) return;
-    const template = this.library.get(rule.templateId);
-    if (!template) return;
-    const flow = pageFlowOptions(rule.pageFlow === 'default' ? this.settings.defaultNewPageFlow : rule.pageFlow);
-    await this.applyTemplate(template, file, { ...clone(DEFAULT_PAGE_OPTIONS), ...flow }, {
-      recordRecent: false,
-      appliedByRule: { id: rule.id, name: rule.name },
-    });
+  public async evaluateStyleRules(file: TFile, metadataReady: boolean): Promise<void> {
+    await this.ruleEngine.evaluate(file, metadataReady);
   }
-
-  private registerCommands(): void {
-    this.addCommand({
-      id: 'open-page-styles',
-      name: 'Open page styles',
-      callback: () => void this.openStylesView(),
-    });
-    this.addCommand({
-      id: 'choose-page-style',
-      name: 'Choose page style…',
-      checkCallback: (checking) => {
-        const available = this.activeFile() !== null;
-        if (available && !checking) {
-          this.showStylePicker();
-        }
-        return available;
-      },
-    });
-    this.addCommand({ id: 'focus-style-search', name: 'Focus style search', callback: () => void this.focusStyleSearch() });
-    this.addCommand({
-      id: 'customize-current-note', name: 'Customize current note',
-      checkCallback: (checking) => {
-        const file = this.activeFile(); const available = file !== null && this.frontmatter.hasStyle(file);
-        if (available && !checking) this.showCurrentNoteInspector(file);
-        return available;
-      },
-    });
-    this.addCommand({
-      id: 'apply-last-used-style', name: 'Apply last used style',
-      checkCallback: (checking) => {
-        const file = this.activeFile(); const template = this.library.get(this.settings.recentTemplateIds[0] ?? '');
-        const available = file !== null && template !== null;
-        if (available && !checking) void this.applyTemplate(template, file);
-        return available;
-      },
-    });
-    this.addCommand({ id: 'next-favorite-style', name: 'Next favorite style', checkCallback: (checking) => { const available = this.activeFile() !== null && this.settings.favouriteTemplateIds.length > 0; if (available && !checking) void this.cycleFavouritePreview(1); return available; } });
-    this.addCommand({ id: 'previous-favorite-style', name: 'Previous favorite style', checkCallback: (checking) => { const available = this.activeFile() !== null && this.settings.favouriteTemplateIds.length > 0; if (available && !checking) void this.cycleFavouritePreview(-1); return available; } });
-    this.addCommand({ id: 'apply-previewed-style', name: 'Apply previewed style', checkCallback: (checking) => { const available = this.preview.current() !== null; if (available && !checking) void this.applyCurrentPreview(); return available; } });
-    this.addCommand({ id: 'cancel-style-preview', name: 'Cancel style preview', checkCallback: (checking) => { const available = this.preview.current() !== null; if (available && !checking) void this.preview.cancelAll().then(() => this.refreshSidebars()); return available; } });
-    this.addCommand({
-      id: 'apply-default-page-style',
-      name: 'Apply default page style',
-      checkCallback: (checking) => {
-        const file = this.activeFile();
-        if (!file) {
-          return false;
-        }
-        if (!checking) {
-          const template =
-            this.library.get(this.settings.defaultTemplateId) ??
-            this.library.get(DEFAULT_TEMPLATE_ID);
-          if (template) {
-            void this.applyTemplate(template, file);
-          }
-        }
-        return true;
-      },
-    });
-    this.addCommand({
-      id: 'remove-page-style',
-      name: 'Remove page style',
-      checkCallback: (checking) => {
-        const file = this.activeFile();
-        const available = file !== null && this.frontmatter.hasStyle(file);
-        if (available && !checking) {
-          void this.removeStyle(file);
-        }
-        return available;
-      },
-    });
-    this.addCommand({
-      id: 'edit-raw-style',
-      name: 'Edit raw style…',
-      checkCallback: (checking) => {
-        const file = this.activeFile();
-        const available = file !== null && this.frontmatter.hasStyle(file);
-        if (available && !checking) {
-          this.showRawStyleEditor();
-        }
-        return available;
-      },
-    });
-    this.addCommand({
-      id: 'create-page-style',
-      name: 'Create page style…',
-      callback: () => this.showTemplateCreator(),
-    });
-    this.addCommand({
-      id: 'create-styled-note',
-      name: 'Create styled note…',
-      callback: () => this.showNewNoteStylePicker(),
-    });
-    this.addCommand({
-      id: 'change-page-mode',
-      name: 'Change page mode…',
-      checkCallback: (checking) => {
-        const file = this.activeFile();
-        const available = file !== null && this.frontmatter.hasStyle(file);
-        if (available && !checking) {
-          this.showPageMode();
-        }
-        return available;
-      },
-    });
-    this.addCommand({
-      id: 'toggle-paged-pageless', name: 'Toggle paged / pageless',
-      checkCallback: (checking) => {
-        const file = this.activeFile(); const style = file ? this.frontmatter.getStyle(file) : null;
-        if (file && style && !checking) { style.page.mode = style.page.mode === 'paged' ? 'pageless' : 'paged'; void this.writeAndRefresh(file, style); }
-        return Boolean(file && style);
-      },
-    });
-    this.addCommand({
-      id: 'toggle-fit-narrow-screens', name: 'Toggle fit narrow screens',
-      checkCallback: (checking) => {
-        const file = this.activeFile(); const style = file ? this.frontmatter.getStyle(file) : null;
-        const available = Boolean(file && style?.page.mode === 'paged');
-        if (available && !checking && file && style) { style.page.scaleToFit = !style.page.scaleToFit; void this.writeAndRefresh(file, style); }
-        return available;
-      },
-    });
-    this.addCommand({ id: 'review-template-updates', name: 'Review template updates', callback: () => this.showSynchronizationReview() });
-    this.addCommand({ id: 'manage-style-rules', name: 'Manage style rules', callback: () => this.showStyleRules() });
-    this.addCommand({
-      id: 'print-export-styled-note', name: 'Print / export styled note',
-      checkCallback: (checking) => { const file = this.activeFile(); const leaf = this.activeMarkdownLeaf(); const available = Boolean(file && leaf && this.frontmatter.hasStyle(file) && this.printService.available(leaf)); if (available && !checking) void this.printStyledNote(file); return available; },
-    });
-    this.addCommand({
-      id: 'import-page-style',
-      name: 'Import page style…',
-      callback: () => this.showTemplateImporter(),
-    });
-    this.addCommand({
-      id: 'batch-apply-page-style',
-      name: 'Apply page style to multiple notes…',
-      callback: () => this.showBatchApply(),
-    });
-    this.addCommand({
-      id: 'copy-template-authoring-skill',
-      name: 'Copy LLM template authoring skill',
-      callback: () => void this.copyAuthoringKit(),
-    });
-  }
-
-  private registerEvents(): void {
-    this.registerEvent(
-      this.app.workspace.on('css-change', () => {
-        this.fontMetrics.clear();
-        this.renderer.scheduleRefreshAll();
-      }),
-    );
-    this.registerEvent(
-      this.app.workspace.on('active-leaf-change', () => {
-        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeView) {
-          if (this.lastMarkdownLeaf && this.lastMarkdownLeaf !== activeView.leaf) {
-            void this.preview.cancelAll();
-          }
-          this.lastMarkdownLeaf = activeView.leaf;
-        }
-        this.renderer.scheduleRefreshAll();
-        this.refreshSidebars();
-        this.updateStatusBar();
-      }),
-    );
-    this.registerEvent(
-      this.app.workspace.on('file-open', () => {
-        void this.preview.cancelMismatchedLeaves();
-        this.renderer.scheduleRefreshAll();
-        this.updateStatusBar();
-      }),
-    );
-    this.registerEvent(
-      this.app.workspace.on('layout-change', () => {
-        // During a Reading/Editing mode rebuild, iterateAllLeaves can omit the
-        // active Markdown leaf for one layout event even though the leaf is
-        // still connected and getLeavesOfType already reports it. Preview
-        // sessions are Markdown-only, so use the authoritative typed list and
-        // avoid cancelling a try-on merely because the renderer was swapped.
-        const openLeaves = new Set(this.app.workspace.getLeavesOfType('markdown'));
-        void this.preview.cancelMissingLeaves(openLeaves).then((changed) => {
-          if (changed) this.refreshSidebars();
-        });
-        this.renderer.scheduleRefreshAll();
-      }),
-    );
-    this.registerEvent(
-      this.app.metadataCache.on('changed', (file) => {
-        this.frontmatter.settle(file);
-        if (this.usageIndex.isBuilt()) {
-          this.usageIndex.update({ path: file.path, folder: file.parent?.path ?? '', style: this.frontmatter.getStyle(file) });
-        }
-        void this.evaluateStyleRules(file, true);
-        void this.renderer.refreshFile(file);
-        if (this.activeFile()?.path === file.path) {
-          this.refreshSidebars();
-          this.updateStatusBar();
-        }
-      }),
-    );
-    this.registerEvent(
-      this.app.vault.on('rename', (file, oldPath) => {
-        if (file instanceof TFile) {
-          if (file.extension === 'md') void this.preview.cancelAll().then(() => this.refreshSidebars());
-          this.frontmatter.rename(oldPath, file.path);
-          if (this.usageIndex.isBuilt()) {
-            this.usageIndex.rename(oldPath, { path: file.path, folder: file.parent?.path ?? '', style: this.frontmatter.getStyle(file) });
-          }
-          if (file.extension === 'md') void this.evaluateStyleRules(file, true);
-        }
-        this.renderer.scheduleRefreshAll();
-      }),
-    );
-    this.registerEvent(
-      this.app.vault.on('delete', (file) => {
-        if (file instanceof TFile && file.extension === 'md') void this.preview.cancelAll().then(() => this.refreshSidebars());
-        this.frontmatter.forget(file.path);
-        if (this.usageIndex.isBuilt()) this.usageIndex.remove(file.path);
-        this.renderer.scheduleRefreshAll();
-      }),
-    );
-    this.registerEvent(
-      this.app.workspace.on('editor-menu', (menu: Menu) => {
-        const file = this.activeFile();
-        if (!file) {
-          return;
-        }
-        menu.addSeparator();
-        menu.addItem((item) =>
-          item
-            .setTitle('Apply page style…')
-            .setIcon(TEMPLAR_ICON)
-            .onClick(() => this.showStylePicker(file)),
-        );
-        if (this.frontmatter.hasStyle(file)) {
-          menu.addItem((item) =>
-            item
-              .setTitle('Customize current note…')
-              .setIcon('sliders-horizontal')
-              .onClick(() => this.showCurrentNoteInspector(file)),
-          );
-          menu.addItem((item) =>
-            item
-              .setTitle('Remove page style')
-              .setIcon('eraser')
-              .onClick(() => void this.removeStyle(file)),
-          );
-        }
-      }),
-    );
-    this.registerMarkdownPostProcessor((element, context) => {
-      this.renderer.registerReadingSection(element, context);
-      this.renderer.scheduleRefreshAll();
-    });
-  }
-
   public updateStatusBar(): void {
     if (!this.statusBarEl) {
       return;
     }
     const file = this.activeFile();
-    const style = file ? this.frontmatter.getStyle(file) : null;
-    this.statusBarEl.setText(style ? `Templar: ${style.name}` : '');
-    this.statusBarEl.toggleClass('is-hidden', !style);
+    const inspection = file ? this.frontmatter.inspect(file) : null;
+    const style = inspection?.style ?? null;
+    const text = style
+      ? `Templar: ${style.name}`
+      : inspection?.rawExists ? 'Templar: Recovery required' : '';
+    this.statusBarEl.setText(text);
+    this.statusBarEl.toggleClass('is-hidden', !text);
   }
 }

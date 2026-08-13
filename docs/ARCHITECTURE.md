@@ -18,7 +18,9 @@ Templar is a rendering adapter around ordinary Markdown. It owns neither note co
 Markdown frontmatter
       │ MetadataCache / optimistic write-through
       ▼
-FrontmatterService ── normalizeNoteStyle()
+SettingsStore ── durable settings transactions
+      │
+FrontmatterService ── inspectRawNoteStyle() ── normalized/migrated runtime style
       │
       ▼
 PageRenderer ─────── FontMetricsService
@@ -49,20 +51,23 @@ MetadataCache events ── NoteStyleIndex ── usage/folder/update counts
 
 Library snapshot + note provenance ── Synchronization ── status/merge/replace
 Untrusted YAML/pack ── Schema + CSS validation ── accepted library templates
+StyleApplicationService ── note write + index + refresh
 Renderer settled state ── PrintService ── temporary print scope → host print
 ```
 
 ## Entry point
 
-`src/main.ts` owns plugin lifecycle and registration. It:
+`src/main.ts` is the composition root. It:
 
 - loads normalized settings;
 - constructs services;
-- registers the sidebar view, CodeMirror extension, settings tab, commands, ribbon, menus, post-processor, and lifecycle-safe events;
+- registers the sidebar view, CodeMirror extension, settings tab, ribbon, menus, post-processor, commands through `src/commands/register.ts`, and events through `src/events/register.ts`;
 - defers initial rendering until `workspace.onLayoutReady()`;
 - coordinates user notices and view refreshes.
 
 It must remain orchestration code. Parsing, compilation, persistence, and complex UI belong elsewhere.
+
+Renderer ownership is explicit: `PageRenderer` orchestrates leaf refreshes; `ReadingWhitespaceController` owns Reading section/spacer state; `ImageSnapController`, `PaperOriginController`, and `VariableBlockRhythmController` own their observer lifecycles and clean the roots they configured.
 
 ## Data model
 
@@ -77,7 +82,7 @@ This separation guarantees that paged/pageless is a note choice. The same templa
 
 ## Frontmatter boundary
 
-`FrontmatterService` reads parsed metadata and writes through `FileManager.processFrontMatter()`. It maintains a small optimistic map because MetadataCache updates after the filesystem operation. This lets the active view render immediately without reading or rewriting the note body.
+`FrontmatterService` classifies parsed metadata before exposing a runtime style and writes through `FileManager.processFrontMatter()`. Supported older schemas may migrate in memory; protected future/invalid/legacy data remains raw and is never rewritten by reads. It maintains a per-file serialized queue, generation-aware optimistic state, and last-committed snapshot because MetadataCache updates after the filesystem operation. Every reviewed mutation may carry an expected raw fingerprint, checked inside the callback, so stale user, batch, rule, recovery, and synchronization decisions cannot overwrite newer data. This lets the active view render immediately without reading or rewriting the note body; stale metadata events cannot clear a newer result.
 
 The service exposes:
 
@@ -93,7 +98,7 @@ No UI class should hand-edit YAML text for persistence.
 
 ## CSS trust boundary
 
-Structured properties are compiled by `style-compiler.ts`. All user-controlled scalar CSS values pass through a conservative declaration-value guard before interpolation.
+Structured properties are compiled by the pure modules under `src/services/style-compiler/`, with `index.ts` owning stable output ordering and `style-compiler.ts` remaining a compatibility barrel. All user-controlled scalar CSS values pass through a conservative declaration-value guard before interpolation.
 
 Advanced CSS follows a separate pipeline:
 
@@ -119,6 +124,8 @@ data-templar-mode="pageless|paged"
 The scope value is a collision-free, runtime leaf token (`templar-leaf-<sequence>`), not a file-path hash. The renderer adds `.templar-page` to the active Reading/Live Preview surface and `.templar-page-content` to its content box. Generated CSS starts with the exact scope attribute. Two panes remain isolated even when they show the same file and only one pane owns a temporary preview.
 
 The style element is a direct child of the leaf's content root and is removed when the style disappears, the leaf closes, or the plugin unloads.
+
+`DomRealm` derives observers, animation frames, timers, and cross-window constructor checks from the target content element. This is required for pop-out windows, whose `Window`, `Document`, and DOM constructors are distinct from the main workspace.
 
 ## Rendering services
 
@@ -167,6 +174,8 @@ Two residual behaviors follow from Obsidian's measurement model (heights are re-
 - Exposes an explicit print-preparation refresh that waits for the current compiler/layout state.
 - Per Reading root, tracks the post-processor context and a source-ordered section list (including temporarily detached virtual-scroller elements) that feeds blank-line reconciliation; discarded sections are compacted after `getSectionInfo` marks them stale, and replaced roots are pruned with their scheduled frames.
 
+Focused ownership primitives live under `src/services/rendering/`: `OwnedStyleHost` owns generated style elements, `ReadingRootRegistry` owns root state, and observer/controller modules expose pure compensation and cleanup contracts. `PageRenderer` remains the public high-level leaf orchestrator while these concepts are extracted incrementally.
+
 ### Image compensation
 
 A `ResizeObserver` measures rendered image boxes. In strict/balanced gridded modes, it includes the configured block-start/block-end margins and adds only the missing bottom space needed to make the complete image footprint a grid multiple. Original image files are untouched.
@@ -186,7 +195,7 @@ Paged notes are described fully in [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md). The ser
 - `style-rules.ts`: pure AND-condition matching and first-enabled-rule selection. Rules are triggered only by vault/metadata events and never poll or overwrite a styled note.
 - `synchronization.ts`: source status calculation, legacy detection, note-template extraction, safe replace, and recursive three-way merge.
 - `template-pack.ts`: portable pack parsing/export and conflict-copy ID generation; individual members still traverse normal template validation.
-- `PrintService`: waits for compiler, fonts, images, and pagination, appends temporary scoped print rules to the renderer-owned style element, invokes the host print action, then restores screen layout.
+- `PrintService`: waits for compiler, fonts, images, and pagination using target-realm observers, appends temporary scoped print rules to the renderer-owned style element, invokes the host print action, then keeps its busy state until screen-layout restoration and renderer refresh complete. Restoration failures clear print state and report a Notice.
 
 ## Editor metadata hiding
 
@@ -212,7 +221,7 @@ The Page Styles view takes one catalog snapshot per render and uses CSS-only pap
 
 - `styles-view.ts`: Current Note state/actions; Recent/Favorites/Built-in/My Styles; search, folder/usage filters and density; lightweight cards; live preview; and roving keyboard navigation.
 - `settings-tab.ts`: rendering/default-page behavior, Style Rules management, library/creator entry points, diagnostics, authoring kit, selector reference, and reset.
-- `modals.ts`: selection, page options, creator/raw editor, explicit-session note inspector, standalone/pack import, pack export, synchronization review, rules and dry runs, chunked bulk application, and confirmation flows.
+- `modals/`: focused modal workflows, shared page controls, and composition-root adapters. Each workflow has its own implementation file; shared controls remain in `shared.ts`.
 - `template-preview.ts`: isolated sample document that uses the production compiler.
 - `issues.ts`: consistent human-readable validation output.
 

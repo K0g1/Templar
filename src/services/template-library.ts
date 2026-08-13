@@ -5,14 +5,26 @@ import {
   normalizeTemplate,
   normalizeTemplateFolder,
   templateFolderKey,
-  validateTemplate,
 } from '../templates/schema';
-import { validateCustomCss } from './css-validator';
+import { validateCompleteTemplate } from '../templates/validation';
+import { SettingsStore } from './settings-store';
+
+export type TemplateImportConflictAction = 'keep' | 'replace' | 'copy';
+
+export interface TemplateImportPlanEntry {
+  template: TemplarTemplate;
+  action: TemplateImportConflictAction;
+}
+
+export interface TemplateImportManyResult {
+  imported: TemplarTemplate[];
+  keptIds: string[];
+}
 
 export class TemplateLibrary {
   public constructor(
     private readonly settings: TemplarSettings,
-    private readonly persist: () => Promise<void>,
+    private readonly store: SettingsStore,
   ) {}
 
   public all(): TemplarTemplate[] {
@@ -54,52 +66,35 @@ export class TemplateLibrary {
   }
 
   public async save(templateValue: TemplarTemplate): Promise<TemplarTemplate> {
-    const template = normalizeTemplate(templateValue);
+    const template = this.validatedTemplate(templateValue);
     template.builtIn = false;
-    const issues = [
-      ...validateTemplate(template).issues,
-      ...validateCustomCss(template.css).issues,
-    ];
-    if (issues.some((issue) => issue.severity === 'error')) {
-      const details = issues
-        .filter((issue) => issue.severity === 'error')
-        .map((issue) => issue.message)
-        .join(' ');
-      throw new Error(details || 'The template is invalid.');
-    }
-
-    const index = this.settings.userTemplates.findIndex((candidate) => candidate.id === template.id);
-    if (index >= 0) {
-      this.settings.userTemplates[index] = clone(template);
-    } else {
-      if (BUILT_IN_TEMPLATES.some((candidate) => candidate.id === template.id)) {
-        template.id = this.uniqueId(`${template.id}-custom`);
+    const saved = await this.store.transaction((draft) => {
+      const candidate = clone(template);
+      const index = draft.userTemplates.findIndex((item) => item.id === candidate.id);
+      if (index >= 0) {
+        draft.userTemplates[index] = candidate;
+      } else {
+        if (BUILT_IN_TEMPLATES.some((item) => item.id === candidate.id)) {
+          candidate.id = this.uniqueId(candidate.id, draft);
+        }
+        draft.userTemplates.push(candidate);
       }
-      this.settings.userTemplates.push(clone(template));
-    }
-    await this.persist();
-    return clone(template);
+      return candidate;
+    });
+    return clone(saved);
   }
 
   public async saveAsNew(templateValue: TemplarTemplate): Promise<TemplarTemplate> {
-    const template = normalizeTemplate(templateValue);
+    const template = this.validatedTemplate(templateValue);
     template.builtIn = false;
-    const preferred = this.isBuiltIn(template.id) ? `${template.id}-custom` : template.id;
-    template.id = this.uniqueId(preferred);
-    const issues = [
-      ...validateTemplate(template).issues,
-      ...validateCustomCss(template.css).issues,
-    ];
-    if (issues.some((issue) => issue.severity === 'error')) {
-      const details = issues
-        .filter((issue) => issue.severity === 'error')
-        .map((issue) => issue.message)
-        .join(' ');
-      throw new Error(details || 'The template is invalid.');
-    }
-    this.settings.userTemplates.push(clone(template));
-    await this.persist();
-    return clone(template);
+    const saved = await this.store.transaction((draft) => {
+      const candidate = clone(template);
+      const preferred = this.isBuiltIn(candidate.id) ? `${candidate.id}-custom` : candidate.id;
+      candidate.id = this.uniqueId(preferred, draft);
+      draft.userTemplates.push(candidate);
+      return candidate;
+    });
+    return clone(saved);
   }
 
   public async duplicate(id: string): Promise<TemplarTemplate> {
@@ -107,31 +102,87 @@ export class TemplateLibrary {
     if (!source) {
       throw new Error('The selected Page Style no longer exists.');
     }
-    source.builtIn = false;
-    source.name = `${source.name} copy`;
-    source.id = this.uniqueId(slugify(source.name));
-    source.metadata.author = 'Templar user';
-    this.settings.userTemplates.push(clone(source));
-    await this.persist();
-    return source;
+    const saved = await this.store.transaction((draft) => {
+      const candidate = clone(source);
+      candidate.builtIn = false;
+      candidate.name = `${candidate.name} copy`;
+      candidate.id = this.uniqueId(slugify(candidate.name), draft);
+      candidate.metadata.author = 'Templar user';
+      draft.userTemplates.push(candidate);
+      return candidate;
+    });
+    return clone(saved);
   }
 
   public async remove(id: string): Promise<boolean> {
-    const index = this.settings.userTemplates.findIndex((template) => template.id === id);
-    if (index < 0) {
+    if (!this.settings.userTemplates.some((template) => template.id === id)) {
       return false;
     }
-    this.settings.userTemplates.splice(index, 1);
-    const favouriteIndex = this.settings.favouriteTemplateIds.indexOf(id);
-    if (favouriteIndex >= 0) {
-      this.settings.favouriteTemplateIds.splice(favouriteIndex, 1);
+    return this.store.transaction((draft) => {
+      const index = draft.userTemplates.findIndex((template) => template.id === id);
+      if (index < 0) return false;
+      draft.userTemplates.splice(index, 1);
+      draft.favouriteTemplateIds = draft.favouriteTemplateIds.filter((value) => value !== id);
+      draft.recentTemplateIds = draft.recentTemplateIds.filter((value) => value !== id);
+      return true;
+    });
+  }
+
+  public async importMany(
+    entries: readonly TemplateImportPlanEntry[],
+  ): Promise<TemplateImportManyResult> {
+    const plan = Object.freeze(entries.map((entry) => ({
+      action: entry.action,
+      template: this.validatedTemplate(entry.template),
+    })));
+    const incomingIds = new Set<string>();
+    for (const entry of plan) {
+      if (incomingIds.has(entry.template.id)) {
+        throw new Error(`The import plan contains duplicate template ID “${entry.template.id}”.`);
+      }
+      incomingIds.add(entry.template.id);
+      if (entry.action === 'replace' && this.isBuiltIn(entry.template.id)) {
+        throw new Error(`Built-in template “${entry.template.id}” cannot be replaced.`);
+      }
     }
-    const recentIndex = this.settings.recentTemplateIds.indexOf(id);
-    if (recentIndex >= 0) {
-      this.settings.recentTemplateIds.splice(recentIndex, 1);
-    }
-    await this.persist();
-    return true;
+    return this.store.transaction((draft) => {
+      const imported: TemplarTemplate[] = [];
+      const keptIds: string[] = [];
+      for (const entry of plan) {
+        const existingIndex = draft.userTemplates.findIndex((template) => template.id === entry.template.id);
+        if (entry.action === 'keep') {
+          keptIds.push(entry.template.id);
+          continue;
+        }
+        const candidate = clone(entry.template);
+        candidate.builtIn = false;
+        if (entry.action === 'replace') {
+          if (existingIndex < 0) throw new Error(`Template “${entry.template.id}” disappeared before import.`);
+          draft.userTemplates[existingIndex] = candidate;
+        } else {
+          if (existingIndex >= 0 || BUILT_IN_TEMPLATES.some((template) => template.id === candidate.id)) {
+            candidate.id = this.uniqueId(candidate.id, draft);
+          }
+          draft.userTemplates.push(candidate);
+        }
+        imported.push(clone(candidate));
+      }
+      return { imported, keptIds };
+    });
+  }
+
+  public async removeMany(ids: readonly string[]): Promise<{ removedIds: string[]; count: number }> {
+    const requested = new Set(ids);
+    return this.store.transaction((draft) => {
+      const removedIds = draft.userTemplates
+        .filter((template) => requested.has(template.id))
+        .map((template) => template.id);
+      if (removedIds.length === 0) return { removedIds, count: 0 };
+      draft.userTemplates = draft.userTemplates.filter((template) => !requested.has(template.id));
+      draft.favouriteTemplateIds = draft.favouriteTemplateIds.filter((id) => !requested.has(id));
+      draft.recentTemplateIds = draft.recentTemplateIds.filter((id) => !requested.has(id));
+      return { removedIds, count: removedIds.length };
+    });
   }
 
   public isBuiltIn(id: string): boolean {
@@ -143,38 +194,46 @@ export class TemplateLibrary {
   }
 
   public async toggleFavourite(id: string): Promise<boolean> {
-    const favourites = this.settings.favouriteTemplateIds;
-    const index = favourites.indexOf(id);
-    if (index >= 0) {
-      favourites.splice(index, 1);
-      await this.persist();
-      return false;
-    }
-    favourites.push(id);
-    await this.persist();
-    return true;
+    return this.store.transaction((draft) => {
+      const index = draft.favouriteTemplateIds.indexOf(id);
+      if (index >= 0) {
+        draft.favouriteTemplateIds.splice(index, 1);
+        return false;
+      }
+      draft.favouriteTemplateIds.push(id);
+      return true;
+    });
   }
 
   public async recordRecent(id: string): Promise<void> {
     if (!this.get(id)) return;
-    const recent = this.settings.recentTemplateIds;
-    const existing = recent.indexOf(id);
-    if (existing >= 0) recent.splice(existing, 1);
-    recent.unshift(id);
-    if (recent.length > 10) recent.length = 10;
-    await this.persist();
+    await this.store.transaction((draft) => {
+      const existing = draft.recentTemplateIds.indexOf(id);
+      if (existing >= 0) draft.recentTemplateIds.splice(existing, 1);
+      draft.recentTemplateIds.unshift(id);
+      if (draft.recentTemplateIds.length > 10) draft.recentTemplateIds.length = 10;
+    });
   }
 
-  private uniqueId(preferred: string): string {
+  private validatedTemplate(templateValue: TemplarTemplate): TemplarTemplate {
+    const template = normalizeTemplate(templateValue);
+    const issues = validateCompleteTemplate(template);
+    const errors = issues.filter((issue) => issue.severity === 'error');
+    if (errors.length > 0) {
+      throw new Error(errors.map((issue) => issue.message).join(' ') || 'The template is invalid.');
+    }
+    return template;
+  }
+
+  private uniqueId(preferred: string, draft: TemplarSettings): string {
     const base = slugify(preferred);
-    const used = new Set(this.all().map((template) => template.id));
-    if (!used.has(base)) {
-      return base;
-    }
+    const used = new Set([
+      ...BUILT_IN_TEMPLATES.map((template) => template.id),
+      ...draft.userTemplates.map((template) => template.id),
+    ]);
+    if (!used.has(base)) return base;
     let suffix = 2;
-    while (used.has(`${base}-${String(suffix)}`)) {
-      suffix += 1;
-    }
+    while (used.has(`${base}-${String(suffix)}`)) suffix += 1;
     return `${base}-${String(suffix)}`;
   }
 }

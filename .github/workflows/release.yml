@@ -5,44 +5,144 @@ on:
     tags:
       - "*"
 
-permissions:
-  contents: write
-
 jobs:
-  build:
+  build-and-verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 20
           cache: npm
 
-      - name: Verify release metadata
-        run: npm run verify:release -- "${{ github.ref_name }}"
-
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: Verify and build release
+        run: npm run verify:ship -- "${GITHUB_REF_NAME}"
 
-      - name: Test
-        run: npm test
+      - name: Stage exact release bundle
+        run: |
+          node scripts/stage-release.mjs "${GITHUB_REF_NAME}" .release
+          (cd .release && sha256sum -c SHA256SUMS.txt)
+          node scripts/verify-brat-release.mjs "${GITHUB_REF_NAME}" .release
 
-      - name: Build and verify mobile bundle
-        run: npm run build
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Templar ${{ github.ref_name }}
-          body_path: docs/releases/${{ github.ref_name }}.md
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            main.js
-            manifest.json
-            styles.css
+          name: templar-release-${{ github.ref_name }}
+          path: .release/
+          if-no-files-found: error
+
+  publish:
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: templar-release-${{ github.ref_name }}
+          path: .release
+
+      - name: Verify downloaded release bundle
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test -f .release/release-metadata.json
+          test -f .release/release-notes.md
+          test -f .release/SHA256SUMS.txt
+          test -f .release/main.js
+          test -f .release/manifest.json
+          test -f .release/styles.css
+          (cd .release && sha256sum -c SHA256SUMS.txt)
+          test "$(jq -r '.tag' .release/release-metadata.json)" = "${RELEASE_TAG}"
+          test "$(jq -r '.title' .release/release-metadata.json)" = "Templar ${RELEASE_TAG}"
+          test "$(jq -r '.prerelease' .release/release-metadata.json)" = "$(if [[ "${RELEASE_TAG}" == *-* ]]; then echo true; else echo false; fi)"
+          test "$(jq -c '.assets' .release/release-metadata.json)" = '["main.js","manifest.json","styles.css","SHA256SUMS.txt"]'
+
+      - name: Create or update draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          RELEASE_TITLE="$(jq -r '.title' .release/release-metadata.json)"
+          RELEASE_PRERELEASE="$(jq -r '.prerelease' .release/release-metadata.json)"
+          if gh release view "${RELEASE_TAG}" --json isDraft >/tmp/templar-release.json 2>/dev/null; then
+            if [[ "$(jq -r '.isDraft' /tmp/templar-release.json)" != "true" ]]; then
+              echo "Refusing to modify an already-published release for ${RELEASE_TAG}"
+              exit 1
+            fi
+            gh release edit "${RELEASE_TAG}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file .release/release-notes.md \
+              --prerelease="${RELEASE_PRERELEASE}"
+          else
+            flags=()
+            if [[ "${RELEASE_PRERELEASE}" == "true" ]]; then flags+=(--prerelease); fi
+            gh release create "${RELEASE_TAG}" \
+              --draft \
+              --title "${RELEASE_TITLE}" \
+              --notes-file .release/release-notes.md \
+              "${flags[@]}"
+          fi
+          gh release upload "${RELEASE_TAG}" \
+            .release/main.js .release/manifest.json .release/styles.css .release/SHA256SUMS.txt \
+            --clobber
+
+      - name: Verify remote draft before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          rm -rf .release-remote
+          mkdir .release-remote
+          gh release download "${RELEASE_TAG}" \
+            --dir .release-remote \
+            --pattern main.js \
+            --pattern manifest.json \
+            --pattern styles.css \
+            --pattern SHA256SUMS.txt
+          (cd .release-remote && sha256sum -c ../.release/SHA256SUMS.txt)
+          cmp .release/SHA256SUMS.txt .release-remote/SHA256SUMS.txt
+          gh release view "${RELEASE_TAG}" --json tagName,isDraft,isPrerelease,assets >/tmp/templar-release-draft.json
+          test "$(jq -r '.tagName' /tmp/templar-release-draft.json)" = "${RELEASE_TAG}"
+          test "$(jq -r '.isDraft' /tmp/templar-release-draft.json)" = "true"
+          test "$(jq -r '.isPrerelease' /tmp/templar-release-draft.json)" = "$(jq -r '.prerelease' .release/release-metadata.json)"
+          jq -e '([.assets[].name] | sort) == ["SHA256SUMS.txt", "main.js", "manifest.json", "styles.css"]' /tmp/templar-release-draft.json >/dev/null
+
+      - name: Publish verified draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release edit "${RELEASE_TAG}" --draft=false
+
+      - name: Verify published release metadata and asset hashes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          rm -rf .release-remote
+          mkdir .release-remote
+          gh release download "${RELEASE_TAG}" \
+            --dir .release-remote \
+            --pattern main.js \
+            --pattern manifest.json \
+            --pattern styles.css \
+            --pattern SHA256SUMS.txt
+          (cd .release-remote && sha256sum -c ../.release/SHA256SUMS.txt)
+          cmp .release/SHA256SUMS.txt .release-remote/SHA256SUMS.txt
+          gh release view "${RELEASE_TAG}" --json tagName,isDraft,isPrerelease,assets >/tmp/templar-release-final.json
+          test "$(jq -r '.tagName' /tmp/templar-release-final.json)" = "${RELEASE_TAG}"
+          test "$(jq -r '.isDraft' /tmp/templar-release-final.json)" = "false"
+          test "$(jq -r '.isPrerelease' /tmp/templar-release-final.json)" = "$(jq -r '.prerelease' .release/release-metadata.json)"
+          jq -e '([.assets[].name] | sort) == ["SHA256SUMS.txt", "main.js", "manifest.json", "styles.css"]' /tmp/templar-release-final.json >/dev/null

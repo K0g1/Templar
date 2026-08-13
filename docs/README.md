@@ -7,6 +7,7 @@ The current implementation snapshot is `1.2.0-alpha.2`: 132 built-in styles, lea
 ## Getting started
 
 - [`../README.md`](../README.md) — user-facing behavior, installation, and commands.
+- [`INSTALLATION.md`](INSTALLATION.md) — BRAT, frozen versions, manual installation, and troubleshooting.
 - [`../examples/Templar Showcase/`](../examples/Templar%20Showcase/) — copy-ready Markdown showcase notes and their local image assets.
 
 ## Reference
@@ -17,6 +18,9 @@ The current implementation snapshot is `1.2.0-alpha.2`: 132 built-in styles, lea
 - [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md) — the fixed-canvas invariant, whole-page scaling, page-break fitting, and mobile behavior for paged notes.
 - [`SECURITY.md`](SECURITY.md) — trust boundaries, CSS validation model, privacy, and denial-of-service considerations.
 - [`MAINTAINER_GUIDE.md`](MAINTAINER_GUIDE.md) — test layout, manual smoke tests, the mobile release gate, schema change recipe, and release steps.
+- [`REPOSITORY_GOVERNANCE.md`](REPOSITORY_GOVERNANCE.md) — observed GitHub branch, security-update, and release-immutability settings.
+- [`PERFORMANCE.md`](PERFORMANCE.md) — benchmark fixtures and coverage commands for renderer, catalog, vault matching, and pagination work.
+- [`ASSET_OPTIMIZATION.md`](ASSET_OPTIMIZATION.md) — lossless screenshot conversion record and before/after sizes.
 - [`releases/`](releases/) — versioned GitHub release notes, including validation status and known alpha limitations.
 - [`releases/1.2.0-alpha.2.md`](releases/1.2.0-alpha.2.md) — renderer-rhythm, paper-pattern, isolation, and security audit release notes.
 - [`releases/1.2.0-alpha.1.md`](releases/1.2.0-alpha.1.md) — UX expansion prerelease notes and historical test evidence.

@@ -23,9 +23,11 @@ export async function renderTemplatePreview(
   const metrics = await metricsService.measurePage(style, container.ownerDocument);
   const compiled = compilePageStyle(style, scope, scopeId, metrics);
 
-  const styleEl = container.ownerDocument.createElement('style');
-  styleEl.textContent = compiled.css;
-  container.appendChild(styleEl);
+  if (compiled.css) {
+    const styleEl = container.ownerDocument.createElement('style');
+    styleEl.textContent = compiled.css;
+    container.appendChild(styleEl);
+  }
 
   const shell = container.createDiv({ cls: 'templar-preview-shell' });
   shell.dataset.templarScope = scopeValue;

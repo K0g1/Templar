@@ -1,7 +1,11 @@
 import postcss, { type AtRule, type Rule } from 'postcss';
-import selectorParser, { type Selector } from 'postcss-selector-parser';
 import { MAX_CUSTOM_CSS_BYTES } from '../constants';
 import type { ValidationIssue, ValidationResult } from '../types';
+import {
+  analyzeSelector,
+  decodeCssEscapes,
+  type SelectorAnalysis,
+} from './css/selector-policy';
 
 const allowedAtRules = new Set([
   'keyframes',
@@ -11,18 +15,6 @@ const allowedAtRules = new Set([
   'supports',
 ]);
 
-const globalTags = new Set(['html', 'body']);
-const globalClasses = new Set([
-  'app-container',
-  'horizontal-main-container',
-  'mod-root',
-  'workspace',
-  'workspace-leaf',
-  'workspace-tabs',
-  'nav-files-container',
-  'modal-container',
-  'setting-item',
-]);
 const allowedPreferenceFeatures = new Set([
   'prefers-reduced-motion',
   'prefers-color-scheme',
@@ -116,6 +108,62 @@ const reservedRhythmProperties = new Set([
   'padding-bottom',
   'padding-top',
 ]);
+const reservedRootAvailabilityProperties = new Set([
+  'display',
+  'content-visibility',
+  'visibility',
+  'opacity',
+  'pointer-events',
+  'filter',
+  'backdrop-filter',
+  'clip',
+  'clip-path',
+  'mask',
+  'mask-image',
+  '-webkit-mask',
+  '-webkit-mask-image',
+  'transform',
+  'scale',
+  'zoom',
+]);
+const broadAvailabilityProperties = new Set([
+  'display',
+  'visibility',
+  'content-visibility',
+  'opacity',
+  'pointer-events',
+  'filter',
+  'backdrop-filter',
+  'clip',
+  'clip-path',
+  'mask',
+  'mask-image',
+  '-webkit-mask',
+  '-webkit-mask-image',
+  'transform',
+  'scale',
+  'zoom',
+]);
+const broadReadabilityProperties = new Set([
+  'color',
+  '-webkit-text-fill-color',
+  'font-size',
+  'line-height',
+  'text-indent',
+]);
+const broadCollapseProperties = new Set([
+  'height',
+  'block-size',
+  'max-height',
+  'max-block-size',
+  'font-size',
+  'line-height',
+]);
+const broadClippingProperties = new Set([
+  'overflow',
+  'overflow-x',
+  'overflow-y',
+]);
 const unstableLengthUnit =
   /[-+]?(?:\d+|\d*\.\d+)\s*(?:cqb|cqh|cqi|cqmax|cqmin|cqw|dvh|dvw|lvh|lvw|svh|svw|vb|vh|vi|vmax|vmin|vw)\b/i;
 
@@ -167,55 +215,6 @@ function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as AtRule).name);
 }
 
-function selectorStartsWithVirtualRoot(selector: string): boolean {
-  return /^\.page(?:-content)?(?=$|[\s.:#[])/.test(selector.trim());
-}
-
-function selectorTargetsVirtualRoot(selector: string): boolean {
-  return /^\.page(?:-content)?(?=$|[.:#[])/.test(selector.trim());
-}
-
-function selectorTargetsRhythmElement(selector: string): boolean {
-  return /(?:^|[\s>+~(,])(?:h[1-6]|p|ul|ol|li|blockquote|pre|hr)(?=$|[\s>+~,.#:)\]])/.test(
-    selector,
-  );
-}
-
-function decodeCssEscapes(value: string): string {
-  return value.replace(
-    /\\(?:([0-9a-f]{1,6})\s?|([^\r\n0-9a-f]))/gi,
-    (_match, hex: string | undefined, character: string | undefined) => {
-      if (hex) {
-        const codePoint = Number.parseInt(hex, 16);
-        return codePoint === 0 || codePoint > 0x10ffff
-          ? '\uFFFD'
-          : String.fromCodePoint(codePoint);
-      }
-      return character ?? '';
-    },
-  );
-}
-
-function globalSelectorToken(selector: Selector): string | null {
-  let token: string | null = null;
-  selector.walkTags((tag) => {
-    if (!token && globalTags.has(tag.value.toLowerCase())) {
-      token = tag.value.toLowerCase();
-    }
-  });
-  selector.walkClasses((className) => {
-    if (!token && globalClasses.has(className.value.toLowerCase())) {
-      token = `.${className.value.toLowerCase()}`;
-    }
-  });
-  selector.walkPseudos((pseudo) => {
-    if (!token && decodeCssEscapes(pseudo.value).toLowerCase() === ':root') {
-      token = ':root';
-    }
-  });
-  return token;
-}
-
 function isSafePreferenceMediaQuery(params: string): boolean {
   const decoded = decodeCssEscapes(params).toLowerCase().trim();
   if (!decoded || decoded.includes(',')) {
@@ -235,43 +234,34 @@ function isSafePreferenceMediaQuery(params: string): boolean {
   return remainder.length === 0;
 }
 
-function selectorCanHideWholePage(rule: Rule): boolean {
-  return rule.selectors.some((selector) =>
-    /^\.page(?:-content)?(?:\s*[>+~]?\s*\*)?\s*$/.test(selector.trim()),
-  );
-}
-
-function validateSelector(selector: string, issues: ValidationIssue[]): void {
+function validateSelector(selector: string, issues: ValidationIssue[]): SelectorAnalysis[] {
   try {
-    const ast = selectorParser().astSync(selector);
-    for (const node of ast.nodes) {
-      const text = node.toString().trim();
-      if (!selectorStartsWithVirtualRoot(text)) {
+    const analyses = analyzeSelector(selector);
+    for (const analysis of analyses) {
+      if (!analysis.startsWithVirtualRoot) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
-          message: `“${text}” is not scoped to .page or .page-content.`,
+          message: `“${analysis.text}” is not scoped to .page or .page-content.`,
           fix: `Start the selector with “.page ” so it affects only this note.`,
         });
       }
-      const lower = decodeCssEscapes(text).toLowerCase();
-      const token = globalSelectorToken(node);
-      if (token) {
+      if (analysis.globalToken) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
-          message: `“${text}” references the global Obsidian selector “${token}”.`,
+          message: `“${analysis.text}” references the global Obsidian selector “${analysis.globalToken}”.`,
           fix: 'Use the documented Templar selector vocabulary.',
         });
       }
-      if (lower.includes(':global(')) {
+      if (analysis.usesGlobalEscape) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
           message: 'The :global() escape is not supported because it can leak outside the note.',
         });
       }
-      if (lower.includes('.templar-')) {
+      if (analysis.usesPrivateRuntimeClass) {
         issues.push({
           severity: 'error',
           path: 'css.selector',
@@ -279,13 +269,101 @@ function validateSelector(selector: string, issues: ValidationIssue[]): void {
           fix: 'Use only the documented .page and .page-content virtual vocabulary.',
         });
       }
+      if (analysis.hasVirtualRootEscapeCombinator) {
+        issues.push({
+          severity: 'error',
+          path: 'css.selector',
+          message: 'Custom CSS may select only the virtual page root or its descendants. Sibling and column combinators after .page/.page-content are not supported.',
+          fix: 'Use descendant or child selectors beneath .page or .page-content.',
+        });
+      }
     }
+    return analyses;
   } catch (error) {
     issues.push({
       severity: 'error',
       path: 'css.selector',
       message: `Templar could not parse selector “${selector}”: ${errorMessage(error)}`,
     });
+    return [];
+  }
+}
+
+export function isCssZero(value: string): boolean {
+  const normalized = decodeCssEscapes(value)
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '');
+  const zero = '[+-]?(?:0+(?:\\.0+)?|\\.0+)';
+  if (new RegExp(`^${zero}(?:[a-z%]+)?$`).test(normalized)) return true;
+  return new RegExp(`^calc\\(${zero}(?:[a-z%]+)?\\)$`).test(normalized);
+}
+
+function isClippingOverflow(value: string): boolean {
+  return /^(?:hidden|clip)(?:\s+hidden|\s+clip){0,1}$/.test(value.trim().toLowerCase());
+}
+
+function validateBroadAvailabilityRule(
+  rule: Rule,
+  analyses: readonly SelectorAnalysis[],
+  issues: ValidationIssue[],
+): void {
+  if (!analyses.some((analysis) => analysis.availabilityCoverage === 'potentially-all-descendants')) {
+    return;
+  }
+  const declarations = rule.nodes.filter((node) => node.type === 'decl');
+  const collapse = declarations.some((node) =>
+    node.type === 'decl' &&
+    broadCollapseProperties.has(decodeCssEscapes(node.prop).toLowerCase()) &&
+    isCssZero(node.value),
+  );
+  const clipping = declarations.some((node) =>
+    node.type === 'decl' &&
+    broadClippingProperties.has(decodeCssEscapes(node.prop).toLowerCase()) &&
+    isClippingOverflow(node.value),
+  );
+  for (const node of declarations) {
+    if (node.type !== 'decl') continue;
+    const property = decodeCssEscapes(node.prop).toLowerCase();
+    const value = decodeCssEscapes(node.value).toLowerCase();
+    if (broadAvailabilityProperties.has(property)) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” is not allowed on a selector that may cover every page descendant.`,
+        fix: 'Add a positive tag, class, attribute, or ID subject so the effect cannot remove the whole note.',
+      });
+    }
+    if (broadReadabilityProperties.has(property)) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” is not allowed on a selector that may cover every page descendant because it can make all note text unreadable.`,
+        fix: 'Apply typography and readability effects to a positively narrowed Markdown descendant.',
+      });
+    }
+    if (collapse && clipping && (broadCollapseProperties.has(property) || broadClippingProperties.has(property))) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” combines descendant-wide collapse with clipping and could make note content disappear.`,
+        fix: 'Use a specific Markdown descendant and avoid zero geometry with hidden or clipped overflow.',
+      });
+    }
+    if (
+      property === 'position' &&
+      /^(?:absolute|relative|fixed|sticky)$/.test(value) &&
+      declarations.some((candidate) => candidate.type === 'decl' &&
+        /^(?:inset|top|right|bottom|left|translate|transform)$/.test(decodeCssEscapes(candidate.prop).toLowerCase()) &&
+        /(?:-999|-100%|100%|999)/.test(decodeCssEscapes(candidate.value)))
+    ) {
+      issues.push({
+        severity: 'error',
+        path: 'css.position',
+        message: 'Positioning every page descendant with an extreme displacement is not allowed.',
+        fix: 'Use a positively narrowed Markdown descendant and ordinary page-relative positioning.',
+      });
+    }
   }
 }
 
@@ -351,11 +429,15 @@ export function validateCustomCss(
     }
   });
 
+  const ruleAnalyses = new WeakMap<Rule, SelectorAnalysis[]>();
   root.walkRules((rule) => {
     if (!isInsideKeyframes(rule)) {
+      const analyses: SelectorAnalysis[] = [];
       for (const selector of rule.selectors) {
-        validateSelector(selector, issues);
+        analyses.push(...validateSelector(selector, issues));
       }
+      ruleAnalyses.set(rule, analyses);
+      validateBroadAvailabilityRule(rule, analyses, issues);
     }
   });
 
@@ -381,10 +463,13 @@ export function validateCustomCss(
     const parentRule = declaration.parent?.type === 'rule'
       ? declaration.parent
       : null;
+    const analyses = parentRule ? ruleAnalyses.get(parentRule) ?? [] : [];
+    const targetsRoot = analyses.some((analysis) => analysis.targetsVirtualRoot);
+    const targetsRhythm = analyses.some((analysis) => analysis.targetsRhythmElement);
     if (
       parentRule &&
       reservedRootGeometryProperties.has(property) &&
-      parentRule.selectors.some((selector) => selectorTargetsVirtualRoot(selector))
+      targetsRoot
     ) {
       issues.push({
         severity: 'error',
@@ -395,9 +480,21 @@ export function validateCustomCss(
     }
     if (
       parentRule &&
+      reservedRootAvailabilityProperties.has(property) &&
+      targetsRoot
+    ) {
+      issues.push({
+        severity: 'error',
+        path: `css.${property}`,
+        message: `“${property}” could make the entire .page or .page-content unavailable.`,
+        fix: 'Apply this effect to a specific Markdown descendant instead of the page root.',
+      });
+    }
+    if (
+      parentRule &&
       options.protectRhythm === true &&
       reservedRhythmProperties.has(property) &&
-      parentRule.selectors.some((selector) => selectorTargetsRhythmElement(selector))
+      targetsRhythm
     ) {
       issues.push({
         severity: 'error',
@@ -425,40 +522,31 @@ export function validateCustomCss(
         fix: 'Use relative, absolute, or sticky positioning inside the page.',
       });
     }
-    if (property === 'z-index' && Number.parseFloat(value) > 20) {
+    const zIndexValue = value.trim();
+    const literalZIndex = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(zIndexValue)
+      ? Number(zIndexValue)
+      : null;
+    if (
+      property === 'z-index' &&
+      literalZIndex !== null &&
+      (literalZIndex < -1 || literalZIndex > 20)
+    ) {
       issues.push({
         severity: 'error',
         path: 'css.z-index',
-        message: 'z-index values above 20 can escape the page’s visual layer.',
+        message: 'z-index values must stay between -1 and 20.',
         fix: 'Use a z-index between -1 and 20.',
       });
     }
     if (
       property === 'z-index' &&
-      !/^(?:auto|inherit|initial|revert|revert-layer|unset|-?\d+(?:\.\d+)?)$/.test(value.trim())
+      !/^(?:auto|inherit|initial|revert|revert-layer|unset|-?(?:\d+(?:\.\d+)?|\.\d+))$/.test(zIndexValue)
     ) {
       issues.push({
         severity: 'error',
         path: 'css.z-index',
         message: 'Calculated or variable z-index values cannot be safety-bounded.',
         fix: 'Use auto or a literal z-index between -1 and 20.',
-      });
-    }
-    if (
-      declaration.parent?.type === 'rule' &&
-      selectorCanHideWholePage(declaration.parent) &&
-      ((property === 'display' && value.trim() === 'none') ||
-        (property === 'visibility' && value.trim() === 'hidden') ||
-        (property === 'content-visibility' && value.trim() === 'hidden') ||
-        (property === 'opacity' && Number.parseFloat(value) === 0) ||
-        (property === 'pointer-events' && value.trim() === 'none') ||
-        (property === 'font-size' && /^0(?:[a-z%]+)?$/.test(value.trim())))
-    ) {
-      issues.push({
-        severity: 'error',
-        path: `css.${property}`,
-        message: `“${property}: ${declaration.value}” would hide or disable the whole note.`,
-        fix: 'Target a specific Markdown element without making the page inaccessible.',
       });
     }
     if (property.includes('animation') && /\binfinite\b/.test(value)) {

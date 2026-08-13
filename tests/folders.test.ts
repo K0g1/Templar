@@ -11,6 +11,7 @@ import {
 import { normalizeTemplate, normalizeTemplateFolder } from '../src/templates/schema';
 import type { TemplarSettings, TemplarTemplate } from '../src/types';
 import { clone } from '../src/utils/value';
+import { SettingsStore } from '../src/services/settings-store';
 
 function customTemplate(id: string, folder: string): TemplarTemplate {
   const template = clone(BUILT_IN_TEMPLATES[0]!);
@@ -60,14 +61,14 @@ describe('template folders', () => {
         customTemplate('loose', 'Unfiled'),
       ],
     };
-    const library = new TemplateLibrary(settings, vi.fn(async () => undefined));
+    const library = new TemplateLibrary(settings, new SettingsStore(settings, async () => undefined));
     const folders = library.folders(settings.userTemplates);
     expect(folders).toEqual(['Academic', 'Zines', 'Unfiled']);
   });
 
   it('deduplicates case variants without merging different diacritics', () => {
     const settings = clone(DEFAULT_SETTINGS);
-    const library = new TemplateLibrary(settings, vi.fn(async () => undefined));
+    const library = new TemplateLibrary(settings, new SettingsStore(settings, async () => undefined));
     const templates = [
       customTemplate('work-upper', 'Work'),
       customTemplate('work-lower', 'work'),
@@ -80,7 +81,7 @@ describe('template folders', () => {
   it('normalizes the folder before persisting a custom template', async () => {
     const settings = clone(DEFAULT_SETTINGS);
     const persist = vi.fn(async () => undefined);
-    const library = new TemplateLibrary(settings, persist);
+    const library = new TemplateLibrary(settings, new SettingsStore(settings, persist));
     const template = customTemplate('field-notes-custom', '  Field / Notes  ');
     const saved = await library.saveAsNew(template);
     expect(saved.metadata.folder).toBe('Field Notes');

@@ -49,7 +49,7 @@ For renderer changes, additionally smoke-test:
 - font and grid changes;
 - multiple simultaneous notes with different styles;
 - plugin disable/re-enable;
-- mobile emulation and at least one physical iOS/Android device before public release.
+- mobile emulation for every renderer change. A prerelease may ship with a documented physical-device check pending after desktop and mobile static/build gates pass; a stable or Community Plugins candidate requires recorded physical iOS and Android smoke results.
 
 ## Code organization
 

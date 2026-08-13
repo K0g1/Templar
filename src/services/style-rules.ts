@@ -10,7 +10,7 @@ export interface RuleNoteFacts {
 }
 
 function folded(value: string): string {
-  return value.trim().toLocaleLowerCase();
+  return value.trim().toLowerCase();
 }
 
 function scalar(value: unknown): string | null {

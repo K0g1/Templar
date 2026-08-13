@@ -2,7 +2,17 @@
 
 The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). It records the alpha version, command/settings surface, source map, persistence and lifecycle contracts, release artifacts, and known limitations. This guide is the executable smoke-test and release checklist.
 
-At `1.2.0-alpha.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and the only supported distribution path is manual installation of the three release artifacts.
+At `1.2.0-alpha.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT is a supported alpha distribution/update path under final clean-vault validation. Do not call it recommended until the release E2E matrix is recorded. Manual installation of the three release artifacts remains the compatibility fallback; see [`INSTALLATION.md`](INSTALLATION.md).
+
+## Promotion policy
+
+| Stage | Required evidence |
+| --- | --- |
+| Alpha | Architecture and data format may change. Automated gates are required; an incomplete manual matrix is permitted only when the release note discloses it exactly. |
+| Beta | Persistence, schema, recovery, and CSS-security contracts are frozen; no known data-loss or trust-boundary blocker remains; BRAT packaged install, desktop matrix, migration/recovery scenarios, and interactive mobile coverage have been recorded. Any unavailable physical device is disclosed in the beta release note. |
+| Stable | Beta soak is complete and physical iOS plus Android validation is recorded, alongside all automated, BRAT, desktop, migration, and recovery gates. |
+
+Do not label a build beta merely because its automated suite passes. Manual evidence applies to the packaged GitHub/BRAT artifact, not a development checkout.
 
 ## Local workflow
 
@@ -14,15 +24,16 @@ npm run dev
 Reload Templar in Obsidian after builds. For a clean handoff:
 
 ```bash
-npm audit
+npm audit --audit-level=moderate
+npm audit --omit=dev --audit-level=moderate
 npm run check
 ```
 
-`npm run check` runs Obsidian-aware ESLint, Vitest, strict TypeScript, a minified browser-targeted esbuild bundle, and the mobile bundle guard. The guard fails if `main.js` retains Node/Electron imports, dynamic `require`, `Buffer`, or `process` access.
+`npm run check` runs Obsidian-aware ESLint, test-inclusive strict TypeScript, Vitest (including targeted `happy-dom` integration files), a minified browser-targeted esbuild bundle, the mobile bundle guard, the runtime privacy scan, and the BRAT artifact contract verifier. The guard fails if `main.js` retains Node/Electron imports, dynamic `require`, `Buffer`, or `process` access.
 
-The current post-alpha audit suite contains 108 tests. Treat the command result—not a hard-coded count—as authoritative when the suite grows; historical release notes retain the count that shipped with that version.
+Treat the command result—not a hard-coded count—as authoritative when the suite grows. Pure tests run in Node; renderer, print, clipboard, frontmatter, and pop-out lifecycle tests are explicit integration fixtures. Historical release notes retain the count that shipped with each version.
 
-The CI workflow runs the same check on every pull request and push to `main`; tagged releases repeat it before attaching artifacts.
+The CI workflow runs the same check on every pull request and push to `main`; tagged releases run `npm run verify:ship -- <exact-version>`, produce `SHA256SUMS.txt`, verify the BRAT bundle contract, and publish only the verified artifact set through a draft release.
 
 ## Test layout
 
@@ -46,10 +57,18 @@ The CI workflow runs the same check on every pull request and push to `main`; ta
 - `template-pack.test.ts`: bounded pack parsing, duplicate-ID errors, per-member validity, aggregate CSS limits, portable export, and copy conflict IDs.
 - `settings.test.ts`: migration/normalization for default page flow, density, Recent, and rules.
 - `print-service.test.ts`: A4, Letter, custom, and pageless print-size selection.
+- `tests/*integration.test.ts`: happy-dom realm ownership, renderer cleanup, pop-out preview isolation, clipboard focus, frontmatter settlement, and print restoration/concurrency paths.
+- `performance.bench.ts`: repeatable renderer, catalog, vault-matching, compiler, and pagination fixtures; see [`PERFORMANCE.md`](PERFORMANCE.md).
 
-Pure tests deliberately avoid importing Obsidian's Electron runtime. UI/runtime behavior needs an Obsidian smoke test.
+Pure tests deliberately avoid importing Obsidian's Electron runtime. The integration harness uses small DOM/fake-owner fixtures; it complements rather than replaces a real Obsidian smoke test.
+
+Use `npm run test:coverage` for a V8 report of lines, statements, functions, and branches. Coverage is diagnostic and does not replace desktop Obsidian or physical-device evidence.
 
 The generated bundle is intentionally ignored by source control. A local live test must run `npm run build`, then copy `main.js`, `manifest.json`, and `styles.css` into the test vault's `.obsidian/plugins/templar/` directory before reloading the plugin. If the UI appears stale, compare artifact hashes and confirm the plugin folder is the one Obsidian has enabled.
+
+The current alpha's structured BRAT E2E matrix and physical-device smoke results are pending maintainer execution. The alpha policy permits those checks to remain pending only when release notes say so; automated build, mobile-bundle, privacy, and test gates do not substitute for BRAT or physical-device evidence.
+
+Repository-level GitHub controls are recorded in [`REPOSITORY_GOVERNANCE.md`](REPOSITORY_GOVERNANCE.md). The active `main` ruleset and classic protection both require the observed `check` CI job, pull requests, and conversation resolution while blocking force pushes and deletion. Dependabot alerts/security updates and future-release immutability are enabled; do not mutate the existing alpha release to retrofit immutability.
 
 ## Manual smoke test
 
@@ -114,7 +133,10 @@ For paged mode, follow `docs/PAGED_LAYOUT.md`'s resize matrix. For per-note isol
 
 ## Mobile release gate
 
-The code is designed for mobile but release claims require evidence:
+The code is designed for mobile but release claims require evidence. The policy is explicit:
+
+- A prerelease may ship while a physical-device check is pending only when desktop automated gates and mobile static/build gates pass, the missing check is listed in the release note, and the release remains clearly marked prerelease.
+- A stable or Community Plugins candidate must have recorded physical iOS and Android smoke results with device, OS, Obsidian version, and outcome before publication.
 
 1. In desktop developer tools, run `this.app.emulateMobile(true)` and check narrow/touch layouts.
 2. Test a physical iOS device supported by current Obsidian.
@@ -178,12 +200,12 @@ When an Obsidian release changes DOM:
 1. Update `minAppVersion` only when API usage requires it.
 2. Run `npm version <exact-version> --no-git-tag-version`; the version script synchronizes `package.json`, `package-lock.json`, `manifest.json`, and `versions.json`.
 3. Move the shipped entries from **Unreleased** to a dated changelog heading and add `docs/releases/<exact-version>.md`.
-4. Run `npm audit` and `npm run check`.
-5. Run `npm run verify:release -- <exact-version>` to catch mismatched metadata before tagging.
-6. Complete and record the manual desktop/mobile verification. A prerelease may ship with clearly documented manual gates still pending; a community-directory-ready stable release may not.
+4. Run `npm audit --audit-level=moderate` and `npm audit --omit=dev --audit-level=moderate`.
+5. Run `npm run verify:release -- <exact-version>` and `npm run verify:ship -- <exact-version>`; the latter is the authoritative local ship gate.
+6. Complete and record the manual desktop/mobile verification. A prerelease may ship with clearly documented physical gates pending; a community-directory-ready stable release may not.
 7. Commit and push the release state.
 8. Create and push a tag that exactly matches `manifest.json`, without a `v` prefix (for example, `1.1.0` or `1.1.0-alpha.2`).
-9. Wait for the release workflow and verify that the GitHub release contains `main.js`, `manifest.json`, and `styles.css`.
+9. Wait for the release workflow and verify the draft/published release contains `main.js`, `manifest.json`, `styles.css`, and `SHA256SUMS.txt`.
 
 The release workflow uses `docs/releases/<tag>.md` as the release body and automatically marks any tag containing `-` as a GitHub prerelease. Never repoint or overwrite an existing release tag; increment the prerelease suffix instead.
 

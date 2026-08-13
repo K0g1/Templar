@@ -111,4 +111,60 @@ describe('preview sessions', () => {
     expect(service.current()).toBeNull();
     expect(cancelPreview).toHaveBeenCalledWith(leaf, 'sidebar');
   });
+
+  it('keeps two previews in one document independently addressable', () => {
+    const ownerDocument = {} as Document;
+    const view = { containerEl: { ownerDocument }, requestAnimationFrame: vi.fn(() => 1), cancelAnimationFrame: vi.fn() };
+    const firstLeaf = { view } as unknown as WorkspaceLeaf;
+    const secondLeaf = { view: { ...view } } as unknown as WorkspaceLeaf;
+    const firstFile = fixture<TFile>({ path: 'first.md' });
+    const secondFile = fixture<TFile>({ path: 'second.md' });
+    const cancelPreview = vi.fn(async () => undefined);
+    const renderer = {
+      setPreview: vi.fn(async () => undefined),
+      cancelPreview,
+      cancelPreviewsByOwner: vi.fn(),
+    } as unknown as PageRenderer;
+    const service = new PreviewSessionService(
+      clone(DEFAULT_SETTINGS),
+      { getStyle: vi.fn(() => null) } as unknown as FrontmatterService,
+      renderer,
+    );
+
+    service.preview('first', firstLeaf, firstFile, BUILT_IN_TEMPLATES[0]!);
+    service.preview('second', secondLeaf, secondFile, BUILT_IN_TEMPLATES[1]!);
+    expect(service.sessionsForDocument(ownerDocument).map((session) => session.owner)).toEqual(['first', 'second']);
+    expect(service.currentForLeaf(firstLeaf)?.owner).toBe('first');
+    expect(service.currentForLeaf(secondLeaf)?.owner).toBe('second');
+  });
+
+  it('retargets an owner across leaves and cancels the frame in the old window', async () => {
+    const oldCallbacks = new Map<number, FrameRequestCallback>();
+    const oldWindow = {
+      requestAnimationFrame: (callback: FrameRequestCallback) => { oldCallbacks.set(1, callback); return 1; },
+      cancelAnimationFrame: vi.fn((id: number) => oldCallbacks.delete(id)),
+    };
+    const newWindow = { requestAnimationFrame: vi.fn(() => 2), cancelAnimationFrame: vi.fn() };
+    const oldLeaf = { view: { containerEl: { ownerDocument: { defaultView: oldWindow } } } } as unknown as WorkspaceLeaf;
+    const newLeaf = { view: { containerEl: { ownerDocument: { defaultView: newWindow } } } } as unknown as WorkspaceLeaf;
+    const oldFile = fixture<TFile>({ path: 'old.md' });
+    const newFile = fixture<TFile>({ path: 'new.md' });
+    const cancelPreview = vi.fn(async () => undefined);
+    const renderer = {
+      setPreview: vi.fn(async () => undefined),
+      cancelPreview,
+      cancelPreviewsByOwner: vi.fn(),
+    } as unknown as PageRenderer;
+    const service = new PreviewSessionService(
+      clone(DEFAULT_SETTINGS),
+      { getStyle: vi.fn(() => null) } as unknown as FrontmatterService,
+      renderer,
+    );
+    service.preview('owner', oldLeaf, oldFile, BUILT_IN_TEMPLATES[0]!);
+    service.preview('owner', newLeaf, newFile, BUILT_IN_TEMPLATES[1]!);
+    expect(oldWindow.cancelAnimationFrame).toHaveBeenCalledWith(1);
+    expect(cancelPreview).toHaveBeenCalledWith(oldLeaf, 'owner');
+    expect(service.currentForLeaf(oldLeaf)).toBeNull();
+    expect(service.currentForLeaf(newLeaf)?.file.path).toBe('new.md');
+  });
 });

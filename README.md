@@ -8,13 +8,13 @@ Templar turns ordinary Obsidian notes into polished journals, study sheets, proj
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 > [!IMPORTANT]
-> Templar is currently an alpha and is available through manual installation only. Back up important vaults before testing prerelease software.
+> Templar is alpha software. BRAT is a supported alpha installation path under final clean-vault validation; this project does not call it recommended until the release E2E matrix is recorded. Manual installation remains available. Back up important vaults before testing prerelease software.
 
 ## See what your notes can become
 
 | Botanical field notes | Alpine travel log | Neon creative brief |
 | :---: | :---: | :---: |
-| [![A botanical journal note in Obsidian with fern photography, warm paper, a heading, highlighted text, a table, and checklist](docs/assets/gallery/botanical-field-notes.png)](docs/assets/gallery/botanical-field-notes.png) | [![An alpine travel note in Obsidian with mountain photography, cool paper styling, highlighted route notes, a numbered list, and a table](docs/assets/gallery/alpine-field-log.png)](docs/assets/gallery/alpine-field-log.png) | [![A dark neon creative brief in Obsidian with cyberpunk photography, magenta and cyan accents, code, a palette table, checklist, and callouts](docs/assets/gallery/neon-night-brief.png)](docs/assets/gallery/neon-night-brief.png) |
+| [![A botanical journal note in Obsidian with fern photography, warm paper, a heading, highlighted text, a table, and checklist](docs/assets/gallery/botanical-field-notes.webp)](docs/assets/gallery/botanical-field-notes.webp) | [![An alpine travel note in Obsidian with mountain photography, cool paper styling, highlighted route notes, a numbered list, and a table](docs/assets/gallery/alpine-field-log.webp)](docs/assets/gallery/alpine-field-log.webp) | [![A dark neon creative brief in Obsidian with cyberpunk photography, magenta and cyan accents, code, a palette table, checklist, and callouts](docs/assets/gallery/neon-night-brief.webp)](docs/assets/gallery/neon-night-brief.webp) |
 
 These are real Markdown notes rendered by Templar inside Obsidian—not mockups. The example notes and original artwork are included in [`examples/`](examples/).
 
@@ -37,6 +37,19 @@ Templar includes **132 built-in styles** organized into themed folders, with ins
 - **Safe evolution:** customize only the current note, review source-template updates with three-way merging, or automate unstyled notes with ordered folder/tag/name/property rules.
 - **Print-ready output:** prepare fonts, images, pagination, paper, patterns, watermarks, and page sizes before handing the styled note to Obsidian's print dialog.
 - **Desktop and mobile:** the same self-contained note design works across Obsidian desktop and mobile.
+
+## Alpha installation via BRAT
+
+1. Install **Obsidian42 - BRAT** from Community Plugins and enable it.
+2. Run **BRAT: Add a beta plugin for testing** from the command palette.
+3. Paste `K0g1/Templar` and add the plugin.
+4. Enable **Templar** under **Settings → Community plugins → Installed plugins** if it is not enabled automatically.
+
+[Add Templar to BRAT](obsidian://brat?plugin=K0g1/Templar)
+
+For reproducible bug reports, run **BRAT: Add a beta plugin with frozen version based on a release tag**, enter `K0g1/Templar`, and use `1.2.0-alpha.2`. Frozen installs do not follow later releases automatically. BRAT's current minimum Obsidian version is documented as 1.11.4; Templar itself supports Obsidian 1.8.0, so use manual installation on older supported Obsidian versions.
+
+See the full [installation guide](docs/INSTALLATION.md) for updates, reinstalling, troubleshooting, and manual installation.
 
 ## Manual installation
 

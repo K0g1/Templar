@@ -1,58 +1,14 @@
 import postcss, { type AtRule, type Rule } from 'postcss';
 import type { CompiledPageStyle, ValidationIssue } from '../types';
 import { validateCustomCss } from './css-validator';
-
-const livePreviewElements: Readonly<Record<string, string>> = {
-  h1: ':is(h1, .HyperMD-header-1, .inline-title)',
-  h2: ':is(h2, .HyperMD-header-2)',
-  h3: ':is(h3, .HyperMD-header-3)',
-  h4: ':is(h4, .HyperMD-header-4)',
-  h5: ':is(h5, .HyperMD-header-5)',
-  h6: ':is(h6, .HyperMD-header-6)',
-  p: ':is(p, .HyperMD-paragraph)',
-  ul: ':is(ul, .HyperMD-list-line)',
-  ol: ':is(ol, .HyperMD-list-line)',
-  li: ':is(li, .HyperMD-list-line)',
-  blockquote: ':is(blockquote, .HyperMD-quote)',
-  img: 'img',
-  table: ':is(table, .cm-table-widget)',
-  code: ':is(code, .cm-inline-code)',
-  pre: ':is(pre, .HyperMD-codeblock)',
-  hr: ':is(hr, .HyperMD-hr)',
-  a: ':is(a, .cm-hmd-internal-link, .cm-link, .cm-url)',
-  mark: ':is(mark, .cm-highlight)',
-  input: 'input',
-};
+import { transformVirtualSelectorWithAst } from './css/selector-transform';
 
 function isInsideKeyframes(rule: Rule): boolean {
   return rule.parent?.type === 'atrule' && /keyframes$/i.test((rule.parent as AtRule).name);
 }
 
-function expandVirtualElements(selector: string): string {
-  return selector.replace(
-    /(^|[\s>+~(,])(?:h[1-6]|p|ul|ol|li|blockquote|img|table|code|pre|hr|a|mark|input)(?=$|[\s>+~,.#:)\]])/g,
-    (match) => {
-      const prefix = /^[\s>+~(,]/.test(match) ? match.charAt(0) : '';
-      const element = match.slice(prefix.length);
-      return `${prefix}${livePreviewElements[element] ?? element}`;
-    },
-  );
-}
-
 export function transformVirtualSelector(selector: string, scope: string): string {
-  const trimmed = selector.trim();
-  let transformed: string;
-  if (/^\.page-content(?=$|[\s.:#[])/.test(trimmed)) {
-    transformed = trimmed.replace(
-      /^\.page-content/,
-      `${scope} .templar-page-content`,
-    );
-  } else if (/^\.page(?=$|[\s.:#[])/.test(trimmed)) {
-    transformed = trimmed.replace(/^\.page/, `${scope} .templar-page`);
-  } else {
-    throw new Error(`Selector “${trimmed}” must start with .page or .page-content.`);
-  }
-  return expandVirtualElements(transformed);
+  return transformVirtualSelectorWithAst(selector, scope);
 }
 
 function scopeKeyframes(root: ReturnType<typeof postcss.parse>, scopeId: string): void {
