@@ -40,6 +40,9 @@ jobs:
           name: templar-release-${{ github.ref_name }}
           path: .release/
           if-no-files-found: error
+          # The verified staging directory is intentionally dot-prefixed.
+          # upload-artifact excludes hidden paths unless this is explicit.
+          include-hidden-files: true
 
   publish:
     needs: build-and-verify
