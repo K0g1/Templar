@@ -80,6 +80,13 @@
 
 @layer utilities {
   [hidden] { display: none !important; }
+  @media print {
+    .site-header, .site-footer, .skip-link, .install-cta, .live-note-window, .field-guide-tabs, .style-demo, .page-mode-demo { display: none !important; }
+    [data-reveal] { opacity: 1 !important; transform: none !important; }
+    .paper-card, .paper-panel { break-inside: avoid; box-shadow: none; }
+    a { text-decoration: none; }
+    body { background: #fff; }
+  }
   .grid { display: grid; gap: 24px; }
   .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }

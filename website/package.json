@@ -7,7 +7,7 @@
     "generate": "node scripts/generate-project-data.mjs && node scripts/parse-changelog.mjs && node scripts/sync-docs.mjs && node scripts/render-field-guide.mjs",
     "dev": "npm run generate && astro dev",
     "check": "npm run generate && astro check && node scripts/verify-content.mjs",
-    "build": "npm run generate && astro build && node scripts/verify-content.mjs && node scripts/verify-built-links.mjs"
+    "build": "npm run generate && astro build && node scripts/verify-content.mjs && node scripts/verify-built-links.mjs && node scripts/merge-sitemap.mjs && node scripts/write-404.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "0.41.7",

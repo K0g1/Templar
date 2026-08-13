@@ -102,6 +102,11 @@
   .tab a[role='tab'][aria-selected='true'] { border-color: var(--sl-color-accent); }
   .right-sidebar { background: transparent; }
   .mobile-sidebar-toggle { background: transparent; }
+  @media print {
+    .header, .sidebar, .right-sidebar, .pagination-links, .tab, footer { display: none !important; }
+    .main-frame { padding: 0 !important; }
+    .sl-markdown-content { max-width: none; }
+  }
   @media (min-width: 50rem) {
     .hero { padding: clamp(3rem, 8vw, 5.5rem); }
   }
