@@ -51,6 +51,11 @@ const heroNotes = fieldGuide.notes;
     </div>
   </section>
 
+  <div class="scroll-cue" aria-hidden="true">
+    <span>Scroll</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+  </div>
+
   <FieldGuideSection />
 
   <section class="site-section process-section" data-reveal>
@@ -178,6 +183,10 @@ const heroNotes = fieldGuide.notes;
   .hero-pencil { position: absolute; z-index: 3; bottom: 26px; left: -14px; width: 230px; opacity: 0.9; }
   .hero-desk :global(.live-note-window) { max-height: 620px; }
 
+  .scroll-cue { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 34px auto 0; color: var(--desk-ink-muted); font: 700 0.7rem/1 var(--ui); text-transform: uppercase; letter-spacing: 0.18em; }
+  .scroll-cue svg { width: 22px; height: 22px; animation: cue-bob 2.2s var(--ease-out) infinite; }
+  @keyframes cue-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) { .scroll-cue svg { animation: none; } }
   @media (max-width: 1020px) {
     .hero { grid-template-columns: 1fr; padding-top: 44px; }
     .hero-copy { text-align: center; }
