@@ -11,6 +11,7 @@ import {
 } from '../paper-origin';
 import type { PageMetricSet } from '../style-compiler';
 import { realmFor, type DomRealm } from '../dom-realm';
+import type { PerformanceMonitor } from '../../performance/performance-monitor';
 
 interface PaperOriginObservationState {
   contentEl: HTMLElement;
@@ -27,12 +28,15 @@ interface PaperOriginObservationState {
 export class PaperOriginController {
   private readonly states = new Map<WorkspaceLeaf, PaperOriginObservationState>();
 
+  public constructor(private readonly performanceMonitor?: PerformanceMonitor) {}
+
   public configure(
     leaf: WorkspaceLeaf,
     contentEl: HTMLElement,
     style: TemplarNoteStyle,
     metrics: PageMetricSet,
   ): void {
+    this.performanceMonitor?.counter('paperOrigin.configure.count');
     this.clear(leaf);
     this.cleanupOwnedDom(contentEl);
     const pageContents = new Set(
@@ -62,6 +66,7 @@ export class PaperOriginController {
 
     let state: PaperOriginObservationState;
     const scan = (): void => {
+      const operation = (): void => {
       const nextPageContents = new Set(
         contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`),
       );
@@ -102,8 +107,11 @@ export class PaperOriginController {
           continue;
         }
         nextObserved.add(target.element);
+        this.performanceMonitor?.counter('paperOrigin.contentRect.read');
         const contentRect = pageContent.getBoundingClientRect();
+        this.performanceMonitor?.counter('paperOrigin.targetRect.read');
         const targetRect = target.element.getBoundingClientRect();
+        this.performanceMonitor?.counter('paperOrigin.computedStyle.read');
         const targetStyle = view.getComputedStyle(target.element);
         const scale = measuredGeometryScale(contentRect.width, pageContent.offsetWidth, 1);
         const origin = round(measuredPaperOrigin(
@@ -119,7 +127,10 @@ export class PaperOriginController {
           pageContent.style.getPropertyValue('--templar-paper-baseline-position'),
         );
         if (!Number.isFinite(previous) || Math.abs(previous - origin) >= 0.01) {
+          this.performanceMonitor?.counter('paperOrigin.css.write.changed');
           pageContent.style.setProperty('--templar-paper-baseline-position', `${String(origin)}px`);
+        } else {
+          this.performanceMonitor?.counter('paperOrigin.css.write.sameValue');
         }
       }
       for (const previous of state.observedElements) {
@@ -130,21 +141,37 @@ export class PaperOriginController {
       }
       state.observedElements = nextObserved;
       state.pageContents = nextPageContents;
+      this.performanceMonitor?.gauge('paperOrigin.pageContents', nextPageContents.size);
+      this.performanceMonitor?.gauge('paperOrigin.observedElements', nextObserved.size);
+      };
+      if (this.performanceMonitor) this.performanceMonitor.measureSync('paperOrigin.scan', operation);
+      else operation();
     };
     const scheduleFrame = (): void => {
-      if (state.frame !== null) return;
+      this.performanceMonitor?.counter('paperOrigin.raf.schedule');
+      if (state.frame !== null) {
+        this.performanceMonitor?.counter('paperOrigin.raf.dedupe');
+        return;
+      }
       state.frame = view.requestAnimationFrame(() => {
         state.frame = null;
+        this.performanceMonitor?.counter('paperOrigin.raf.execute');
         scan();
       });
     };
     state = {
       contentEl,
       frame: null,
-      mutationObserver: new MutationObserverConstructor(scheduleFrame),
+      mutationObserver: new MutationObserverConstructor(() => {
+        this.performanceMonitor?.counter('paperOrigin.mutationObserver.callback');
+        scheduleFrame();
+      }),
       observedElements: new Set(),
       pageContents,
-      resizeObserver: new ResizeObserverConstructor(scheduleFrame),
+      resizeObserver: new ResizeObserverConstructor(() => {
+        this.performanceMonitor?.counter('paperOrigin.resizeObserver.callback');
+        scheduleFrame();
+      }),
       targets: new Map(),
       view,
     };
@@ -165,16 +192,39 @@ export class PaperOriginController {
     state?.mutationObserver.disconnect();
     if (state) this.cleanupOwnedDom(state.contentEl);
     this.states.delete(leaf);
+    this.performanceMonitor?.gauge('paperOrigin.states', this.states.size);
+    this.performanceMonitor?.gauge('paperOrigin.pageContents', this.pageContentCount());
+    this.performanceMonitor?.gauge('paperOrigin.observedElements', this.observedElementCount());
   }
 
   public destroy(): void {
     for (const leaf of [...this.states.keys()]) this.clear(leaf);
   }
 
+  public snapshot(): Record<string, number> {
+    return {
+      states: this.states.size,
+      observedElements: this.observedElementCount(),
+      pageContents: this.pageContentCount(),
+    };
+  }
+
   private cleanupOwnedDom(contentEl: HTMLElement): void {
     contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`).forEach((element) => {
       element.style.removeProperty('--templar-paper-baseline-position');
     });
+  }
+
+  private observedElementCount(): number {
+    let count = 0;
+    for (const state of this.states.values()) count += state.observedElements.size;
+    return count;
+  }
+
+  private pageContentCount(): number {
+    let count = 0;
+    for (const state of this.states.values()) count += state.pageContents.size;
+    return count;
   }
 }
 

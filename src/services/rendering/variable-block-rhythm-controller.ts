@@ -4,6 +4,7 @@ import type { TemplarNoteStyle } from '../../types';
 import { gridCompensation, naturalOuterFootprint } from '../../utils/grid';
 import { round } from '../../utils/value';
 import { realmFor } from '../dom-realm';
+import type { PerformanceMonitor } from '../../performance/performance-monitor';
 
 const VARIABLE_BLOCK_SELECTORS = [
   'table', '.mermaid', '[class*="block-language-"]', '.math-block', '.callout',
@@ -26,11 +27,14 @@ interface RhythmObservationState {
 export class VariableBlockRhythmController {
   private readonly states = new Map<WorkspaceLeaf, RhythmObservationState>();
 
+  public constructor(private readonly performanceMonitor?: PerformanceMonitor) {}
+
   public configure(
     leaf: WorkspaceLeaf,
     contentEl: HTMLElement,
     style: TemplarNoteStyle,
   ): void {
+    this.performanceMonitor?.counter('rhythm.configure.count');
     this.clear(leaf);
     this.cleanupOwnedDom(contentEl);
     let realm;
@@ -51,7 +55,9 @@ export class VariableBlockRhythmController {
     if (!enabled || !ResizeObserverConstructor || !MutationObserverConstructor) return;
 
     const update = (block: HTMLElement, measuredHeight?: number): void => {
+      this.performanceMonitor?.counter('rhythm.update.count');
       const marginTail = block.matches('table, iframe, object, video, audio, canvas');
+      this.performanceMonitor?.counter('rhythm.computedStyle.read');
       const computed = view.getComputedStyle(block);
       if (!block.style.getPropertyValue('--templar-grid-natural-margin-end')) {
         block.style.setProperty(
@@ -64,7 +70,7 @@ export class VariableBlockRhythmController {
         block.style.getPropertyValue('--templar-grid-snap'),
       ) || 0;
       const naturalHeight = naturalOuterFootprint(
-        measuredHeight ?? block.offsetHeight,
+        measuredHeight ?? this.readOffsetHeight(block),
         Number.parseFloat(computed.marginBlockStart || computed.marginTop) || 0,
         Number.parseFloat(block.style.getPropertyValue('--templar-grid-natural-margin-end')) || 0,
         previous,
@@ -72,7 +78,11 @@ export class VariableBlockRhythmController {
       );
       if (naturalHeight <= 0) return;
       const compensation = round(gridCompensation(naturalHeight, style.baseline.unit));
-      if (Math.abs(compensation - previous) < 0.01) return;
+      if (Math.abs(compensation - previous) < 0.01) {
+        this.performanceMonitor?.counter('rhythm.css.write.avoided');
+        return;
+      }
+      this.performanceMonitor?.counter('rhythm.css.write.changed');
       block.style.setProperty('--templar-grid-snap', `${String(compensation)}px`);
     };
 
@@ -91,9 +101,19 @@ export class VariableBlockRhythmController {
       }
     };
     const scheduleFrame = (): void => {
-      if (state.frame === null) state.frame = view.requestAnimationFrame(flush);
+      this.performanceMonitor?.counter('rhythm.raf.schedule');
+      if (state.frame !== null) {
+        this.performanceMonitor?.counter('rhythm.raf.dedupe');
+        return;
+      }
+      state.frame = view.requestAnimationFrame(() => {
+        this.performanceMonitor?.counter('rhythm.raf.execute');
+        flush();
+      });
     };
     const resizeObserver = new ResizeObserverConstructor((entries) => {
+      this.performanceMonitor?.counter('rhythm.resizeObserver.callback');
+      this.performanceMonitor?.counter('rhythm.resizeObserver.entryCount', entries.length);
       for (const entry of entries) {
         if (!entry.target.instanceOf(OwnerHTMLElement)) continue;
         const borderBox = entry.borderBoxSize[0];
@@ -108,6 +128,7 @@ export class VariableBlockRhythmController {
       contentEl,
       frame: null,
       mutationObserver: new MutationObserverConstructor(() => {
+        this.performanceMonitor?.counter('rhythm.mutationObserver.callback');
         state.needsScan = true;
         scheduleFrame();
       }),
@@ -118,6 +139,7 @@ export class VariableBlockRhythmController {
       view,
     };
     scanBlocks = (): void => {
+      const scan = (): void => {
       const nextBlocks = new Set<HTMLElement>();
       const selector = VARIABLE_BLOCK_SELECTORS
         .map((candidate) => `.${TEMPLAR_PAGE_CLASS} ${candidate}`)
@@ -137,6 +159,11 @@ export class VariableBlockRhythmController {
         update(block);
       }
       state.observedBlocks = nextBlocks;
+      this.performanceMonitor?.gauge('rhythm.observedBlocks', nextBlocks.size);
+      this.performanceMonitor?.gauge('rhythm.pendingMeasurements', state.pendingMeasurements.size);
+      };
+      if (this.performanceMonitor) this.performanceMonitor.measureSync('rhythm.scan', scan);
+      else scan();
     };
     state.mutationObserver.observe(contentEl, { childList: true, subtree: true });
     this.states.set(leaf, state);
@@ -150,10 +177,21 @@ export class VariableBlockRhythmController {
     state?.mutationObserver.disconnect();
     if (state) this.cleanupOwnedDom(state.contentEl);
     this.states.delete(leaf);
+    this.performanceMonitor?.gauge('rhythm.states', this.states.size);
+    this.performanceMonitor?.gauge('rhythm.observedBlocks', this.observedBlockCount());
+    this.performanceMonitor?.gauge('rhythm.pendingMeasurements', this.pendingMeasurementCount());
   }
 
   public destroy(): void {
     for (const leaf of [...this.states.keys()]) this.clear(leaf);
+  }
+
+  public snapshot(): Record<string, number> {
+    return {
+      states: this.states.size,
+      observedBlocks: this.observedBlockCount(),
+      pendingMeasurements: this.pendingMeasurementCount(),
+    };
   }
 
   private variableBlockOwner(element: HTMLElement): HTMLElement | null {
@@ -175,8 +213,25 @@ export class VariableBlockRhythmController {
     block.style.removeProperty('--templar-grid-natural-margin-end');
   }
 
+  private readOffsetHeight(block: HTMLElement): number {
+    this.performanceMonitor?.counter('rhythm.offsetHeight.fallbackRead');
+    return block.offsetHeight;
+  }
+
   private cleanupOwnedDom(contentEl: HTMLElement): void {
     contentEl.querySelectorAll<HTMLElement>('.templar-grid-snap-block').forEach((block) => this.clearBlock(block));
+  }
+
+  private observedBlockCount(): number {
+    let count = 0;
+    for (const state of this.states.values()) count += state.observedBlocks.size;
+    return count;
+  }
+
+  private pendingMeasurementCount(): number {
+    let count = 0;
+    for (const state of this.states.values()) count += state.pendingMeasurements.size;
+    return count;
   }
 }
 

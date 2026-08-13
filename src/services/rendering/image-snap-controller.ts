@@ -4,6 +4,7 @@ import type { TemplarNoteStyle } from '../../types';
 import { imageGridCompensation } from '../../utils/grid';
 import { round } from '../../utils/value';
 import { realmFor } from '../dom-realm';
+import type { PerformanceMonitor } from '../../performance/performance-monitor';
 
 interface ImageObservationState {
   mutationObserver: MutationObserver;
@@ -16,11 +17,14 @@ interface ImageObservationState {
 export class ImageSnapController {
   private readonly states = new Map<WorkspaceLeaf, ImageObservationState>();
 
+  public constructor(private readonly performanceMonitor?: PerformanceMonitor) {}
+
   public configure(
     leaf: WorkspaceLeaf,
     contentEl: HTMLElement,
     style: TemplarNoteStyle,
   ): void {
+    this.performanceMonitor?.counter('imageSnap.configure.count');
     this.clear(leaf);
     this.cleanupOwnedDom(contentEl);
 
@@ -44,35 +48,50 @@ export class ImageSnapController {
     }
 
     const update = (image: HTMLElement): void => {
+      this.performanceMonitor?.counter('imageSnap.update.count');
       // offsetHeight is the untransformed layout border box. A client rect is
       // contaminated by paged-mode zoom and decorative rotation.
+      this.performanceMonitor?.counter('imageSnap.offsetHeight.read');
       const height = image.offsetHeight;
       if (height <= 0) return;
       const previous = Number.parseFloat(
         image.style.getPropertyValue('--templar-image-snap'),
       ) || 0;
+      this.performanceMonitor?.counter('imageSnap.computedStyle.read');
       const computed = contentEl.ownerDocument.defaultView?.getComputedStyle(image);
       const footprint = height +
         (Number.parseFloat(computed?.marginBlockStart ?? computed?.marginTop ?? '0') || 0) +
         (Number.parseFloat(computed?.marginBlockEnd ?? computed?.marginBottom ?? '0') || 0) -
         previous;
       const compensation = imageGridCompensation(footprint, style.baseline.unit);
-      image.style.setProperty('--templar-image-snap', `${String(round(compensation))}px`);
+      const nextValue = `${String(round(compensation))}px`;
+      this.performanceMonitor?.counter(
+        compensation === previous
+          ? 'imageSnap.css.write.sameValue'
+          : 'imageSnap.css.write.changed',
+      );
+      image.style.setProperty('--templar-image-snap', nextValue);
     };
 
     let scanImages: () => void;
     const resizeObserver = new ResizeObserverConstructor((entries) => {
+      this.performanceMonitor?.counter('imageSnap.resizeObserver.callback');
+      this.performanceMonitor?.counter('imageSnap.resizeObserver.entryCount', entries.length);
       for (const entry of entries) {
         if (entry.target.instanceOf(OwnerHTMLElement)) update(entry.target);
       }
     });
     const state: ImageObservationState = {
       contentEl,
-      mutationObserver: new MutationObserverConstructor(() => scanImages()),
+      mutationObserver: new MutationObserverConstructor(() => {
+        this.performanceMonitor?.counter('imageSnap.mutationObserver.callback');
+        scanImages();
+      }),
       observedImages: new Set(),
       resizeObserver,
     };
     scanImages = (): void => {
+      const scan = (): void => {
       const nextImages = new Set(
         contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_PAGE_CLASS} img`),
       );
@@ -84,6 +103,10 @@ export class ImageSnapController {
         update(image);
       }
       state.observedImages = nextImages;
+      this.performanceMonitor?.gauge('imageSnap.observedImages', nextImages.size);
+      };
+      if (this.performanceMonitor) this.performanceMonitor.measureSync('imageSnap.scan', scan);
+      else scan();
     };
     state.mutationObserver.observe(contentEl, { childList: true, subtree: true });
     this.states.set(leaf, state);
@@ -96,16 +119,34 @@ export class ImageSnapController {
     state?.mutationObserver.disconnect();
     if (state) this.cleanupOwnedDom(state.contentEl);
     this.states.delete(leaf);
+    this.performanceMonitor?.gauge('imageSnap.states', this.states.size);
+    this.performanceMonitor?.gauge(
+      'imageSnap.observedImages',
+      this.observedImageCount(),
+    );
   }
 
   public destroy(): void {
     for (const leaf of [...this.states.keys()]) this.clear(leaf);
   }
 
+  public snapshot(): Record<string, number> {
+    return {
+      states: this.states.size,
+      observedImages: this.observedImageCount(),
+    };
+  }
+
   private cleanupOwnedDom(contentEl: HTMLElement): void {
     contentEl.querySelectorAll<HTMLElement>('img').forEach((image) => {
       image.style.removeProperty('--templar-image-snap');
     });
+  }
+
+  private observedImageCount(): number {
+    let count = 0;
+    for (const state of this.states.values()) count += state.observedImages.size;
+    return count;
   }
 }
 

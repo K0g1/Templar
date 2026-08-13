@@ -29,7 +29,13 @@ export default defineConfig(
             'scripts/verify-brat-release.mjs',
             'scripts/verify-ship.mjs',
             'scripts/stage-release.mjs',
+            'scripts/generate-benchmark-fixtures.mjs',
+            'scripts/run-profile-synthetic.mjs',
+            'scripts/aggregate-performance-results.mjs',
+            'scripts/run-overhead-calibration.mjs',
             'vitest.config.ts',
+            'vitest.profile.config.ts',
+            'vitest.overhead.config.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,
@@ -87,6 +93,16 @@ export default defineConfig(
     },
   },
   {
+    files: ['tests/**/*.profile.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+    rules: {
+      'obsidianmd/no-nodejs-modules': 'off',
+      'obsidianmd/no-tfile-tfolder-cast': 'off',
+    },
+  },
+  {
     files: [
       'tests/frontmatter.test.ts',
       'tests/frontmatter.integration.test.ts',
@@ -102,7 +118,10 @@ export default defineConfig(
     },
   },
   {
-    files: ['vitest.config.ts'],
+    files: ['vitest.config.ts', 'vitest.profile.config.ts', 'vitest.overhead.config.ts'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
     rules: {
       'obsidianmd/no-nodejs-modules': 'off',
     },

@@ -2,6 +2,7 @@ import type { FontMetricRequest, FontMetrics, TemplarNoteStyle } from '../types'
 import { fitToGrid } from '../utils/grid';
 import { round } from '../utils/value';
 import type { PageMetricSet } from './style-compiler';
+import type { PerformanceMonitor } from '../performance/performance-monitor';
 
 /**
  * Returns the baseline coordinate inside the measured line box.
@@ -43,19 +44,24 @@ export class FontMetricsService {
   private readonly documentIds = new WeakMap<Document, number>();
   private nextDocumentId = 1;
 
-  public constructor(private readonly maxEntries: () => number) {}
+  public constructor(
+    private readonly maxEntries: () => number,
+    private readonly performanceMonitor?: PerformanceMonitor,
+  ) {}
 
   public async measurePage(style: TemplarNoteStyle, document: Document): Promise<PageMetricSet> {
-    const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
-    const bodyLineHeight = gridded
-      ? style.baseline.unit
-      : style.typography.bodyLineHeight > 0
-        ? style.typography.bodyLineHeight
-        : Math.max(style.typography.bodySize * 1.55, 22);
-    const headingLineHeight = (size: number): number =>
-      gridded ? fitToGrid(size * 1.18, style.baseline.unit) : size * 1.2;
+    this.performanceMonitor?.counter('font.measurePage.count');
+    return this.performanceMonitor?.measureAsync('font.measurePage', async () => {
+      const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
+      const bodyLineHeight = gridded
+        ? style.baseline.unit
+        : style.typography.bodyLineHeight > 0
+          ? style.typography.bodyLineHeight
+          : Math.max(style.typography.bodySize * 1.55, 22);
+      const headingLineHeight = (size: number): number =>
+        gridded ? fitToGrid(size * 1.18, style.baseline.unit) : size * 1.2;
 
-    const [body, h1, h2, h3, h4, h5, h6, code] = await Promise.all([
+      const [body, h1, h2, h3, h4, h5, h6, code] = await Promise.all([
       this.measure(
         {
           family: style.typography.bodyFont,
@@ -128,23 +134,35 @@ export class FontMetricsService {
         },
         document,
       ),
-    ]);
-    return { body, h1, h2, h3, h4, h5, h6, code };
+      ]);
+      return { body, h1, h2, h3, h4, h5, h6, code };
+    }) ?? await this.measurePageWithoutMonitor(style, document);
   }
 
   public async measure(request: FontMetricRequest, document: Document): Promise<FontMetrics> {
+    this.performanceMonitor?.counter('font.measure.count');
     const key = this.cacheKey(request, document);
     const cached = this.cache.get(key);
     if (cached) {
+      this.performanceMonitor?.counter('font.cache.hit');
+      this.performanceMonitor?.gauge('font.cache.size', this.cache.size);
       this.cache.delete(key);
       this.cache.set(key, cached);
       return cached;
     }
 
-    await this.loadFont(request, document);
-    const metrics = this.measureWithDom(request, document);
+    this.performanceMonitor?.counter('font.cache.miss');
+    await (this.performanceMonitor?.measureAsync(
+      'font.loadFont',
+      () => this.loadFont(request, document),
+    ) ?? this.loadFont(request, document));
+    const metrics = this.performanceMonitor?.measureSync(
+      'font.measureWithDom',
+      () => this.measureWithDom(request, document),
+    ) ?? this.measureWithDom(request, document);
     this.cache.set(key, metrics);
     this.trimCache();
+    this.performanceMonitor?.gauge('font.cache.size', this.cache.size);
     return metrics;
   }
 
@@ -154,6 +172,31 @@ export class FontMetricsService {
 
   public get size(): number {
     return this.cache.size;
+  }
+
+  private async measurePageWithoutMonitor(
+    style: TemplarNoteStyle,
+    document: Document,
+  ): Promise<PageMetricSet> {
+    const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
+    const bodyLineHeight = gridded
+      ? style.baseline.unit
+      : style.typography.bodyLineHeight > 0
+        ? style.typography.bodyLineHeight
+        : Math.max(style.typography.bodySize * 1.55, 22);
+    const headingLineHeight = (size: number): number =>
+      gridded ? fitToGrid(size * 1.18, style.baseline.unit) : size * 1.2;
+    const [body, h1, h2, h3, h4, h5, h6, code] = await Promise.all([
+      this.measure({ family: style.typography.bodyFont, fontSize: style.typography.bodySize, fontWeight: style.typography.bodyWeight, lineHeight: bodyLineHeight }, document),
+      this.measure({ family: style.headings.h1.font, fontSize: style.headings.h1.size, fontWeight: style.headings.h1.weight, lineHeight: headingLineHeight(style.headings.h1.size) }, document),
+      this.measure({ family: style.headings.h2.font, fontSize: style.headings.h2.size, fontWeight: style.headings.h2.weight, lineHeight: headingLineHeight(style.headings.h2.size) }, document),
+      this.measure({ family: style.headings.h3.font, fontSize: style.headings.h3.size, fontWeight: style.headings.h3.weight, lineHeight: headingLineHeight(style.headings.h3.size) }, document),
+      this.measure({ family: style.headings.h4.font, fontSize: style.headings.h4.size, fontWeight: style.headings.h4.weight, lineHeight: headingLineHeight(style.headings.h4.size) }, document),
+      this.measure({ family: style.headings.h5.font, fontSize: style.headings.h5.size, fontWeight: style.headings.h5.weight, lineHeight: headingLineHeight(style.headings.h5.size) }, document),
+      this.measure({ family: style.headings.h6.font, fontSize: style.headings.h6.size, fontWeight: style.headings.h6.weight, lineHeight: headingLineHeight(style.headings.h6.size) }, document),
+      this.measure({ family: style.blocks.codeFont, fontSize: style.blocks.codeSize, fontWeight: style.typography.bodyWeight, lineHeight: bodyLineHeight }, document),
+    ]);
+    return { body, h1, h2, h3, h4, h5, h6, code };
   }
 
   private async loadFont(request: FontMetricRequest, document: Document): Promise<void> {

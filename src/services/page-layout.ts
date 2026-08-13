@@ -3,6 +3,7 @@ import type { TemplarNoteStyle } from '../types';
 import { alignedPageGap, measuredGeometryScale } from '../utils/grid';
 import { round } from '../utils/value';
 import { realmFor, type DomRealm } from './dom-realm';
+import type { PerformanceMonitor } from '../performance/performance-monitor';
 
 interface PageLayoutState {
   realm: DomRealm;
@@ -22,11 +23,15 @@ export class PageLayoutService {
   private readonly states = new Map<WorkspaceLeaf, PageLayoutState>();
   private readonly scopes = new Map<WorkspaceLeaf, HTMLElement>();
 
+  public constructor(private readonly performanceMonitor?: PerformanceMonitor) {}
+
   public configure(
     leaf: WorkspaceLeaf,
     scopeEl: HTMLElement,
     style: TemplarNoteStyle,
   ): void {
+    this.performanceMonitor?.counter('pageLayout.configure.count');
+    const configure = (): void => {
     this.clear(leaf);
     this.scopes.set(leaf, scopeEl);
     scopeEl.dataset.templarMode = style.page.mode;
@@ -49,8 +54,13 @@ export class PageLayoutService {
       frame: null,
       observedResizeTargets: new Set(),
       scopeEl,
-      resizeObserver: new realm.ResizeObserver(() => this.schedule(leaf, style)),
+      resizeObserver: new realm.ResizeObserver((entries) => {
+        this.performanceMonitor?.counter('pageLayout.resizeObserver.callback');
+        this.performanceMonitor?.counter('pageLayout.resizeObserver.entryCount', entries.length);
+        this.schedule(leaf, style);
+      }),
       mutationObserver: new realm.MutationObserver(() => {
+        this.performanceMonitor?.counter('pageLayout.mutationObserver.callback');
         this.observeResizeTargets(state);
         this.schedule(leaf, style);
       }),
@@ -65,6 +75,12 @@ export class PageLayoutService {
     }
     this.observeResizeTargets(state);
     this.schedule(leaf, style);
+    };
+    if (this.performanceMonitor) {
+      this.performanceMonitor.measureSync('pageLayout.configure', configure);
+    } else {
+      configure();
+    }
   }
 
   public clear(leaf: WorkspaceLeaf): void {
@@ -90,6 +106,9 @@ export class PageLayoutService {
     }
     this.states.delete(leaf);
     this.scopes.delete(leaf);
+    this.performanceMonitor?.gauge('pageLayout.states', this.states.size);
+    this.performanceMonitor?.gauge('pageLayout.scopes', this.scopes.size);
+    this.performanceMonitor?.gauge('pageLayout.observedTargets', this.observedTargetCount());
   }
 
   public destroy(): void {
@@ -121,24 +140,38 @@ export class PageLayoutService {
     this.schedule(leaf, style);
   }
 
+  public snapshot(): Record<string, number> {
+    return {
+      states: this.states.size,
+      scopes: this.scopes.size,
+      observedTargets: this.observedTargetCount(),
+      scheduledFrames: [...this.states.values()].filter((state) => state.frame !== null).length,
+    };
+  }
+
   private schedule(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
     const state = this.states.get(leaf);
+    this.performanceMonitor?.counter('pageLayout.schedule.attempt');
     if (!state || state.frame !== null) {
+      this.performanceMonitor?.counter('pageLayout.schedule.dedupe');
       return;
     }
     state.frame = state.realm.window.requestAnimationFrame(() => {
       state.frame = null;
+      this.performanceMonitor?.counter('pageLayout.raf.execute');
       this.layout(state.scopeEl, style);
     });
   }
 
   private layout(scopeEl: HTMLElement, style: TemplarNoteStyle): void {
+    const operation = (): void => {
     for (const { pageRoot, pageContent } of this.pagePairs(scopeEl)) {
+      this.performanceMonitor?.counter('pageLayout.geometry.clientWidthRead');
       if (pageRoot.clientWidth <= 0) {
         continue;
       }
       const view = pageRoot.ownerDocument.defaultView;
-      const computed = view?.getComputedStyle(pageRoot);
+      const computed = this.readComputedStyle(view, pageRoot, 'pageLayout.computedStyle.read');
       const inlinePadding =
         this.pixelValue(computed?.paddingInlineStart) +
         this.pixelValue(computed?.paddingInlineEnd);
@@ -155,12 +188,19 @@ export class PageLayoutService {
         '--templar-page-scale',
         String(appliedScale),
       );
+      this.performanceMonitor?.counter('pageLayout.canvasScale.write');
       const geometryScale = measuredGeometryScale(
-        pageContent.getBoundingClientRect().width,
+        this.readRect(pageContent, 'pageLayout.geometry.read').width,
         style.page.width,
         appliedScale,
       );
       this.paginate(pageContent, style, geometryScale);
+    }
+    };
+    if (this.performanceMonitor) {
+      this.performanceMonitor.measureSync('pageLayout.layout', operation);
+    } else {
+      operation();
     }
   }
 
@@ -200,6 +240,8 @@ export class PageLayoutService {
       }
     }
     state.observedResizeTargets = nextTargets;
+    this.performanceMonitor?.gauge('pageLayout.observedTargets', this.observedTargetCount());
+    this.performanceMonitor?.gauge('pageLayout.pagePairCount', this.pagePairs(state.scopeEl).length);
   }
 
   private pixelValue(value: string | undefined): number {
@@ -213,8 +255,12 @@ export class PageLayoutService {
     geometryScale: number,
     pageGapOverride?: number,
   ): void {
+    this.performanceMonitor?.counter('pageLayout.pagination.count');
+    const operation = (): void => {
     this.clearBreaks(pageContent);
     const candidates = this.pageBreakCandidates(pageContent);
+    this.performanceMonitor?.counter('pageLayout.candidate.count', candidates.length);
+    this.performanceMonitor?.gauge('pageLayout.candidateCount', candidates.length);
     const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
     const pageGap = pageGapOverride ?? (gridded
       ? alignedPageGap(style.page.height, style.page.gap, style.baseline.unit)
@@ -226,8 +272,8 @@ export class PageLayoutService {
     );
 
     for (const element of candidates) {
-      const contentRect = pageContent.getBoundingClientRect();
-      const rect = element.getBoundingClientRect();
+      const contentRect = this.readRect(pageContent, 'pageLayout.geometry.read');
+      const rect = this.readRect(element, 'pageLayout.geometry.read');
       const top = (rect.top - contentRect.top) / geometryScale;
       const height = rect.height / geometryScale;
       if (height <= 0) {
@@ -248,23 +294,32 @@ export class PageLayoutService {
       const nextPage = Math.floor(top / pageSpan) + 1;
       const nextTop = nextPage * pageSpan + style.layout.paddingTop;
       const breakOffset = Math.max(0, nextTop - top);
-      const computed = pageContent.ownerDocument.defaultView?.getComputedStyle(element);
+      const computed = this.readComputedStyle(
+        pageContent.ownerDocument.defaultView,
+        element,
+        'pageLayout.computedStyle.read',
+      );
       element.style.setProperty(
         '--templar-original-margin-top',
         computed?.marginTop ?? '0px',
       );
       element.style.setProperty('--templar-page-break', `${String(round(breakOffset))}px`);
+      this.performanceMonitor?.counter('pageLayout.break.write');
     }
 
-    const contentRect = pageContent.getBoundingClientRect();
+    const contentRect = this.readRect(pageContent, 'pageLayout.geometry.read');
     let contentBottom = style.layout.paddingTop;
     for (const element of candidates) {
-      const rect = element.getBoundingClientRect();
+      const rect = this.readRect(element, 'pageLayout.geometry.read');
       contentBottom = Math.max(
         contentBottom,
         (rect.bottom - contentRect.top) / geometryScale +
           this.pixelValue(
-            pageContent.ownerDocument.defaultView?.getComputedStyle(element).marginBlockEnd,
+            this.readComputedStyle(
+              pageContent.ownerDocument.defaultView,
+              element,
+              'pageLayout.computedStyle.read',
+            )?.marginBlockEnd,
           ),
       );
     }
@@ -277,6 +332,13 @@ export class PageLayoutService {
       '--templar-canvas-height',
       `${String(round(canvasHeight))}px`,
     );
+    this.performanceMonitor?.counter('pageLayout.canvasHeight.write');
+    };
+    if (this.performanceMonitor) {
+      this.performanceMonitor.measureSync('pageLayout.pagination', operation);
+    } else {
+      operation();
+    }
   }
 
   private pageBreakCandidates(pageContent: HTMLElement): HTMLElement[] {
@@ -306,5 +368,21 @@ export class PageLayoutService {
       element.style.removeProperty('--templar-page-break');
       element.style.removeProperty('--templar-original-margin-top');
     }
+  }
+
+  private readRect(element: Element, metric: string): DOMRect {
+    this.performanceMonitor?.counter(metric);
+    return element.getBoundingClientRect();
+  }
+
+  private readComputedStyle(view: Window | null | undefined, element: Element, metric: string): CSSStyleDeclaration | undefined {
+    this.performanceMonitor?.counter(metric);
+    return view?.getComputedStyle(element);
+  }
+
+  private observedTargetCount(): number {
+    let count = 0;
+    for (const state of this.states.values()) count += state.observedResizeTargets.size;
+    return count;
   }
 }

@@ -176,7 +176,7 @@ export class TemplarSettingTab extends PluginSettingTab {
       .addButton((button) =>
         button.setButtonText('Clear cache').onClick(() => {
           this.plugin.fontMetrics.clear();
-          this.plugin.renderer.scheduleRefreshAll();
+          this.plugin.renderer.scheduleRefreshAll('settings-refresh');
           new Notice('Cleared font measurements.');
         }),
       );

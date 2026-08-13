@@ -14,6 +14,7 @@ import {
   readingRootNeedsRetarget,
 } from '../reading-whitespace';
 import { ReadingRootRegistry } from './reading-root-registry';
+import type { PerformanceMonitor } from '../../performance/performance-monitor';
 
 interface ReadingSectionInfo {
   lineStart: number;
@@ -39,12 +40,14 @@ export class ReadingWhitespaceController {
   public constructor(
     private readonly app: App,
     private readonly isEnabled: () => boolean,
+    private readonly performanceMonitor?: PerformanceMonitor,
   ) {}
 
   public registerSection(
     element: HTMLElement,
     context: MarkdownPostProcessorContext,
   ): void {
+    this.performanceMonitor?.counter('reading.registerSection.count');
     const file = this.app.vault.getAbstractFileByPath(context.sourcePath);
     if (this.destroyed || !this.isEnabled() || !(file instanceof TFile)) return;
     this.pruneDisconnectedRoots();
@@ -69,6 +72,7 @@ export class ReadingWhitespaceController {
   }
 
   public activateRoot(readingRoot: HTMLElement, file: TFile): void {
+    this.performanceMonitor?.counter('reading.activateRoot.count');
     if (this.destroyed || !this.isEnabled()) return;
     const state = this.rootState(readingRoot);
     this.retargetRoot(readingRoot, state, file.path, this.bodyStartLine(file));
@@ -82,6 +86,7 @@ export class ReadingWhitespaceController {
   }
 
   public deactivateRoot(readingRoot: HTMLElement): void {
+    this.performanceMonitor?.counter('reading.deactivateRoot.count');
     const state = this.readingRoots.get(readingRoot);
     if (!state) return;
     state.active = false;
@@ -91,6 +96,7 @@ export class ReadingWhitespaceController {
   }
 
   public prepareCachedSections(readingRoot: HTMLElement, file: TFile): void {
+    this.performanceMonitor?.counter('reading.prepareCachedSections.count');
     const state = this.rootState(readingRoot);
     this.retargetRoot(readingRoot, state, file.path, this.bodyStartLine(file));
     if (state.context) return;
@@ -122,16 +128,21 @@ export class ReadingWhitespaceController {
   }
 
   public schedule(readingRoot: HTMLElement): void {
+    this.performanceMonitor?.counter('reading.schedule.attempt');
     const state = this.readingRoots.get(readingRoot);
     if (!this.isEnabled() || !readingRoot.hasClass(TEMPLAR_PAGE_CLASS) || !state?.active) {
       this.deactivateRoot(readingRoot);
       return;
     }
-    if (this.scheduledRoots.has(readingRoot)) return;
+    if (this.scheduledRoots.has(readingRoot)) {
+      this.performanceMonitor?.counter('reading.schedule.dedupe');
+      return;
+    }
     const view = readingRoot.ownerDocument.defaultView;
     if (!view) return;
     const frame = view.requestAnimationFrame(() => {
       this.scheduledRoots.delete(readingRoot);
+      this.performanceMonitor?.counter('reading.raf.execute');
       if (
         !this.destroyed &&
         this.isEnabled() &&
@@ -156,6 +167,7 @@ export class ReadingWhitespaceController {
     }
     readingRoot.querySelectorAll('.templar-blank-line-spacer').forEach((spacer) => spacer.remove());
     this.readingRoots.delete(readingRoot);
+    this.updateGauges();
   }
 
   public destroy(): void {
@@ -167,6 +179,13 @@ export class ReadingWhitespaceController {
 
   public pruneDisconnected(): void {
     this.pruneDisconnectedRoots();
+  }
+
+  public snapshot(): Record<string, number> {
+    return {
+      roots: this.rootCount(),
+      scheduledRoots: this.scheduledRoots.size,
+    };
   }
 
   private rootState(readingRoot: HTMLElement): ReadingRootState {
@@ -227,15 +246,20 @@ export class ReadingWhitespaceController {
   }
 
   private reconcile(readingRoot: HTMLElement, current?: HTMLElement): void {
+    this.performanceMonitor?.counter('reading.reconcile.count');
+    const operation = (): void => {
     const state = this.rootState(readingRoot);
     if (!state.active) return;
     if (!hasReadingWhitespaceWork(Boolean(state.context), Boolean(current), state.sections.length)) return;
+    this.performanceMonitor?.counter('reading.reconcile.sectionsInput', state.sections.length);
     if (current && !state.sections.includes(current)) state.sections.push(current);
     const aliveSections = state.sections.filter((element) => this.isAliveSection(state, element));
     state.sections = aliveSections;
     const sections = aliveSections.filter(
       (element) => !element.parentElement?.closest('.templar-reading-section'),
     );
+    this.performanceMonitor?.counter('reading.reconcile.sectionsAlive', aliveSections.length);
+    this.performanceMonitor?.counter('reading.reconcile.topLevelSections', sections.length);
     sections.sort((left, right) =>
       (this.sectionInfo(state, left)?.lineStart ?? 0) - (this.sectionInfo(state, right)?.lineStart ?? 0));
 
@@ -247,6 +271,12 @@ export class ReadingWhitespaceController {
     if (firstSection) this.reconcileLeadingSpacer(state, firstSection);
     for (let index = 1; index < sections.length; index += 1) {
       this.reconcileGapSpacer(state, sections[index - 1]!, sections[index]!);
+    }
+    };
+    if (this.performanceMonitor) {
+      this.performanceMonitor.measureSync('reading.reconcile', operation);
+    } else {
+      operation();
     }
   }
 
@@ -271,6 +301,7 @@ export class ReadingWhitespaceController {
       if (hasSpacer) firstChild.remove();
       return;
     }
+    this.performanceMonitor?.counter('reading.leadingSpacer.operations');
     if (hasSpacer) {
       (firstChild as HTMLElement).style.setProperty('--templar-blank-lines', String(count));
       return;
@@ -293,6 +324,7 @@ export class ReadingWhitespaceController {
       if (hasSpacer) firstChild.remove();
       return;
     }
+    this.performanceMonitor?.counter('reading.gapSpacer.operations');
     if (hasSpacer) {
       (firstChild as HTMLElement).style.setProperty('--templar-blank-lines', String(Math.max(1, count)));
       return;
@@ -305,6 +337,7 @@ export class ReadingWhitespaceController {
     section: HTMLElement,
     range: ReadingSectionInfo,
   ): void {
+    this.performanceMonitor?.counter('reading.internalWhitespace.operations');
     const lines = range.text.split('\n');
     const markdown = range.lineStart <= range.lineEnd && range.lineEnd < lines.length
       ? lines.slice(range.lineStart, range.lineEnd + 1).join('\n')
@@ -344,6 +377,19 @@ export class ReadingWhitespaceController {
         );
       }
     }
+  }
+
+  private rootCount(): number {
+    let count = 0;
+    for (const root of this.readingRoots.keys()) {
+      if (root) count += 1;
+    }
+    return count;
+  }
+
+  private updateGauges(): void {
+    this.performanceMonitor?.gauge('reading.roots', this.rootCount());
+    this.performanceMonitor?.gauge('reading.scheduledRoots', this.scheduledRoots.size);
   }
 }
 
