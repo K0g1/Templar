@@ -1,6 +1,6 @@
 {
   "name": "templar",
-  "version": "1.2.0-alpha.2",
+  "version": "1.2.0-alpha.3",
   "description": "Self-contained per-note visual page design for Obsidian.",
   "main": "main.js",
   "type": "module",
