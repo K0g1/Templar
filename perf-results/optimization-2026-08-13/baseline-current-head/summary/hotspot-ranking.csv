@@ -1,0 +1,9 @@
+rank,subsystem,scenario,metric,measured_value,comparison_value,delta_percent,confidence,evidence_files
+1,pageLayout,synthetic profile matrix,pageLayout.layout,7055.5803750000005,,,medium,raw/**/*.templar-perf.json
+2,pageLayout,synthetic profile matrix,pageLayout.pagination,6955.798453000002,,,medium,raw/**/*.templar-perf.json
+3,reading,synthetic profile matrix,reading.reconcile,2858.9658900000018,,,medium,raw/**/*.templar-perf.json
+4,renderer,synthetic profile matrix,renderer.refreshLeaf.total,2528.2526249999996,,,medium,raw/**/*.templar-perf.json
+5,rhythm,synthetic profile matrix,rhythm.scan,1974.7215830000018,,,medium,raw/**/*.templar-perf.json
+6,paperOrigin,synthetic profile matrix,paperOrigin.scan,129.1966239999997,,,medium,raw/**/*.templar-perf.json
+7,renderer,synthetic profile matrix,renderer.refreshLeaf.compileStyle,74.3985869999982,,,medium,raw/**/*.templar-perf.json
+8,font,synthetic profile matrix,font.measureWithDom,37.46595899999454,,,medium,raw/**/*.templar-perf.json

@@ -1,0 +1,789 @@
+{
+  "schemaVersion": 1,
+  "profileInstrumentation": true,
+  "scenarioId": "ablation-no-PaperOrigin-run-1",
+  "valid": true,
+  "invalidReason": null,
+  "sourceCommit": "ff9a667cca557665035449e2ce58435eea2b67cb",
+  "instrumentationCommit": "ff9a667cca557665035449e2ce58435eea2b67cb",
+  "pluginVersion": "1.2.0-alpha.2",
+  "environmentId": "synthetic-happy-dom",
+  "platform": "cli",
+  "fixtureId": "F002",
+  "styleProfile": "S6",
+  "leafCount": 1,
+  "mode": "paged",
+  "readingEnabled": true,
+  "livePreviewEnabled": false,
+  "previewActive": null,
+  "featureMask": {
+    "pageLayout": true,
+    "readingWhitespace": true,
+    "paperOrigin": false,
+    "variableRhythm": true,
+    "imageSnap": true
+  },
+  "durationMs": 126.4808750000002,
+  "timing": {
+    "warmupStartMs": null,
+    "measurementStartMs": 4158.076625,
+    "interactionStartMs": 4158.193,
+    "interactionEndMs": 4280.082916,
+    "settleEndMs": 4280.085708,
+    "measurementEndMs": 4284.5575
+  },
+  "settled": true,
+  "terminatedEarly": false,
+  "terminationReason": null,
+  "frameMonitorSupported": true,
+  "longTaskSupport": true,
+  "memorySupport": false,
+  "counters": {
+    "renderer.refreshAll.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "leafCount=1&reason=\"explicit-refresh\"": 1
+      }
+    },
+    "renderer.refreshLeaf.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "leafCount=1&livePreviewEnabled=false&mode=\"paged\"&previewActive=false&readingEnabled=true&reason=\"explicit-refresh\"": 1
+      }
+    },
+    "font.measurePage.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "font.measure.count": {
+      "count": 8,
+      "total": 8,
+      "byDimensions": {
+        "": 8
+      }
+    },
+    "font.cache.miss": {
+      "count": 8,
+      "total": 8,
+      "byDimensions": {
+        "": 8
+      }
+    },
+    "renderer.refreshLeaf.styleHostWrite": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "imageSnap.configure.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "rhythm.configure.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "rhythm.discovery.fullScan": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "rhythm.batch.read": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "rhythm.offsetHeight.fallbackRead": {
+      "count": 87,
+      "total": 87,
+      "byDimensions": {
+        "": 87
+      }
+    },
+    "rhythm.batch.write": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.configure.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.schedule.attempt": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "renderer.refreshLeaf.readingPrepare": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.prepareCachedSections.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "renderer.refreshLeaf.readingActivate": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.activateRoot.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.schedule.attempt": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.raf.execute": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.geometry.clientWidthRead": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.computedStyle.read": {
+      "count": 501,
+      "total": 501,
+      "byDimensions": {
+        "": 501
+      }
+    },
+    "pageLayout.canvasScale.write": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.geometry.read": {
+      "count": 501,
+      "total": 501,
+      "byDimensions": {
+        "": 501
+      }
+    },
+    "pageLayout.pagination.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.candidate.count": {
+      "count": 1,
+      "total": 500,
+      "byDimensions": {
+        "": 500
+      }
+    },
+    "pageLayout.geometry.contentRectRead": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.canvasHeight.write": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.raf.execute": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.reconcile.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    }
+  },
+  "gauges": {
+    "font.cache.size": {
+      "value": 8,
+      "samples": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "droppedSamples": 0
+    },
+    "paperOrigin.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "paperOrigin.pageContents": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "paperOrigin.observedElements": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "imageSnap.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "imageSnap.observedImages": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "rhythm.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "rhythm.observedBlocks": {
+      "value": 0,
+      "samples": [
+        0,
+        87,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "rhythm.pendingMeasurements": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.scopes": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.observedTargets": {
+      "value": 0,
+      "samples": [
+        0,
+        89,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.pagePairCount": {
+      "value": 1,
+      "samples": [
+        1
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.candidateCount": {
+      "value": 500,
+      "samples": [
+        500
+      ],
+      "droppedSamples": 0
+    },
+    "reading.roots": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "reading.scheduledRoots": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    }
+  },
+  "durations": {
+    "renderer.refreshLeaf.resolveStyle": {
+      "count": 1,
+      "totalMs": 0.0007910000003903406,
+      "meanMs": 0.0007910000003903406,
+      "minMs": 0.0007910000003903406,
+      "p50Ms": 0.0007910000003903406,
+      "p75Ms": 0.0007910000003903406,
+      "p90Ms": 0.0007910000003903406,
+      "p95Ms": 0.0007910000003903406,
+      "p99Ms": 0.0007910000003903406,
+      "maxMs": 0.0007910000003903406,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.0007910000003903406
+      ]
+    },
+    "font.loadFont": {
+      "count": 8,
+      "totalMs": 0.09862400000019989,
+      "meanMs": 0.012328000000024986,
+      "minMs": 0.009000000000014552,
+      "p50Ms": 0.011479000000235828,
+      "p75Ms": 0.012739249999867752,
+      "p90Ms": 0.015508100000261036,
+      "p95Ms": 0.01819155000021055,
+      "p99Ms": 0.020338310000170164,
+      "maxMs": 0.02087500000016007,
+      "stddevMs": 0.0034971751100782394,
+      "retainedSampleCount": 8,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.02087500000016007,
+        0.01320800000030431,
+        0.012582999999722233,
+        0.01187500000014552,
+        0.011083000000326138,
+        0.010374999999839929,
+        0.009624999999687134,
+        0.009000000000014552
+      ]
+    },
+    "font.measureWithDom": {
+      "count": 8,
+      "totalMs": 0.42791699999816046,
+      "meanMs": 0.05348962499977006,
+      "minMs": 0.038083999999798834,
+      "p50Ms": 0.04066649999958827,
+      "p75Ms": 0.04506249999985812,
+      "p90Ms": 0.07816239999974639,
+      "p95Ms": 0.10562269999973065,
+      "p99Ms": 0.1275909399997181,
+      "maxMs": 0.13308299999971496,
+      "stddevMs": 0.030478400367852244,
+      "retainedSampleCount": 8,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.13308299999971496,
+        0.05462499999975989,
+        0.04187499999989086,
+        0.03979200000048877,
+        0.03912499999933061,
+        0.038083999999798834,
+        0.040707999999540334,
+        0.0406249999996362
+      ]
+    },
+    "font.measurePage": {
+      "count": 1,
+      "totalMs": 0.47429099999953905,
+      "meanMs": 0.47429099999953905,
+      "minMs": 0.47429099999953905,
+      "p50Ms": 0.47429099999953905,
+      "p75Ms": 0.47429099999953905,
+      "p90Ms": 0.47429099999953905,
+      "p95Ms": 0.47429099999953905,
+      "p99Ms": 0.47429099999953905,
+      "maxMs": 0.47429099999953905,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.47429099999953905
+      ]
+    },
+    "renderer.refreshLeaf.fontMetrics": {
+      "count": 1,
+      "totalMs": 0.4800829999994676,
+      "meanMs": 0.4800829999994676,
+      "minMs": 0.4800829999994676,
+      "p50Ms": 0.4800829999994676,
+      "p75Ms": 0.4800829999994676,
+      "p90Ms": 0.4800829999994676,
+      "p95Ms": 0.4800829999994676,
+      "p99Ms": 0.4800829999994676,
+      "maxMs": 0.4800829999994676,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.4800829999994676
+      ]
+    },
+    "renderer.refreshLeaf.prepareRoots": {
+      "count": 1,
+      "totalMs": 0.278665999999248,
+      "meanMs": 0.278665999999248,
+      "minMs": 0.278665999999248,
+      "p50Ms": 0.278665999999248,
+      "p75Ms": 0.278665999999248,
+      "p90Ms": 0.278665999999248,
+      "p95Ms": 0.278665999999248,
+      "p99Ms": 0.278665999999248,
+      "maxMs": 0.278665999999248,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.278665999999248
+      ]
+    },
+    "renderer.refreshLeaf.compileStyle": {
+      "count": 1,
+      "totalMs": 0.6026659999997719,
+      "meanMs": 0.6026659999997719,
+      "minMs": 0.6026659999997719,
+      "p50Ms": 0.6026659999997719,
+      "p75Ms": 0.6026659999997719,
+      "p90Ms": 0.6026659999997719,
+      "p95Ms": 0.6026659999997719,
+      "p99Ms": 0.6026659999997719,
+      "maxMs": 0.6026659999997719,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.6026659999997719
+      ]
+    },
+    "rhythm.scan": {
+      "count": 1,
+      "totalMs": 4.9247499999992215,
+      "meanMs": 4.9247499999992215,
+      "minMs": 4.9247499999992215,
+      "p50Ms": 4.9247499999992215,
+      "p75Ms": 4.9247499999992215,
+      "p90Ms": 4.9247499999992215,
+      "p95Ms": 4.9247499999992215,
+      "p99Ms": 4.9247499999992215,
+      "maxMs": 4.9247499999992215,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        4.9247499999992215
+      ]
+    },
+    "pageLayout.configure": {
+      "count": 1,
+      "totalMs": 1.8914999999997235,
+      "meanMs": 1.8914999999997235,
+      "minMs": 1.8914999999997235,
+      "p50Ms": 1.8914999999997235,
+      "p75Ms": 1.8914999999997235,
+      "p90Ms": 1.8914999999997235,
+      "p95Ms": 1.8914999999997235,
+      "p99Ms": 1.8914999999997235,
+      "maxMs": 1.8914999999997235,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        1.8914999999997235
+      ]
+    },
+    "renderer.refreshLeaf.total": {
+      "count": 1,
+      "totalMs": 29.125958999999966,
+      "meanMs": 29.125958999999966,
+      "minMs": 29.125958999999966,
+      "p50Ms": 29.125958999999966,
+      "p75Ms": 29.125958999999966,
+      "p90Ms": 29.125958999999966,
+      "p95Ms": 29.125958999999966,
+      "p99Ms": 29.125958999999966,
+      "maxMs": 29.125958999999966,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        29.125958999999966
+      ]
+    },
+    "pageLayout.pagination": {
+      "count": 1,
+      "totalMs": 91.91716700000052,
+      "meanMs": 91.91716700000052,
+      "minMs": 91.91716700000052,
+      "p50Ms": 91.91716700000052,
+      "p75Ms": 91.91716700000052,
+      "p90Ms": 91.91716700000052,
+      "p95Ms": 91.91716700000052,
+      "p99Ms": 91.91716700000052,
+      "maxMs": 91.91716700000052,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        91.91716700000052
+      ]
+    },
+    "pageLayout.layout": {
+      "count": 1,
+      "totalMs": 92.47195800000009,
+      "meanMs": 92.47195800000009,
+      "minMs": 92.47195800000009,
+      "p50Ms": 92.47195800000009,
+      "p75Ms": 92.47195800000009,
+      "p90Ms": 92.47195800000009,
+      "p95Ms": 92.47195800000009,
+      "p99Ms": 92.47195800000009,
+      "maxMs": 92.47195800000009,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        92.47195800000009
+      ]
+    },
+    "reading.reconcile": {
+      "count": 1,
+      "totalMs": 0.003749999999854481,
+      "meanMs": 0.003749999999854481,
+      "minMs": 0.003749999999854481,
+      "p50Ms": 0.003749999999854481,
+      "p75Ms": 0.003749999999854481,
+      "p90Ms": 0.003749999999854481,
+      "p95Ms": 0.003749999999854481,
+      "p99Ms": 0.003749999999854481,
+      "maxMs": 0.003749999999854481,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.003749999999854481
+      ]
+    }
+  },
+  "events": [
+    {
+      "name": "scenario.start",
+      "atMs": 0.10925000000042928,
+      "dimensions": {
+        "scenarioId": "ablation-no-PaperOrigin-run-1"
+      }
+    },
+    {
+      "name": "scenario.interactionStart",
+      "atMs": 0.11704100000042672,
+      "dimensions": {}
+    },
+    {
+      "name": "scenario.interactionEnd",
+      "atMs": 122.00824999999986,
+      "dimensions": {}
+    },
+    {
+      "name": "scenario.settleEnd",
+      "atMs": 122.00933299999997,
+      "dimensions": {}
+    },
+    {
+      "name": "scenario.stop",
+      "atMs": 126.6108750000003,
+      "dimensions": {
+        "scenarioId": "ablation-no-PaperOrigin-run-1"
+      }
+    }
+  ],
+  "droppedEvents": 0,
+  "frameGaps": {
+    "label": "RAF frame-gap telemetry",
+    "supported": true,
+    "sampleCount": 1,
+    "meanMs": 93,
+    "p50Ms": 93,
+    "p95Ms": 93,
+    "p99Ms": 93,
+    "maxMs": 93,
+    "over16_7ms": 1,
+    "over33_3ms": 1,
+    "over50ms": 1,
+    "over100ms": 0,
+    "retainedSampleCount": 1,
+    "droppedSamples": 0,
+    "samplesMs": [
+      93
+    ]
+  },
+  "longTasks": {
+    "supported": true,
+    "count": 0,
+    "totalMs": 0,
+    "p50Ms": null,
+    "p95Ms": null,
+    "maxMs": null,
+    "retainedSampleCount": 0,
+    "droppedSamples": 0,
+    "samplesMs": []
+  },
+  "memory": {
+    "start": {
+      "supported": false,
+      "usedJSHeapSize": null,
+      "totalJSHeapSize": null,
+      "jsHeapSizeLimit": null
+    },
+    "end": {
+      "supported": false,
+      "usedJSHeapSize": null,
+      "totalJSHeapSize": null,
+      "jsHeapSizeLimit": null
+    }
+  },
+  "stateSnapshots": {
+    "start": {
+      "PageRenderer.styledViews": 0,
+      "PageRenderer.previews": 0,
+      "PageRenderer.issuesByLeaf": 0,
+      "PageRenderer.fontDocumentCleanups": 0,
+      "PageLayout.states": 0,
+      "PageLayout.scopes": 0,
+      "PageLayout.observedTargets": 0,
+      "ImageSnap.states": 0,
+      "ImageSnap.observedImages": 0,
+      "PaperOrigin.states": 0,
+      "PaperOrigin.observedElements": 0,
+      "PaperOrigin.pageContents": 0,
+      "VariableRhythm.states": 0,
+      "VariableRhythm.observedBlocks": 0,
+      "VariableRhythm.pendingMeasurements": 0,
+      "Reading.roots": 0,
+      "Reading.scheduledRoots": 0,
+      "FontMetrics.cacheSize": 0,
+      "Templar.scheduledRefresh": 0
+    },
+    "end": {
+      "PageRenderer.styledViews": 0,
+      "PageRenderer.previews": 0,
+      "PageRenderer.issuesByLeaf": 0,
+      "PageRenderer.fontDocumentCleanups": 0,
+      "PageLayout.states": 0,
+      "PageLayout.scopes": 0,
+      "PageLayout.observedTargets": 0,
+      "ImageSnap.states": 0,
+      "ImageSnap.observedImages": 0,
+      "PaperOrigin.states": 0,
+      "PaperOrigin.observedElements": 0,
+      "PaperOrigin.pageContents": 0,
+      "VariableRhythm.states": 0,
+      "VariableRhythm.observedBlocks": 0,
+      "VariableRhythm.pendingMeasurements": 0,
+      "Reading.roots": 0,
+      "Reading.scheduledRoots": 0,
+      "FontMetrics.cacheSize": 0,
+      "Templar.scheduledRefresh": 0
+    },
+    "afterCleanup": {
+      "PageRenderer.styledViews": 0,
+      "PageRenderer.previews": 0,
+      "PageRenderer.issuesByLeaf": 0,
+      "PageRenderer.fontDocumentCleanups": 0,
+      "PageLayout.states": 0,
+      "PageLayout.scopes": 0,
+      "PageLayout.observedTargets": 0,
+      "ImageSnap.states": 0,
+      "ImageSnap.observedImages": 0,
+      "PaperOrigin.states": 0,
+      "PaperOrigin.observedElements": 0,
+      "PaperOrigin.pageContents": 0,
+      "VariableRhythm.states": 0,
+      "VariableRhythm.observedBlocks": 0,
+      "VariableRhythm.pendingMeasurements": 0,
+      "Reading.roots": 0,
+      "Reading.scheduledRoots": 0,
+      "FontMetrics.cacheSize": 0,
+      "Templar.scheduledRefresh": 0
+    }
+  },
+  "thermal": null,
+  "notes": []
+}

@@ -1,0 +1,775 @@
+{
+  "schemaVersion": 1,
+  "profileInstrumentation": true,
+  "scenarioId": "ablation-no-PaperOrigin-run-1",
+  "valid": true,
+  "invalidReason": null,
+  "sourceCommit": "8eeac67",
+  "instrumentationCommit": "8eeac67",
+  "pluginVersion": "1.2.0-alpha.2",
+  "environmentId": "synthetic-happy-dom",
+  "platform": "cli",
+  "fixtureId": "F002",
+  "styleProfile": "S6",
+  "leafCount": 1,
+  "mode": "paged",
+  "readingEnabled": true,
+  "livePreviewEnabled": false,
+  "previewActive": null,
+  "featureMask": {
+    "pageLayout": true,
+    "readingWhitespace": true,
+    "paperOrigin": false,
+    "variableRhythm": true,
+    "imageSnap": true
+  },
+  "durationMs": 131.51800000000003,
+  "timing": {
+    "warmupStartMs": null,
+    "measurementStartMs": 5117.916209,
+    "interactionStartMs": 5117.992959,
+    "interactionEndMs": 5246.581292,
+    "settleEndMs": 5246.583875,
+    "measurementEndMs": 5249.434209
+  },
+  "settled": true,
+  "terminatedEarly": false,
+  "terminationReason": null,
+  "frameMonitorSupported": true,
+  "longTaskSupport": true,
+  "memorySupport": false,
+  "counters": {
+    "renderer.refreshAll.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "leafCount=1&reason=\"explicit-refresh\"": 1
+      }
+    },
+    "renderer.refreshLeaf.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "leafCount=1&livePreviewEnabled=false&mode=\"paged\"&previewActive=false&readingEnabled=true&reason=\"explicit-refresh\"": 1
+      }
+    },
+    "font.measurePage.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "font.measure.count": {
+      "count": 8,
+      "total": 8,
+      "byDimensions": {
+        "": 8
+      }
+    },
+    "font.cache.miss": {
+      "count": 8,
+      "total": 8,
+      "byDimensions": {
+        "": 8
+      }
+    },
+    "renderer.refreshLeaf.styleHostWrite": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "imageSnap.configure.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "rhythm.configure.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "rhythm.update.count": {
+      "count": 87,
+      "total": 87,
+      "byDimensions": {
+        "": 87
+      }
+    },
+    "rhythm.computedStyle.read": {
+      "count": 87,
+      "total": 87,
+      "byDimensions": {
+        "": 87
+      }
+    },
+    "rhythm.offsetHeight.fallbackRead": {
+      "count": 87,
+      "total": 87,
+      "byDimensions": {
+        "": 87
+      }
+    },
+    "pageLayout.configure.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.schedule.attempt": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "renderer.refreshLeaf.readingPrepare": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.prepareCachedSections.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "renderer.refreshLeaf.readingActivate": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.activateRoot.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.schedule.attempt": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.raf.execute": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.geometry.clientWidthRead": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.computedStyle.read": {
+      "count": 501,
+      "total": 501,
+      "byDimensions": {
+        "": 501
+      }
+    },
+    "pageLayout.canvasScale.write": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.geometry.read": {
+      "count": 1502,
+      "total": 1502,
+      "byDimensions": {
+        "": 1502
+      }
+    },
+    "pageLayout.pagination.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "pageLayout.candidate.count": {
+      "count": 1,
+      "total": 500,
+      "byDimensions": {
+        "": 500
+      }
+    },
+    "pageLayout.canvasHeight.write": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.raf.execute": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    },
+    "reading.reconcile.count": {
+      "count": 1,
+      "total": 1,
+      "byDimensions": {
+        "": 1
+      }
+    }
+  },
+  "gauges": {
+    "font.cache.size": {
+      "value": 8,
+      "samples": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "droppedSamples": 0
+    },
+    "paperOrigin.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "paperOrigin.pageContents": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "paperOrigin.observedElements": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "imageSnap.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "imageSnap.observedImages": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "rhythm.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "rhythm.observedBlocks": {
+      "value": 0,
+      "samples": [
+        0,
+        87,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "rhythm.pendingMeasurements": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.states": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.scopes": {
+      "value": 0,
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.observedTargets": {
+      "value": 0,
+      "samples": [
+        0,
+        502,
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.pagePairCount": {
+      "value": 1,
+      "samples": [
+        1
+      ],
+      "droppedSamples": 0
+    },
+    "pageLayout.candidateCount": {
+      "value": 500,
+      "samples": [
+        500
+      ],
+      "droppedSamples": 0
+    },
+    "reading.roots": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    },
+    "reading.scheduledRoots": {
+      "value": 0,
+      "samples": [
+        0,
+        0
+      ],
+      "droppedSamples": 0
+    }
+  },
+  "durations": {
+    "renderer.refreshLeaf.resolveStyle": {
+      "count": 1,
+      "totalMs": 0.0009159999999610591,
+      "meanMs": 0.0009159999999610591,
+      "minMs": 0.0009159999999610591,
+      "p50Ms": 0.0009159999999610591,
+      "p75Ms": 0.0009159999999610591,
+      "p90Ms": 0.0009159999999610591,
+      "p95Ms": 0.0009159999999610591,
+      "p99Ms": 0.0009159999999610591,
+      "maxMs": 0.0009159999999610591,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.0009159999999610591
+      ]
+    },
+    "font.loadFont": {
+      "count": 8,
+      "totalMs": 0.07925100000102248,
+      "meanMs": 0.00990637500012781,
+      "minMs": 0.005625000000691216,
+      "p50Ms": 0.009229500000401458,
+      "p75Ms": 0.010864500000025146,
+      "p90Ms": 0.01355820000035237,
+      "p95Ms": 0.015862600000264133,
+      "p99Ms": 0.01770612000019355,
+      "maxMs": 0.018167000000175904,
+      "stddevMs": 0.0036088320111218692,
+      "retainedSampleCount": 8,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.018167000000175904,
+        0.011583000000428001,
+        0.01062499999989086,
+        0.009708999999929802,
+        0.008750000000873115,
+        0.00779199999942648,
+        0.006999999999607098,
+        0.005625000000691216
+      ]
+    },
+    "font.measureWithDom": {
+      "count": 8,
+      "totalMs": 0.3851670000003651,
+      "meanMs": 0.048145875000045635,
+      "minMs": 0.03695900000002439,
+      "p50Ms": 0.03939600000012433,
+      "p75Ms": 0.04212500000039654,
+      "p90Ms": 0.06502490000011675,
+      "p95Ms": 0.0856164500001341,
+      "p99Ms": 0.10208969000014803,
+      "maxMs": 0.10620800000015151,
+      "stddevMs": 0.02216040666056709,
+      "retainedSampleCount": 8,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.10620800000015151,
+        0.04737500000010186,
+        0.03999999999996362,
+        0.03820799999994051,
+        0.040375000000494765,
+        0.03724999999940337,
+        0.03695900000002439,
+        0.03879200000028504
+      ]
+    },
+    "font.measurePage": {
+      "count": 1,
+      "totalMs": 0.4276660000004995,
+      "meanMs": 0.4276660000004995,
+      "minMs": 0.4276660000004995,
+      "p50Ms": 0.4276660000004995,
+      "p75Ms": 0.4276660000004995,
+      "p90Ms": 0.4276660000004995,
+      "p95Ms": 0.4276660000004995,
+      "p99Ms": 0.4276660000004995,
+      "maxMs": 0.4276660000004995,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.4276660000004995
+      ]
+    },
+    "renderer.refreshLeaf.fontMetrics": {
+      "count": 1,
+      "totalMs": 0.42937500000061846,
+      "meanMs": 0.42937500000061846,
+      "minMs": 0.42937500000061846,
+      "p50Ms": 0.42937500000061846,
+      "p75Ms": 0.42937500000061846,
+      "p90Ms": 0.42937500000061846,
+      "p95Ms": 0.42937500000061846,
+      "p99Ms": 0.42937500000061846,
+      "maxMs": 0.42937500000061846,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.42937500000061846
+      ]
+    },
+    "renderer.refreshLeaf.prepareRoots": {
+      "count": 1,
+      "totalMs": 0.7335830000001806,
+      "meanMs": 0.7335830000001806,
+      "minMs": 0.7335830000001806,
+      "p50Ms": 0.7335830000001806,
+      "p75Ms": 0.7335830000001806,
+      "p90Ms": 0.7335830000001806,
+      "p95Ms": 0.7335830000001806,
+      "p99Ms": 0.7335830000001806,
+      "maxMs": 0.7335830000001806,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.7335830000001806
+      ]
+    },
+    "renderer.refreshLeaf.compileStyle": {
+      "count": 1,
+      "totalMs": 0.605333999999857,
+      "meanMs": 0.605333999999857,
+      "minMs": 0.605333999999857,
+      "p50Ms": 0.605333999999857,
+      "p75Ms": 0.605333999999857,
+      "p90Ms": 0.605333999999857,
+      "p95Ms": 0.605333999999857,
+      "p99Ms": 0.605333999999857,
+      "maxMs": 0.605333999999857,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.605333999999857
+      ]
+    },
+    "rhythm.scan": {
+      "count": 1,
+      "totalMs": 44.395166999999674,
+      "meanMs": 44.395166999999674,
+      "minMs": 44.395166999999674,
+      "p50Ms": 44.395166999999674,
+      "p75Ms": 44.395166999999674,
+      "p90Ms": 44.395166999999674,
+      "p95Ms": 44.395166999999674,
+      "p99Ms": 44.395166999999674,
+      "maxMs": 44.395166999999674,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        44.395166999999674
+      ]
+    },
+    "pageLayout.configure": {
+      "count": 1,
+      "totalMs": 1.4844999999995707,
+      "meanMs": 1.4844999999995707,
+      "minMs": 1.4844999999995707,
+      "p50Ms": 1.4844999999995707,
+      "p75Ms": 1.4844999999995707,
+      "p90Ms": 1.4844999999995707,
+      "p95Ms": 1.4844999999995707,
+      "p99Ms": 1.4844999999995707,
+      "maxMs": 1.4844999999995707,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        1.4844999999995707
+      ]
+    },
+    "renderer.refreshLeaf.total": {
+      "count": 1,
+      "totalMs": 48.27716599999985,
+      "meanMs": 48.27716599999985,
+      "minMs": 48.27716599999985,
+      "p50Ms": 48.27716599999985,
+      "p75Ms": 48.27716599999985,
+      "p90Ms": 48.27716599999985,
+      "p95Ms": 48.27716599999985,
+      "p99Ms": 48.27716599999985,
+      "maxMs": 48.27716599999985,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        48.27716599999985
+      ]
+    },
+    "pageLayout.pagination": {
+      "count": 1,
+      "totalMs": 78.53875000000062,
+      "meanMs": 78.53875000000062,
+      "minMs": 78.53875000000062,
+      "p50Ms": 78.53875000000062,
+      "p75Ms": 78.53875000000062,
+      "p90Ms": 78.53875000000062,
+      "p95Ms": 78.53875000000062,
+      "p99Ms": 78.53875000000062,
+      "maxMs": 78.53875000000062,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        78.53875000000062
+      ]
+    },
+    "pageLayout.layout": {
+      "count": 1,
+      "totalMs": 79.23558400000002,
+      "meanMs": 79.23558400000002,
+      "minMs": 79.23558400000002,
+      "p50Ms": 79.23558400000002,
+      "p75Ms": 79.23558400000002,
+      "p90Ms": 79.23558400000002,
+      "p95Ms": 79.23558400000002,
+      "p99Ms": 79.23558400000002,
+      "maxMs": 79.23558400000002,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        79.23558400000002
+      ]
+    },
+    "reading.reconcile": {
+      "count": 1,
+      "totalMs": 0.0029580000000350992,
+      "meanMs": 0.0029580000000350992,
+      "minMs": 0.0029580000000350992,
+      "p50Ms": 0.0029580000000350992,
+      "p75Ms": 0.0029580000000350992,
+      "p90Ms": 0.0029580000000350992,
+      "p95Ms": 0.0029580000000350992,
+      "p99Ms": 0.0029580000000350992,
+      "maxMs": 0.0029580000000350992,
+      "stddevMs": 0,
+      "retainedSampleCount": 1,
+      "droppedSamples": 0,
+      "samplesMs": [
+        0.0029580000000350992
+      ]
+    }
+  },
+  "events": [
+    {
+      "name": "scenario.start",
+      "atMs": 0.07383300000037707,
+      "dimensions": {
+        "scenarioId": "ablation-no-PaperOrigin-run-1"
+      }
+    },
+    {
+      "name": "scenario.interactionStart",
+      "atMs": 0.07733300000018062,
+      "dimensions": {}
+    },
+    {
+      "name": "scenario.interactionEnd",
+      "atMs": 128.66691600000013,
+      "dimensions": {}
+    },
+    {
+      "name": "scenario.settleEnd",
+      "atMs": 128.667958,
+      "dimensions": {}
+    },
+    {
+      "name": "scenario.stop",
+      "atMs": 131.64279100000022,
+      "dimensions": {
+        "scenarioId": "ablation-no-PaperOrigin-run-1"
+      }
+    }
+  ],
+  "droppedEvents": 0,
+  "frameGaps": {
+    "label": "RAF frame-gap telemetry",
+    "supported": true,
+    "sampleCount": 1,
+    "meanMs": 79,
+    "p50Ms": 79,
+    "p95Ms": 79,
+    "p99Ms": 79,
+    "maxMs": 79,
+    "over16_7ms": 1,
+    "over33_3ms": 1,
+    "over50ms": 1,
+    "over100ms": 0,
+    "retainedSampleCount": 1,
+    "droppedSamples": 0,
+    "samplesMs": [
+      79
+    ]
+  },
+  "longTasks": {
+    "supported": true,
+    "count": 0,
+    "totalMs": 0,
+    "p50Ms": null,
+    "p95Ms": null,
+    "maxMs": null,
+    "retainedSampleCount": 0,
+    "droppedSamples": 0,
+    "samplesMs": []
+  },
+  "memory": {
+    "start": {
+      "supported": false,
+      "usedJSHeapSize": null,
+      "totalJSHeapSize": null,
+      "jsHeapSizeLimit": null
+    },
+    "end": {
+      "supported": false,
+      "usedJSHeapSize": null,
+      "totalJSHeapSize": null,
+      "jsHeapSizeLimit": null
+    }
+  },
+  "stateSnapshots": {
+    "start": {
+      "PageRenderer.styledViews": 0,
+      "PageRenderer.previews": 0,
+      "PageRenderer.issuesByLeaf": 0,
+      "PageRenderer.fontDocumentCleanups": 0,
+      "PageLayout.states": 0,
+      "PageLayout.scopes": 0,
+      "PageLayout.observedTargets": 0,
+      "ImageSnap.states": 0,
+      "ImageSnap.observedImages": 0,
+      "PaperOrigin.states": 0,
+      "PaperOrigin.observedElements": 0,
+      "PaperOrigin.pageContents": 0,
+      "VariableRhythm.states": 0,
+      "VariableRhythm.observedBlocks": 0,
+      "VariableRhythm.pendingMeasurements": 0,
+      "Reading.roots": 0,
+      "Reading.scheduledRoots": 0,
+      "FontMetrics.cacheSize": 0,
+      "Templar.scheduledRefresh": 0
+    },
+    "end": {
+      "PageRenderer.styledViews": 0,
+      "PageRenderer.previews": 0,
+      "PageRenderer.issuesByLeaf": 0,
+      "PageRenderer.fontDocumentCleanups": 0,
+      "PageLayout.states": 0,
+      "PageLayout.scopes": 0,
+      "PageLayout.observedTargets": 0,
+      "ImageSnap.states": 0,
+      "ImageSnap.observedImages": 0,
+      "PaperOrigin.states": 0,
+      "PaperOrigin.observedElements": 0,
+      "PaperOrigin.pageContents": 0,
+      "VariableRhythm.states": 0,
+      "VariableRhythm.observedBlocks": 0,
+      "VariableRhythm.pendingMeasurements": 0,
+      "Reading.roots": 0,
+      "Reading.scheduledRoots": 0,
+      "FontMetrics.cacheSize": 0,
+      "Templar.scheduledRefresh": 0
+    },
+    "afterCleanup": {
+      "PageRenderer.styledViews": 0,
+      "PageRenderer.previews": 0,
+      "PageRenderer.issuesByLeaf": 0,
+      "PageRenderer.fontDocumentCleanups": 0,
+      "PageLayout.states": 0,
+      "PageLayout.scopes": 0,
+      "PageLayout.observedTargets": 0,
+      "ImageSnap.states": 0,
+      "ImageSnap.observedImages": 0,
+      "PaperOrigin.states": 0,
+      "PaperOrigin.observedElements": 0,
+      "PaperOrigin.pageContents": 0,
+      "VariableRhythm.states": 0,
+      "VariableRhythm.observedBlocks": 0,
+      "VariableRhythm.pendingMeasurements": 0,
+      "Reading.roots": 0,
+      "Reading.scheduledRoots": 0,
+      "FontMetrics.cacheSize": 0,
+      "Templar.scheduledRefresh": 0
+    }
+  },
+  "thermal": null,
+  "notes": []
+}

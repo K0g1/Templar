@@ -1,0 +1,109 @@
+
+> templar@1.2.0-alpha.2 bench
+> vitest bench --run tests/performance.bench.ts tests/renderer-performance.bench.ts tests/page-renderer-performance.bench.ts
+
+Benchmarking is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+
+ RUN  v3.2.7 /Users/kevindeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
+
+
+ ✓ tests/performance.bench.ts > Templar pure performance fixtures 7946ms
+     name                                               hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · reading whitespace scan: 100 blocks        201,691.91  0.0045  1.3729  0.0050  0.0048  0.0058  0.0078  0.0376  ±0.84%   100846
+   · reading whitespace scan: 1000 blocks        21,817.75  0.0417  6.8795  0.0458  0.0438  0.0853  0.1980  0.4009  ±3.03%    10909
+   · reading whitespace scan: 5000 blocks         4,005.48  0.2157  2.3004  0.2497  0.2288  0.6212  0.7512  1.1297  ±1.65%     2004
+   · reading whitespace scan: 10000 blocks        2,016.43  0.4299  5.1240  0.4959  0.4573  1.2416  1.7137  2.7363  ±2.82%     1009
+   · structured compiler: representative style    5,499.87  0.1363  3.8204  0.1818  0.1593  1.1422  1.3189  1.9037  ±3.36%     2751
+   · catalog normalization: 132 templates         1,246.94  0.7655  1.4906  0.8020  0.8011  1.0896  1.1410  1.4906  ±0.69%      624
+   · catalog normalization: 500 templates           319.26  2.9285  3.6588  3.1322  3.2443  3.6514  3.6588  3.6588  ±0.93%      160
+   · catalog normalization: 1000 templates          163.05  5.8776  6.6660  6.1330  6.3122  6.6660  6.6660  6.6660  ±0.69%       82
+   · vault rule matching: 1000 files              6,897.28  0.1318  3.3205  0.1450  0.1367  0.3568  0.4035  0.6833  ±1.60%     3450
+   · vault rule matching: 10000 files               712.39  1.3209  2.1432  1.4037  1.4435  1.7561  1.9597  2.1432  ±0.84%      357
+   · pagination math: A4                          5,275.79  0.1862  0.9921  0.1895  0.1878  0.2203  0.2437  0.3906  ±0.39%     2638
+   · pagination math: Letter                      5,124.13  0.1862  1.3663  0.1952  0.1944  0.2837  0.5466  0.9023  ±0.99%     2563
+   · pagination math: Custom                      5,194.13  0.1862  0.7284  0.1925  0.1944  0.2441  0.2892  0.5486  ±0.41%     2598
+
+ ✓ tests/renderer-performance.bench.ts > renderer controller performance fixtures > 100 block fixture
+     name                                                hz      min      max     mean      p75      p99     p995     p999      rme  samples
+   · 100 blocks / same file / pageless / 1 leaves    318.18   2.4425   3.7427   3.1429   3.5626   3.7427   3.7427   3.7427  ±13.88%        7
+   · 100 blocks / same file / pageless / 3 leaves    143.42   6.4833   7.5129   6.9724   7.5129   7.5129   7.5129   7.5129  ±18.41%        3
+   · 100 blocks / same file / pageless / 10 leaves  46.8924  21.3254  21.3254  21.3254  21.3254  21.3254  21.3254  21.3254   ±0.00%        1
+   · 100 blocks / same file / paged / 1 leaves       488.55   1.8320   2.9525   2.0469   2.0788   2.9525   2.9525   2.9525  ±12.44%       10
+   · 100 blocks / same file / paged / 3 leaves       167.67   5.5348   6.5329   5.9641   5.9428   6.5329   6.5329   6.5329  ±11.13%        4
+   · 100 blocks / same file / paged / 10 leaves     48.5298  20.6059  20.6059  20.6059  20.6059  20.6059  20.6059  20.6059   ±0.00%        1
+
+ ✓ tests/renderer-performance.bench.ts > renderer controller performance fixtures > 1000 block fixture 2239ms
+     name                                                 hz      min      max     mean      p75      p99     p995     p999     rme  samples
+   · 1000 blocks / same file / pageless / 1 leaves   33.4936  29.8564  29.8564  29.8564  29.8564  29.8564  29.8564  29.8564  ±0.00%        1
+   · 1000 blocks / same file / pageless / 3 leaves   12.3353  81.0684  81.0684  81.0684  81.0684  81.0684  81.0684  81.0684  ±0.00%        1
+   · 1000 blocks / same file / pageless / 10 leaves   3.8631   258.86   258.86   258.86   258.86   258.86   258.86   258.86  ±0.00%        1
+   · 1000 blocks / same file / paged / 1 leaves      42.7702  23.3808  23.3808  23.3808  23.3808  23.3808  23.3808  23.3808  ±0.00%        1
+   · 1000 blocks / same file / paged / 3 leaves      13.4387  74.4122  74.4122  74.4122  74.4122  74.4122  74.4122  74.4122  ±0.00%        1
+   · 1000 blocks / same file / paged / 10 leaves      3.1005   322.53   322.53   322.53   322.53   322.53   322.53   322.53  ±0.00%        1
+
+ ✓ tests/renderer-performance.bench.ts > renderer controller performance fixtures > 5000 block fixture 1451ms
+     name                                               hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · 5000 blocks / same file / pageless / 1 leaves  4.1641  240.15  240.15  240.15  240.15  240.15  240.15  240.15  ±0.00%        1
+   · 5000 blocks / same file / paged / 1 leaves     4.4922  222.61  222.61  222.61  222.61  222.61  222.61  222.61  ±0.00%        1
+
+ ✓ tests/renderer-performance.bench.ts > renderer controller performance fixtures > 10000 block fixture 2632ms
+     name                                                hz     min     max    mean     p75     p99    p995    p999     rme  samples
+   · 10000 blocks / same file / pageless / 1 leaves  2.3324  428.74  428.74  428.74  428.74  428.74  428.74  428.74  ±0.00%        1
+   · 10000 blocks / same file / paged / 1 leaves     2.4763  403.83  403.83  403.83  403.83  403.83  403.83  403.83  ±0.00%        1
+
+ ✓ tests/renderer-performance.bench.ts > renderer controller performance fixtures > image fixture
+     name                                   hz     min     max    mean     p75     p99    p995    p999      rme  samples
+   · 100 data-free images / one leaf  3,732.88  0.1812  3.6838  0.2679  0.2260  3.6838  3.6838  3.6838  ±34.71%       75
+
+ ✓ tests/page-renderer-performance.bench.ts > full PageRenderer performance fixtures 1134ms
+     name                                                                 hz      min      max     mean      p75      p99     p995     p999       rme  samples
+   · 100 blocks / one leaf / pageless A4                             24.1757  41.3639  41.3639  41.3639  41.3639  41.3639  41.3639  41.3639    ±0.00%        1
+   · 1,000 blocks / three leaves / paged A4                           2.1251   470.57   470.57   470.57   470.57   470.57   470.57   470.57    ±0.00%        1
+   · 1,000 blocks / three same-file leaves / one preview / paged A4   2.2993   434.91   434.91   434.91   434.91   434.91   434.91   434.91    ±0.00%        1
+   · 100 blocks / ten different files / paged Letter                  6.8890   145.16   145.16   145.16   145.16   145.16   145.16   145.16    ±0.00%        1
+   · 100 images / one leaf / pageless A4                             62.6904  13.2360  18.6669  15.9514  18.6669  18.6669  18.6669  18.6669  ±216.37%        2
+
+ BENCH  Summary
+
+  100 images / one leaf / pageless A4 - tests/page-renderer-performance.bench.ts > full PageRenderer performance fixtures
+    2.59x faster than 100 blocks / one leaf / pageless A4
+    9.10x faster than 100 blocks / ten different files / paged Letter
+    27.26x faster than 1,000 blocks / three same-file leaves / one preview / paged A4
+    29.50x faster than 1,000 blocks / three leaves / paged A4
+
+  reading whitespace scan: 100 blocks - tests/performance.bench.ts > Templar pure performance fixtures
+    9.24x faster than reading whitespace scan: 1000 blocks
+    29.24x faster than vault rule matching: 1000 files
+    36.67x faster than structured compiler: representative style
+    38.23x faster than pagination math: A4
+    38.83x faster than pagination math: Custom
+    39.36x faster than pagination math: Letter
+    50.35x faster than reading whitespace scan: 5000 blocks
+    100.02x faster than reading whitespace scan: 10000 blocks
+    161.75x faster than catalog normalization: 132 templates
+    283.12x faster than vault rule matching: 10000 files
+    631.75x faster than catalog normalization: 500 templates
+    1236.99x faster than catalog normalization: 1000 templates
+
+  100 blocks / same file / paged / 1 leaves - tests/renderer-performance.bench.ts > renderer controller performance fixtures > 100 block fixture
+    1.54x faster than 100 blocks / same file / pageless / 1 leaves
+    2.91x faster than 100 blocks / same file / paged / 3 leaves
+    3.41x faster than 100 blocks / same file / pageless / 3 leaves
+    10.07x faster than 100 blocks / same file / paged / 10 leaves
+    10.42x faster than 100 blocks / same file / pageless / 10 leaves
+
+  1000 blocks / same file / paged / 1 leaves - tests/renderer-performance.bench.ts > renderer controller performance fixtures > 1000 block fixture
+    1.28x faster than 1000 blocks / same file / pageless / 1 leaves
+    3.18x faster than 1000 blocks / same file / paged / 3 leaves
+    3.47x faster than 1000 blocks / same file / pageless / 3 leaves
+    11.07x faster than 1000 blocks / same file / pageless / 10 leaves
+    13.79x faster than 1000 blocks / same file / paged / 10 leaves
+
+  5000 blocks / same file / paged / 1 leaves - tests/renderer-performance.bench.ts > renderer controller performance fixtures > 5000 block fixture
+    1.08x faster than 5000 blocks / same file / pageless / 1 leaves
+
+  10000 blocks / same file / paged / 1 leaves - tests/renderer-performance.bench.ts > renderer controller performance fixtures > 10000 block fixture
+    1.06x faster than 10000 blocks / same file / pageless / 1 leaves
+
+  100 data-free images / one leaf - tests/renderer-performance.bench.ts > renderer controller performance fixtures > image fixture

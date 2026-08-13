@@ -1,0 +1,12 @@
+{
+  "branch": "perf/optimization-2026-08-13",
+  "optimizedSourceCommit": "ff9a667cca557665035449e2ce58435eea2b67cb",
+  "baselineSourceCommit": "8eeac67",
+  "node": "v23.11.0",
+  "npm": "10.9.2",
+  "packageNodeRequirement": ">=20 <21",
+  "vitest": "3.2.7",
+  "happyDom": "20.11.2",
+  "mobileValidation": "unavailable",
+  "liveObsidianValidation": "unavailable"
+}

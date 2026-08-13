@@ -1,0 +1,108 @@
+
+> templar@1.2.0-alpha.2 check
+> npm run lint && npm run typecheck:runtime && npm run typecheck:test && npm run typecheck:tooling && npm test && npm run build && npm run verify:privacy
+
+
+> templar@1.2.0-alpha.2 lint
+> eslint . --max-warnings=0
+
+
+> templar@1.2.0-alpha.2 typecheck:runtime
+> tsc -p tsconfig.runtime.json --noEmit
+
+
+> templar@1.2.0-alpha.2 typecheck:test
+> tsc -p tsconfig.test.json --noEmit
+
+
+> templar@1.2.0-alpha.2 typecheck:tooling
+> tsc -p tsconfig.tooling.json --noEmit
+
+
+> templar@1.2.0-alpha.2 test
+> vitest run
+
+
+ RUN  v3.2.7 /Users/kevindeng/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
+
+ ✓ tests/performance-monitor.test.ts (5 tests) 62ms
+ ✓ tests/recovery-service.test.ts (3 tests) 106ms
+ ✓ tests/schema.test.ts (18 tests) 77ms
+ ✓ tests/builtins.test.ts (6 tests) 206ms
+ ✓ tests/style-compiler.test.ts (22 tests) 208ms
+ ✓ tests/template-pack.test.ts (8 tests) 25ms
+ ✓ tests/frontmatter.test.ts (14 tests) 55ms
+ ✓ tests/synchronization.test.ts (5 tests) 27ms
+ ✓ tests/css.test.ts (18 tests) 60ms
+ ✓ tests/folders.test.ts (6 tests) 26ms
+ ✓ tests/style-inspection.test.ts (5 tests) 14ms
+ ✓ tests/style-compiler-attachments.test.ts (1 test) 6ms
+ ✓ tests/preview-session.test.ts (5 tests) 6ms
+ ✓ tests/template-library.test.ts (8 tests) 15ms
+ ✓ tests/settings.test.ts (4 tests) 17ms
+ ✓ tests/style-compiler-page.test.ts (1 test) 3ms
+ ✓ tests/frontmatter.integration.test.ts (3 tests) 22ms
+ ✓ tests/grid.test.ts (8 tests) 4ms
+ ✓ tests/release-contract.test.ts (11 tests) 1787ms
+   ✓ BRAT release contract verifier > rejects missing and malformed artifact files  562ms
+   ✓ BRAT release contract verifier > rejects manifest identity, version, type, and casing violations  626ms
+ ✓ tests/frontmatter-recovery.integration.test.ts (3 tests) 11ms
+ ✓ tests/style-application.test.ts (9 tests) 8ms
+ ✓ tests/print-service.test.ts (1 test) 1ms
+ ✓ tests/scope.test.ts (1 test) 6ms
+ ✓ tests/font-metrics.test.ts (3 tests) 4ms
+ ✓ tests/settings-migrations.test.ts (9 tests) 5ms
+ ✓ tests/settings-store.test.ts (4 tests) 4ms
+ ✓ tests/style-rule-engine.test.ts (5 tests) 4ms
+ ✓ tests/runtime-policy.test.ts (23 tests) 7ms
+ ✓ tests/style-compiler-typography.test.ts (1 test) 2ms
+ ✓ tests/style-rules.test.ts (4 tests) 4ms
+ ✓ tests/reading-whitespace.test.ts (8 tests) 10ms
+ ✓ tests/style-compiler-images.test.ts (1 test) 3ms
+ ✓ tests/migration-engine.test.ts (5 tests) 4ms
+ ✓ tests/note-style-index.test.ts (3 tests) 7ms
+ ✓ tests/value.test.ts (1 test) 2ms
+ ✓ tests/catalog-render-matrix.test.ts (2 tests) 2474ms
+   ✓ all-template render matrix > compiles every built-in across all page flows without invalid or unscoped output  1878ms
+   ✓ all-template render matrix > compiles disabled baselines independently of their stored mode  591ms
+ ✓ tests/page-layout-plan.test.ts (2 tests) 2ms
+ ✓ tests/operation-results.test.ts (2 tests) 2ms
+ ✓ tests/paper-origin.test.ts (4 tests) 2ms
+ ✓ tests/hide-metadata.test.ts (1 test) 2ms
+ ✓ tests/style-compiler-paper.test.ts (1 test) 5ms
+ ✓ tests/print-service.integration.test.ts (1 test) 141ms
+ ✓ tests/popout.integration.test.ts (4 tests) 21ms
+ ✓ tests/rendering-controllers.test.ts (6 tests) 29ms
+ ✓ tests/page-layout.integration.test.ts (2 tests) 19ms
+ ✓ tests/renderer-lifecycle-performance.test.ts (3 tests) 55ms
+ ✓ tests/page-renderer.integration.test.ts (5 tests) 105ms
+ ✓ tests/clipboard.integration.test.ts (1 test) 2ms
+ ✓ tests/print-service.lifecycle.integration.test.ts (2 tests) 392ms
+
+ Test Files  49 passed (49)
+      Tests  268 passed (268)
+   Start at  11:17:19
+   Duration  4.67s (transform 1.59s, setup 0ms, collect 7.31s, tests 6.06s, environment 3.91s, prepare 4.93s)
+
+
+> templar@1.2.0-alpha.2 build
+> npm run typecheck:runtime && node esbuild.config.mjs production && npm run verify:mobile && npm run verify:privacy
+
+
+> templar@1.2.0-alpha.2 typecheck:runtime
+> tsc -p tsconfig.runtime.json --noEmit
+
+
+> templar@1.2.0-alpha.2 verify:mobile
+> node scripts/verify-mobile-bundle.mjs
+
+
+> templar@1.2.0-alpha.2 verify:privacy
+> node scripts/verify-runtime-policy.mjs
+
+Runtime API policy verified.
+
+> templar@1.2.0-alpha.2 verify:privacy
+> node scripts/verify-runtime-policy.mjs
+
+Runtime API policy verified.

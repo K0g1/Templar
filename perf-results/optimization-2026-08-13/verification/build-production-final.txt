@@ -1,0 +1,17 @@
+
+> templar@1.2.0-alpha.2 build
+> npm run typecheck:runtime && node esbuild.config.mjs production && npm run verify:mobile && npm run verify:privacy
+
+
+> templar@1.2.0-alpha.2 typecheck:runtime
+> tsc -p tsconfig.runtime.json --noEmit
+
+
+> templar@1.2.0-alpha.2 verify:mobile
+> node scripts/verify-mobile-bundle.mjs
+
+
+> templar@1.2.0-alpha.2 verify:privacy
+> node scripts/verify-runtime-policy.mjs
+
+Runtime API policy verified.
