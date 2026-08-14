@@ -2,7 +2,7 @@
 
 > Give every Markdown note its own visual identity.
 
-Templar turns ordinary Obsidian notes into polished journals, study sheets, project briefs, travel logs, scrapbooks, and more—without taking ownership of your writing. Your note stays Markdown. Its design travels with it.
+Templar gives Markdown notes their own page styles. Use a note as a journal, study sheet, project brief, travel log, or scrapbook. The note stays Markdown, and its design travels with it.
 
 [![Release](https://img.shields.io/github/v/release/K0g1/Templar?include_prereleases&sort=semver&style=for-the-badge)](https://github.com/K0g1/Templar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -11,33 +11,32 @@ Templar turns ordinary Obsidian notes into polished journals, study sheets, proj
 > [!IMPORTANT]
 > Templar is beta software. BRAT and manual release assets are supported prerelease installation paths. Back up important vaults before testing prerelease software; physical iOS and Android validation remains a beta reporting target.
 
-## See what your notes can become
+## A few page styles
 
-| Botanical field notes | Alpine travel log | Neon creative brief |
+| Rainlight field notes | Small hours studio brief | Kitchen window garden |
 | :---: | :---: | :---: |
-| [![A botanical journal note in Obsidian with fern photography, warm paper, a heading, highlighted text, a table, and checklist](docs/assets/gallery/botanical-field-notes.webp)](docs/assets/gallery/botanical-field-notes.webp) | [![An alpine travel note in Obsidian with mountain photography, cool paper styling, highlighted route notes, a numbered list, and a table](docs/assets/gallery/alpine-field-log.webp)](docs/assets/gallery/alpine-field-log.webp) | [![A dark neon creative brief in Obsidian with cyberpunk photography, magenta and cyan accents, code, a palette table, checklist, and callouts](docs/assets/gallery/neon-night-brief.webp)](docs/assets/gallery/neon-night-brief.webp) |
+| [![Obsidian-rendered rainlight field note with a mountain route, conditions callout, and dense travel journal](docs/assets/gallery/rainlight-field-notes.png)](docs/assets/gallery/rainlight-field-notes.png) | [![Obsidian-rendered small hours studio brief with neon street photography, visual direction, and working idea callout](docs/assets/gallery/small-hours-studio-brief.png)](docs/assets/gallery/small-hours-studio-brief.png) | [![Obsidian-rendered kitchen window garden note with botanical photography, care notes, and a working note callout](docs/assets/gallery/kitchen-window-garden.png)](docs/assets/gallery/kitchen-window-garden.png) |
 
-These are real Markdown notes rendered by Templar inside Obsidian—not mockups. The example notes and original artwork are included in [`examples/`](examples/). The [project website](https://k0g1.github.io/Templar/) renders the field-guide notes in `examples/Templar Field Guide/` live, using Templar's own compiled stylesheets.
+The gallery images are cropped screenshots of the display notes rendered in Obsidian. Each crop keeps the styled note canvas and removes the sidebars, tab bar, status strip, scrollbar, and pointer. The notes are plain Markdown with no frontmatter at the top. Their source files and artwork are in [`examples/Templar Showcase/`](examples/Templar%20Showcase/). The [project website](https://k0g1.github.io/Templar/) renders the field-guide notes in `examples/Templar Field Guide/` with Templar's compiled stylesheets.
 
-## A style library you can actually explore
+## Browse the style library
 
-Templar includes **132 built-in styles** organized into themed folders, with instant search, Recent, Favorites, usage-aware sorting, and Compact, Comfortable, or Gallery layouts. Browse calm neutrals, rich color stories, seasonal palettes, celebrations, academic papers, professional layouts, wellness journals, travel notebooks, vintage editorials, dark neon systems, fantasy pages, and more.
+Templar includes **132 built-in styles** in themed folders. The library has search, Recent, Favorites, usage-aware sorting, and Compact, Comfortable, and Gallery layouts. Themes cover calm neutrals, seasonal palettes, academic papers, professional layouts, wellness journals, travel notebooks, vintage editorials, dark neon systems, fantasy pages, and more.
 
-- Press `/` to search, use the arrow keys to move, Space to preview on the real note, and Enter to apply.
-- Click a card to try a style without writing frontmatter; Apply is a separate, explicit action.
-- Surface recently applied, favorite, frequently used, and current-folder styles without rescanning the vault on every open.
+- Press `/` to search, use the arrow keys to move, Space to preview a style on the current note, and Enter to apply it.
+- Click a card to preview a style without writing frontmatter. Apply is a separate action.
+- Surface recent, favorite, frequently used, and current-folder styles without rescanning the vault on every open.
 - Search by style name, folder, description, creator, or tag.
-- Star favorites, keep custom styles in their own library, and export any selection or folder as a portable `.templar-pack`.
+- Star favorites, keep custom styles in their own library, and export a selection or folder as a portable `.templar-pack`.
 
-## Designed for real notes
+## Markdown and page controls
 
-- **Rich Markdown:** headings through H6, emphasis, highlights, links, lists, tasks, quotes, code, tables, callouts, Mermaid/rendered blocks, embeds, dividers, and images. Baseline-aware styles return following text to the next ruled row after variable-height content.
-- **Two page modes:** use a natural reflowing note or a fixed A4, Letter, or custom page that scales as one sheet on narrow screens.
-- **Visual depth:** paper patterns, baseline-aware typography, image treatments, watermarks, callout palettes, table styling, and more.
-- **Your own designs:** create a style with guided controls, edit its raw definition, or import and export portable `.templar` files.
-- **Safe evolution:** customize only the current note, review source-template updates with three-way merging, or automate unstyled notes with ordered folder/tag/name/property rules.
-- **Print-ready output:** prepare fonts, images, pagination, paper, patterns, watermarks, and page sizes before handing the styled note to Obsidian's print dialog.
-- **Desktop and mobile:** the same self-contained note design works across Obsidian desktop and mobile.
+- Styles cover headings through H6, emphasis, highlights, links, lists, tasks, quotes, code, tables, callouts, Mermaid or rendered blocks, embeds, dividers, and images. Baseline-aware styles return following text to the next ruled row after variable-height content.
+- Choose a natural reflowing note or a fixed A4, Letter, or custom page that scales as one sheet on narrow screens.
+- Add paper patterns, baseline-aware typography, image treatments, watermarks, callout palettes, and table styling.
+- Create a style with guided controls, edit its raw definition, or import and export portable `.templar` files.
+- Prepare fonts, images, pagination, paper, patterns, watermarks, and page sizes before handing a styled note to Obsidian's print dialog.
+- Use the same self-contained note design across Obsidian desktop and mobile.
 
 ## Beta installation via BRAT
 
@@ -66,15 +65,15 @@ Templar is not yet listed in the Obsidian Community Plugins directory, so it wil
 
 1. Open a Markdown note.
 2. Select the paintbrush ribbon icon or run **Open page styles** from the command palette.
-3. Search or browse, then click a card (or press Space) to preview it on the actual note.
-4. Select **Apply** (or press Enter). Templar preserves an existing note's page settings; a new note uses the default page-flow setting, so no page-mode dialog interrupts the common path.
-5. Use **Customize** for note-only adjustments, or a card's **Apply with page options…** action when you deliberately want a different page flow.
+3. Search or browse, then click a card or press Space to preview it on the note.
+4. Select **Apply** or press Enter. Templar preserves existing page settings. A new note uses the default page-flow setting, so the common path does not open a page-mode dialog.
+5. Use **Customize** for note-only adjustments, or a card's **Apply with page options…** action when you want a different page flow.
 
-Previewing never writes the note. Applying a style never rewrites the Markdown body, and removing Templar styling returns the note to its normal Obsidian appearance.
+Previewing never writes the note. Applying a style does not rewrite the Markdown body, and removing Templar styling returns the note to its normal Obsidian appearance.
 
-## Private, portable, and yours
+## Privacy and portability
 
-Templar has no account, telemetry, ads, API key, or network traffic. It reads and writes through Obsidian's vault APIs, keeps each note's complete design in one frontmatter property, and treats imported styles, packs, custom CSS, and synced note frontmatter as untrusted. Imports are bounded and validated before use; generated CSS is isolated to the exact Markdown leaf, including when the same note is open in two panes.
+Templar has no account, telemetry, ads, API key, or network traffic. It reads and writes through Obsidian's vault APIs, keeps each note's complete design in one frontmatter property, and treats imported styles, packs, custom CSS, and synced note frontmatter as untrusted. Imports are bounded and validated before use. Generated CSS is isolated to the exact Markdown leaf, including when the same note is open in two panes.
 
 ## Project links
 
