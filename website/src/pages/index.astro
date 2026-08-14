@@ -12,6 +12,7 @@ import Pencil from '../components/art/Pencil.astro';
 import CoffeeRing from '../components/art/CoffeeRing.astro';
 import Fleuron from '../components/art/Fleuron.astro';
 import Flourish from '../components/art/Flourish.astro';
+import LogoLockup from '../components/art/LogoLockup.astro';
 import project from '../data/project.generated.json';
 import fieldGuide from '../data/field-guide.generated.json';
 import { url, bratUrl, repo } from '../lib/site';
@@ -22,6 +23,7 @@ const heroNotes = fieldGuide.notes;
 <BaseLayout title="Templar — Give every Markdown note its own visual identity" description="Templar gives each Obsidian note a self-contained visual page design while the note stays Markdown.">
   <section class="site-section hero">
     <div class="hero-copy">
+      <div class="hero-lockup"><LogoLockup /></div>
       <span class="eyebrow">{project.stage} · {project.version} · {project.builtInStyleCount} built-in styles</span>
       <h1>Give every Markdown note its own <em>visual identity.</em></h1>
       <div class="hero-flourish"><Flourish /></div>
@@ -166,6 +168,9 @@ const heroNotes = fieldGuide.notes;
 </BaseLayout>
 <style>
   .hero { display: grid; grid-template-columns: 0.92fr 1.08fr; align-items: center; gap: 30px; padding-top: 60px; }
+  .hero { overflow-x: clip; }
+  .hero-lockup { width: clamp(210px, 22vw, 280px); margin-bottom: 26px; }
+  .hero-lockup :global(svg) { display: block; width: 100%; height: auto; }
   .hero h1 { font-size: clamp(2.9rem, 4.9vw, 4.5rem); }
   .hero h1 em { font-style: italic; color: var(--oxblood); }
   .hero-flourish { color: var(--brass); width: 230px; margin: 14px 0 4px; }
@@ -189,6 +194,7 @@ const heroNotes = fieldGuide.notes;
   @media (prefers-reduced-motion: reduce) { .scroll-cue svg { animation: none; } }
   @media (max-width: 1020px) {
     .hero { grid-template-columns: 1fr; padding-top: 44px; }
+    .hero-lockup { margin-inline: auto; }
     .hero-copy { text-align: center; }
     .hero-lead { margin-inline: auto; }
     .hero-actions, .hero .trust-strip { justify-content: center; }

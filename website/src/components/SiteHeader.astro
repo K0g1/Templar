@@ -1,5 +1,6 @@
 ---
 import Icon from './Icon.astro';
+import LogoMark from './art/LogoMark.astro';
 import project from '../data/project.generated.json';
 import { url, repo } from '../lib/site';
 const path = Astro.url.pathname;
@@ -16,8 +17,8 @@ function active(href: string) {
   <a class="skip-link" href="#main">Skip to content</a>
   <div class="header-inner">
     <a class="brand" href={url('/')} aria-label="Templar home">
-      <img src={url('/favicon.svg')} alt="" width="42" height="42" />
-      <span>Templar<small>Visual identity for Markdown</small></span>
+      <LogoMark />
+      <span>Templar<small>Page styling for Markdown notes</small></span>
     </a>
     <nav class="desktop-nav" aria-label="Primary navigation">
       {nav.map(([href, label]) => <a href={url(href)} aria-current={active(href) ? 'page' : undefined}>{label}</a>)}

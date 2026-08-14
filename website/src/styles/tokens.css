@@ -33,6 +33,14 @@
     --olive-deep: #475232;
     --brass: #a37c3c;
     --blueink: #4f7895;
+    /* Templar brand logo (from src/assets/logo-source.svg) */
+    --lg-ink: #20201f;
+    --lg-sage: #7d8f77;
+    --lg-graphite: #767a77;
+    --lg-dot: #9da19e;
+    --lg-blue: #8ea9b8;
+    --lg-red: #b97972;
+    --lg-grid: #92a29b;
 
     /* Lines & depth */
     --line: rgba(74, 60, 40, 0.16);
@@ -74,6 +82,14 @@
     --shadow-paper: 0 20px 46px rgba(0, 0, 0, 0.42), 0 3px 8px rgba(0, 0, 0, 0.32);
     --shadow-lift: 0 30px 60px rgba(0, 0, 0, 0.5), 0 5px 12px rgba(0, 0, 0, 0.36);
     --shadow-window: 0 34px 80px rgba(0, 0, 0, 0.55), 0 8px 20px rgba(0, 0, 0, 0.4);
+    /* Templar brand logo, night-desk values */
+    --lg-ink: #f2ead8;
+    --lg-sage: #93a58c;
+    --lg-graphite: #c6c9c3;
+    --lg-dot: #a9aca7;
+    --lg-blue: #9db6c4;
+    --lg-red: #d49a91;
+    --lg-grid: #a2afa5;
   }
 }
 

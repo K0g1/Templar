@@ -17,7 +17,11 @@ export default defineConfig({
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
         { tag: 'meta', attrs: { name: 'twitter:image', content: site + base + '/og.png' } },
       ],
-      logo: { src: './src/assets/emblem.svg', alt: 'Templar' },
+      logo: {
+        light: './src/assets/logo-mark-light.svg',
+        dark: './src/assets/logo-mark-dark.svg',
+        alt: 'Templar',
+      },
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/K0g1/Templar' }],
       customCss: ['./src/styles/tokens.css', './src/styles/docs.css'],
       editLink: { baseUrl: 'https://github.com/K0g1/Templar/edit/main/' },

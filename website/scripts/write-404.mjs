@@ -7,7 +7,7 @@ import path from 'node:path';
 const website = path.resolve(import.meta.dirname, '..');
 const dist = path.join(website, 'dist');
 const base = (process.env.SITE_BASE ?? '/Templar').replace(/\/$/, '');
-const emblem = await fs.readFile(path.join(website, 'src/assets/emblem.svg'), 'utf8');
+const mark = await fs.readFile(path.join(website, 'public', 'favicon.svg'), 'utf8');
 
 const html = `<!doctype html>
 <html lang="en">
@@ -25,7 +25,8 @@ const html = `<!doctype html>
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 32px 18px; color: var(--ink-1); font-family: var(--ui); background: radial-gradient(1200px 700px at 18% -8%, rgba(255,250,235,.5), transparent 55%), linear-gradient(180deg, var(--desk-0), var(--desk-1)); }
   .card { position: relative; width: min(640px, 100%); padding: 56px 44px 64px; text-align: center; background: var(--paper-0); border: 1px solid rgba(85,63,39,.14); border-radius: 6px; box-shadow: 0 16px 36px rgba(48,38,24,.14), 0 2px 6px rgba(48,38,24,.08); }
   .card::after { content: ''; position: absolute; left: 1.5%; right: 1.5%; bottom: -7px; height: 9px; background: var(--paper-2); clip-path: polygon(0 0, 2.5% 42%, 6% 9%, 11% 48%, 17% 13%, 24% 46%, 30% 8%, 38% 50%, 45% 12%, 53% 47%, 61% 10%, 70% 49%, 78% 14%, 86% 46%, 93% 9%, 100% 0, 100% 100%, 0 100%); }
-  .seal { width: 108px; height: 108px; margin: 0 auto 22px; }
+  .seal { width: 92px; margin: 0 auto 24px; }
+  .seal svg { display: block; width: 100%; height: auto; }
   .eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 700 .74rem/1 var(--ui); text-transform: uppercase; letter-spacing: .12em; color: var(--oxblood); background: rgba(138,59,44,.08); border: 1px solid rgba(138,59,44,.22); padding: 8px 12px; border-radius: 999px; }
   h1 { font-family: var(--display); font-weight: 600; font-size: clamp(2.1rem, 6vw, 3.2rem); letter-spacing: -.03em; margin: 22px 0 14px; }
   p { color: var(--ink-2); font-family: var(--display); font-size: 1.08rem; line-height: 1.6; margin: 0 auto; max-width: 460px; }
@@ -47,7 +48,7 @@ const html = `<!doctype html>
 </head>
 <body>
   <main class="card">
-    <div class="seal">${emblem}</div>
+    <div class="seal">${mark}</div>
     <span class="eyebrow">Error 404</span>
     <h1>This page slipped out of the notebook.</h1>
     <p>The link may be old, or the page may have moved. The rest of the desk is right where you left it.</p>

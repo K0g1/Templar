@@ -355,6 +355,8 @@
     .header-inner { min-height: 64px; padding: 8px 14px; gap: 12px; }
     .brand { font-size: 1.22rem; }
     .brand img, .brand svg { width: 34px; height: 34px; }
+    .brand small { letter-spacing: 0.12em; }
+    @media (max-width: 360px) { .brand small { display: none; } }
     .theme-toggle { display: none; }
     .page-hero { width: calc(100% - 24px); padding: 38px 24px; margin-top: 30px; }
     .footer-main { grid-template-columns: 1fr; padding: 28px 22px; }
