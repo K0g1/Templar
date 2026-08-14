@@ -343,47 +343,49 @@ templar:
         .page h1 { letter-spacing: -0.04em; }
         .page hr { opacity: 0.55; }
 ---
-
 # Templar Field Manual
 
-**Field Manual No. 01** · *beta edition* · Prepared by the Templar project
+**Field Manual No. 01** · *beta edition* · *last updated 14 Aug 2026*
 
-![[Assets/field-manual-compass.svg]]
+## What I use this for
 
-> [!info] What is Templar?
-> Templar gives every Markdown note its own visual identity — a paper, a type system, a ruled grid — while the note itself stays plain Markdown. The design lives in one <code>templar</code> frontmatter block and travels with the file.
+I keep a Templar style on the notes I read every day: the daily log, lecture summaries, and my study sheets. The design lives in one `templar` block at the top of the file, and the rest of the note stays plain Markdown.
 
-## How to get started
+> [!info] What Templar is
+> Templar gives each note its own visual page design — paper, type, grids, and rules — while the note itself stays ordinary Markdown. The design travels with the file, and nothing about the writing changes.
 
-1. Install the beta through **BRAT**, or download the manual release assets.
+## Setup in three steps
+
+1. Install the beta through **BRAT** (repo: `K0g1/Templar`).
 2. Open any note and run **Templar: Apply page style** from the command palette.
-3. Pick a style, press <code>/</code> to search, and choose **Apply**.
+3. Search with `/`, press **Enter** to apply.
 
-~~~text
-K0g1/Templar        <- paste this into BRAT
-1.2.0-beta.1        <- frozen tag for reproducible reports
-~~~
+> [!tip] Try before you commit
+> Clicking a style only *previews* it on the real note. ==Nothing is written until you press Apply.==
 
-### Command map
+## Command map
 
 | Command | What it does |
 | --- | --- |
-| <code>Templar: Apply page style</code> | Attaches a style to the open note |
-| <code>Templar: Browse page styles</code> | Opens the style library |
-| <code>Templar: Toggle page mode</code> | Switches pageless and paged |
-| <code>Templar: New styled note</code> | Creates a note with a style in one step |
-| <code>Templar: Print styled note</code> | Prepares paper and images for printing |
-
-> [!tip] Preview before you commit
-> Clicking a style in the library previews it on the real note. ==Nothing is written until you press Apply== — previews are temporary and live only in the current leaf.
+| `Templar: Apply page style` | Attaches a style to the open note |
+| `Templar: Browse page styles` | Opens the style library |
+| `Templar: Toggle page mode` | Switches pageless and paged |
+| `Templar: Print styled note` | Prepares paper and images for printing |
 
 ## What the design controls
 
-- [ ] Paper — color, ruling, dots, graph, ledger, scallops, and margin lines
-- [ ] Typography — body font, size, color, and all six heading levels
+- [x] Paper — ruling, dots, graph, ledger, scallops, and margin lines
+- [x] Typography — body font, size, color, and all six heading levels
 - [x] Baseline grid — text, tables, and images snap to the ruled rhythm
-- [x] Blocks — callouts, tables, quotes, code, and highlights
 - [ ] Page geometry — A4, Letter, or custom; pageless or paged
+
+## Daily routine
+
+~~~text
+08:00  review yesterday's log
+08:20  read through the lecture notes
+09:00  copy the summary into the study sheet
+~~~
 
 > [!warning] Back up first
 > Templar is beta software. Back up important vaults before testing prerelease releases.
@@ -392,7 +394,6 @@ K0g1/Templar        <- paste this into BRAT
 
 ## A page is still a note
 
-Delete the <code>templar</code> property and the note is ordinary Markdown again. **Content remains stable. Presentation can be expressive.**
+Delete the `templar` property and the note is ordinary Markdown again. **Content remains stable. Presentation can be expressive.**
 
-*Field notes from the margin — this manual is refreshed with every release.*
-
+*From the margin — refreshed with every release.*

@@ -343,19 +343,16 @@ templar:
         .page h1 { text-transform: uppercase; letter-spacing: 0.055em; }
         .page h2 { letter-spacing: 0.025em; }
 ---
-
 # The Style Library
 
-**A Sunday Supplement** · One hundred and thirty-two page designs, thirteen packs, and a search box that does not care how your folders are named.
-
-![[Assets/sunday-supplement-masthead.svg]]
+**A Sunday Supplement** · One hundred and thirty-two page designs, thirteen packs
 
 > [!quote] From the editor's desk
 > A style is not a theme. A theme dresses the whole vault; a style dresses one note — and it leaves the writing alone.
 
 ## How the library is organized
 
-Styles ship in themed packs and every style answers one question: *what should this particular note feel like?*
+Styles ship in themed packs, and every style answers one question: *what should this particular note feel like?*
 
 | Pack | Mood | Example styles |
 | --- | --- | --- |
@@ -363,12 +360,12 @@ Styles ship in themed packs and every style answers one question: *what should t
 | Academia | Study and lectures | Cornell Lecture, Thesis Draft, Conference Notes |
 | Professional | Briefs and decisions | Executive Brief, Product Strategy, Sales Pipeline |
 | Travel | Logs and journeys | Tokyo Night, Desert Roadtrip, City Explorer |
-| Dark &amp; Neon | Screen-first night pages | Neon Arcade, Synthwave Sunset, Ultraviolet Club |
-| Vintage &amp; Editorial | Print and press | Sunday Supplement, 1920s Gazette, Paris Café |
+| Dark & Neon | Screen-first night pages | Neon Arcade, Synthwave Sunset, Ultraviolet Club |
+| Vintage & Editorial | Print and press | Sunday Supplement, 1920s Gazette, Paris Café |
 
 ## Finding the right page
 
-- Press <code>/</code> anywhere in the library to search.
+- Press `/` anywhere in the library to search.
 - Move with the arrow keys; press **Space** to preview on the real note.
 - **Enter** applies. A click only previews — ==Apply is always a separate, explicit step==.
 
@@ -384,8 +381,8 @@ Surfaces:      Recent · Favorites · Current folder
 ## Where your own styles live
 
 - [x] Save any preview as a custom style — edit its raw definition later.
-- [x] Export a single <code>.templar</code> style file.
-- [x] Export a validated multi-style <code>.templar-pack</code>.
+- [x] Export a single `.templar` style file.
+- [x] Export a validated multi-style `.templar-pack`.
 - [ ] Import both formats on any other device.
 
 > [!success] The library, summarized
@@ -394,4 +391,3 @@ Surfaces:      Recent · Favorites · Current folder
 ---
 
 *One hundred and thirty-two styles is a lot of taste to carry around. Fortunately, they weigh less than the paper they imitate.*
-

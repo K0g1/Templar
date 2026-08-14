@@ -1,7 +1,8 @@
 ---
-// LiveNote — renders a field-guide note inside a drawn Obsidian-style window.
-// The note HTML and the scoped stylesheet come from the real plugin compiler
-// (field-guide.generated.json); the window chrome around it is pure CSS/SVG.
+// LiveNote — renders field-guide notes inside a drawn Obsidian-style window.
+// The note HTML and scoped stylesheets come from the real plugin compiler
+// (field-guide.generated.json); the window chrome is pure CSS/SVG. Tabs,
+// sidebar files, and the title bar are interactive: click to switch notes.
 import { url } from '../lib/site';
 import Icon from './Icon.astro';
 
@@ -24,73 +25,87 @@ interface Props {
   label?: string;
 }
 const { note, notes = [note], height = '640px', chrome = 'full', label } = Astro.props;
-const resolvedHtml = note.html.replaceAll('src="field-guide/', 'src="' + url('/field-guide/'));
 const activeIndex = Math.max(0, notes.findIndex((entry) => entry.slug === note.slug));
-const folderFiles = notes.slice(0, 3);
+const resolved = notes.map((entry) => ({ ...entry, html: entry.html.replaceAll('src="field-guide/', 'src="' + url('/field-guide/')) }));
 ---
 
 <div class="live-note-window live-note-chrome-{chrome}" style={'--ln-height: ' + height} data-live-note>
   {chrome === 'full' && (
     <div class="ln-titlebar" aria-hidden="true">
       <div class="ln-traffic"><span></span><span></span><span></span></div>
-      <div class="ln-window-title">{note.title} — Lightweight Vault — Obsidian</div>
+      <div class="ln-window-title" data-ln-title>{note.title} — Obsidian</div>
       <div class="ln-window-icon"><Icon name="moon" size={13} /></div>
     </div>
   )}
   <div class="ln-body">
     {chrome === 'full' && (
-      <aside class="ln-sidebar" aria-hidden="true">
+      <aside class="ln-sidebar" aria-label="Vault files">
         <div class="ln-vault">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
-          Lightweight Vault
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+          Obsidian
         </div>
-        <span class="ln-file folder">
+        <span class="ln-file folder" aria-hidden="true">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
           Templar Field Guide
         </span>
-        {notes.map((entry, index) => (
-          <span class:list={['ln-file', { active: index === activeIndex }]}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
+        {resolved.map((entry, index) => (
+          <button
+            type="button"
+            class:list={['ln-file', { active: index === activeIndex }]}
+            data-note-target={entry.slug}
+            aria-pressed={index === activeIndex ? 'true' : 'false'}
+            aria-label={'Open ' + entry.title}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
             {entry.title}
-          </span>
+          </button>
         ))}
-        <span class="ln-file">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
-          Assets
-        </span>
       </aside>
     )}
     <div class="ln-main">
       {chrome !== 'bare' && (
-        <div class="ln-tabs" aria-hidden="true">
-          <span class="ln-tab active">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
-            {note.title}
-          </span>
-          {folderFiles.filter((entry) => entry.slug !== note.slug).slice(0, 2).map((entry) => (
-            <span class="ln-tab">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
+        <div class="ln-tabs" role="tablist" aria-label="Open notes">
+          {resolved.map((entry, index) => (
+            <button
+              type="button"
+              class:list={['ln-tab', { active: index === activeIndex }]}
+              role="tab"
+              data-note-target={entry.slug}
+              aria-selected={index === activeIndex ? 'true' : 'false'}
+              aria-label={entry.title}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v4h4"/></svg>
               {entry.title}
-            </span>
+            </button>
           ))}
         </div>
       )}
       <div class="ln-viewport">
         <div class="ln-scroll">
           {label && <div class="ln-label">{label}</div>}
-          <div class="live-note-scope" data-templar-scope={note.scopeId}>
-            <style is:inline set:html={note.css}></style>
-            <div class="markdown-reading-view">
-              <div class="markdown-preview-view markdown-rendered node-insert-event is-readable-line-width allow-fold-headings allow-fold-lists templar-page">
-                <div class="markdown-preview-sizer markdown-preview-section templar-page-content" set:html={resolvedHtml} />
+          {resolved.map((entry, index) => (
+            <div
+              class:list={['ln-note-pane', { active: index === activeIndex }]}
+              data-note-pane={entry.slug}
+              data-note-title={entry.title}
+              data-note-style={entry.styleName}
+              role="tabpanel"
+            >
+              <div class="live-note-scope" data-templar-scope={entry.scopeId}>
+                <style is:inline set:html={entry.css}></style>
+                <div class="markdown-reading-view">
+                  <div class="markdown-preview-view markdown-rendered node-insert-event is-readable-line-width allow-fold-headings allow-fold-lists templar-page">
+                    <div class="markdown-preview-sizer markdown-preview-section templar-page-content" set:html={entry.html} />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          ))}
         </div>
       </div>
       {chrome === 'full' && (
         <div class="ln-statusbar" aria-hidden="true">
-          <span>{note.styleName}</span>
+          <span data-ln-style>{note.styleName}</span>
           <span>0 errors · templar</span>
           <span class="ln-right"><span>Ln 1, Col 1</span><span>UTF-8</span><span>Markdown</span></span>
         </div>
@@ -98,4 +113,26 @@ const folderFiles = notes.slice(0, 3);
     </div>
   </div>
 </div>
-
+<script>
+  document.querySelectorAll<HTMLElement>('[data-live-note]').forEach((win) => {
+    const panes = win.querySelectorAll<HTMLElement>('[data-note-pane]');
+    const buttons = win.querySelectorAll<HTMLButtonElement>('[data-note-target]');
+    const title = win.querySelector<HTMLElement>('[data-ln-title]');
+    const styleLabel = win.querySelector<HTMLElement>('[data-ln-style]');
+    const setActive = (slug: string) => {
+      buttons.forEach((button) => {
+        const active = button.dataset.noteTarget === slug;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+        button.setAttribute('aria-selected', String(active));
+      });
+      panes.forEach((pane) => pane.classList.toggle('active', pane.dataset.notePane === slug));
+      const pane = win.querySelector<HTMLElement>('[data-note-pane="' + slug + '"]');
+      if (pane) {
+        if (title) title.textContent = (pane.dataset.noteTitle || '') + ' \u2014 Obsidian';
+        if (styleLabel) styleLabel.textContent = pane.dataset.noteStyle || '';
+      }
+    };
+    buttons.forEach((button) => button.addEventListener('click', () => setActive(button.dataset.noteTarget || '')));
+  });
+</script>

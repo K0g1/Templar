@@ -34,7 +34,11 @@ import { bratUrl, releasesUrl, url } from '../lib/site';
         {[['1','Install BRAT','Find “Obsidian42 - BRAT” in Community Plugins, install it, and enable it.'],['2','Add beta plugin','Run “BRAT: Add a beta plugin for testing” from the command palette.'],['3','Enter the repository','Paste K0g1/Templar into the repository field.'],['4','Enable Templar','Open Settings → Community plugins → Installed plugins and enable Templar.']].map(([n,title,copy]) => <article><b>{n}</b><h3>{title}</h3><p>{copy}</p></article>)}
       </div>
       <div class="route-actions">
-        <a class="button primary" href={bratUrl}>Open BRAT in Obsidian <Icon name="arrow" /></a>
+        <div class="brat-actions">
+          <a class="button primary" href={bratUrl}>Add Templar with BRAT <Icon name="arrow" /></a>
+          <a class="button" href="obsidian://show-plugin?id=obsidian42-brat">Open BRAT in Obsidian <Icon name="arrow" /></a>
+          <p class="brat-note">The deep link works once BRAT is installed and enabled. If nothing opens, use the second button, then paste the repository below into “BRAT: Add a beta plugin for testing”.</p>
+        </div>
         <div class="code-line"><code>K0g1/Templar</code><button class="copy-button" data-copy="K0g1/Templar">Copy</button></div>
       </div>
     </div>
@@ -75,6 +79,7 @@ import { bratUrl, releasesUrl, url } from '../lib/site';
   <section class="site-section compact">
     <div class="section-heading"><h2>Troubleshooting.</h2><div class="fleuron-row"><Fleuron /></div></div>
     <div class="faq">
+      <details class="paper-card"><summary>The BRAT deep link does nothing</summary><div class="details-body"><p>The link only works once BRAT is installed and enabled. Open “Obsidian42 - BRAT” in Community Plugins (or press “Open BRAT in Obsidian” above), then run “BRAT: Add a beta plugin for testing” and paste <code>K0g1/Templar</code>.</p></div></details>
       <details class="paper-card"><summary>BRAT rate limit or download failure</summary><div class="details-body"><p>Wait for the GitHub rate limit to reset, or use manual release assets. The plugin does not need BRAT at runtime.</p></div></details>
       <details class="paper-card"><summary>Plugin is missing after copying files</summary><div class="details-body"><p>Check the lowercase folder path and confirm all three release files are directly inside <code>.obsidian/plugins/templar/</code>.</p></div></details>
       <details class="paper-card"><summary>Obsidian shows an older version</summary><div class="details-body"><p>Disable Templar, replace all three files together, reload Obsidian, and enable it again.</p></div></details>
@@ -93,7 +98,9 @@ import { bratUrl, releasesUrl, url } from '../lib/site';
   .steps b { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--oxblood); color: #fff7ee; margin-bottom: 14px; font-family: var(--display); }
   .steps h3 { margin-bottom: 9px; }
   .steps p { font-size: 0.86rem; }
-  .route-actions { display: flex; align-items: center; gap: 18px; margin-top: 28px; }
+  .route-actions { display: flex; align-items: stretch; gap: 18px; margin-top: 28px; flex-wrap: wrap; }
+  .brat-actions { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+  .brat-note { font-size: 0.78rem; color: var(--ink-muted); max-width: 420px; margin: 2px 0 0; }
   .route-actions .code-line { flex: 1; }
   .frozen { padding: 38px; display: grid; grid-template-columns: 1fr 330px; gap: 35px; align-items: center; }
   .frozen p { margin-top: 10px; }

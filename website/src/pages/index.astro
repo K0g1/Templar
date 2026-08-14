@@ -15,7 +15,7 @@ import Flourish from '../components/art/Flourish.astro';
 import LogoLockup from '../components/art/LogoLockup.astro';
 import project from '../data/project.generated.json';
 import fieldGuide from '../data/field-guide.generated.json';
-import { url, bratUrl, repo } from '../lib/site';
+import { url, repo } from '../lib/site';
 
 const heroNote = fieldGuide.notes.find((note) => note.slug === 'templar-field-manual') ?? fieldGuide.notes[0];
 const heroNotes = fieldGuide.notes;
@@ -29,7 +29,7 @@ const heroNotes = fieldGuide.notes;
       <div class="hero-flourish"><Flourish /></div>
       <p class="hero-lead">Templar gives each note a self-contained visual page design — paper, type, grids, and rules — while the note stays pure Markdown. The design travels with the file, and nothing about the writing changes.</p>
       <div class="hero-actions">
-        <a class="button primary" href={bratUrl}><Icon name="download" /> Install Beta</a>
+        <a class="button primary" href={url("/installation/")}><Icon name="download" /> Install Beta</a>
         <a class="button" href={url('/docs/')}><Icon name="book" /> Explore Docs</a>
       </div>
       <div class="trust-strip">
@@ -129,10 +129,47 @@ const heroNotes = fieldGuide.notes;
       <a class="button" href={url('/docs/developers/developer-reference/#note-state-synchronization-and-automation')}>How synchronization works <Icon name="arrow" /></a>
     </div>
     <div class="merge-visual paper-panel">
-      <div class="merge-card source">Applied snapshot</div>
-      <div class="merge-card current">Current source</div>
-      <div class="merge-card local">Your note edits</div>
-      <div class="merge-result">Three-way merge<br /><small>Keep safe changes. Review conflicts.</small></div>
+      <div class="merge-inputs">
+        <div class="merge-card source">
+          <span class="merge-kicker">Applied snapshot</span>
+          <span class="merge-version">v1 · what your note carries</span>
+          <ul class="merge-rows" aria-hidden="true">
+            <li class="keep"><i></i>paper: cream · ruled</li>
+            <li class="keep"><i></i>body font: Georgia 16</li>
+            <li class="conflict"><i></i>highlight: yellow</li>
+          </ul>
+        </div>
+        <div class="merge-card current">
+          <span class="merge-kicker">Current source</span>
+          <span class="merge-version">v2 · updated style</span>
+          <ul class="merge-rows" aria-hidden="true">
+            <li class="keep"><i></i>paper: cream · ruled</li>
+            <li class="keep"><i></i>body font: Georgia 16</li>
+            <li class="changed"><i></i>highlight: amber, softer</li>
+          </ul>
+        </div>
+        <div class="merge-card local">
+          <span class="merge-kicker">Your note edits</span>
+          <span class="merge-version">local overrides</span>
+          <ul class="merge-rows" aria-hidden="true">
+            <li class="keep"><i></i>paper: cream · ruled</li>
+            <li class="local"><i></i>body font: Charter 15</li>
+            <li class="conflict"><i></i>highlight: orange</li>
+          </ul>
+        </div>
+      </div>
+      <div class="merge-flow" aria-hidden="true">
+        <svg viewBox="0 0 660 74" fill="none" preserveAspectRatio="none">
+          <path d="M110 2 C110 40 200 56 330 72" stroke="rgba(95,109,68,0.5)" stroke-width="1.6"/>
+          <path d="M330 2 V72" stroke="rgba(163,124,60,0.55)" stroke-width="1.6"/>
+          <path d="M550 2 C550 40 460 56 330 72" stroke="rgba(138,59,44,0.5)" stroke-width="1.6"/>
+          <circle cx="330" cy="72" r="4" fill="#a37c3c"/>
+        </svg>
+      </div>
+      <div class="merge-result">
+        <span class="merge-result-icon"><Icon name="check" size={20} /></span>
+        <div><strong>Three-way merge</strong><small>Safe changes kept · conflicts listed for review</small></div>
+      </div>
     </div>
   </section>
 
@@ -160,7 +197,7 @@ const heroNotes = fieldGuide.notes;
         <p class="install-status">Requires Obsidian {project.minAppVersion}+ · Back up important vaults before testing prerelease software.</p>
       </div>
       <div class="install-buttons">
-        <a class="button primary" href={bratUrl}><Icon name="download" /> Install with BRAT</a>
+        <a class="button primary" href={url("/installation/")}><Icon name="download" /> Install Templar</a>
         <a class="button" href={url('/installation/')}>Installation guide <Icon name="arrow" /></a>
       </div>
     </div>
