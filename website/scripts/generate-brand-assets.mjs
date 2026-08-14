@@ -119,7 +119,7 @@ const lockupVarBody = [
       if (attr === 'fill' && r === 'wordmark') return 'fill="var(--lg-ink)"';
       if (attr === 'fill' && r === 'subtitle') return 'fill="var(--lg-sage)"';
       if (attr === 'stroke') {
-        const v = r === 'divider' ? 'var(--lg-sage)' : VARS[r];
+        const v = r === 'divider' ? 'var(--lg-sage)' : (VARS[r] || 'var(--lg-graphite)');
         return 'stroke="' + v + '"';
       }
       return _m;
