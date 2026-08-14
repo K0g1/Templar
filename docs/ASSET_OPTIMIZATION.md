@@ -1,14 +1,14 @@
 # Documentation asset optimization
 
-On 2026-08-11, the six documentation/showcase screenshots were converted from PNG to lossless WebP. The pixel dimensions and visual content were preserved; the images were inspected after conversion. WebP is supported by the GitHub Markdown gallery and Obsidian image embeds used by the showcase notes.
+The README gallery uses three screenshots captured from Obsidian 1.13.7 after rendering the display notes. Each source capture was cropped to the note canvas, excluding Obsidian's sidebars, tab bar, status strip, scrollbar, and pointer. The delivered PNGs are 839 × 700 pixels.
 
-| File | Before bytes | After bytes | Reduction | Format changed? |
-| --- | ---: | ---: | ---: | --- |
-| `docs/assets/gallery/botanical-field-notes` | 242,313 | 134,788 | 44.37% | PNG → WebP |
-| `docs/assets/gallery/neon-night-brief` | 287,464 | 166,804 | 41.97% | PNG → WebP |
-| `docs/assets/gallery/alpine-field-log` | 353,736 | 213,888 | 39.53% | PNG → WebP |
-| `examples/Templar Showcase/Assets/neon-night` | 2,073,586 | 1,571,092 | 24.23% | PNG → WebP |
-| `examples/Templar Showcase/Assets/alpine-blue-hour` | 2,503,654 | 1,857,190 | 25.82% | PNG → WebP |
-| `examples/Templar Showcase/Assets/botanical-journal` | 2,679,056 | 1,681,880 | 37.22% | PNG → WebP |
+| Asset | Source | Canvas | Capture | Format |
+| --- | --- | ---: | --- | --- |
+| `docs/assets/gallery/rainlight-field-notes` | Obsidian Reading View | 839 × 700 | note-only crop | PNG |
+| `docs/assets/gallery/small-hours-studio-brief` | Obsidian Reading View | 839 × 700 | note-only crop | PNG |
+| `docs/assets/gallery/kitchen-window-garden` | Obsidian Reading View | 839 × 700 | note-only crop | PNG |
+| `examples/Templar Showcase/Assets/neon-night` | original artwork | source asset | unchanged | WebP |
+| `examples/Templar Showcase/Assets/alpine-blue-hour` | original artwork | source asset | unchanged | WebP |
+| `examples/Templar Showcase/Assets/botanical-journal` | original artwork | source asset | unchanged | WebP |
 
-No generated or release artifacts were changed. References in the README and showcase notes now point to the WebP assets.
+The showcase note artwork remains separate from the README screenshots. References in the README point to the cropped PNG gallery assets, and the corresponding display-note source files live in `examples/Templar Showcase/`.
