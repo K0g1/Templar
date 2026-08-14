@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
 <title id="title">Templar</title>
 <desc id="desc">A folded page icon demonstrating dot grid, ruled notebook paper with a margin, and graph paper.</desc>
-  <g stroke="#767a77" stroke-width="2.1" opacity="0.88" stroke-linecap="square" fill="none">
+  <g stroke="#c6c9c3" stroke-width="2.1" opacity="0.88" stroke-linecap="square" fill="none">
     <line x1="14.86" y1="7" x2="14.86" y2="57"/>
     <line x1="11.92" y1="54.06" x2="52.08" y2="54.06"/>
     <line x1="13.59" y1="10.2" x2="41.21" y2="10.2"/>
     <path d="M41.21 10.2 L49.14 18.13 V54.06" stroke-linejoin="miter"/>
     <path d="M41.21 10.2 V18.13 H49.14" stroke-linejoin="miter"/>
   </g>
-  <g fill="#9da19e" opacity="0.78">
+  <g fill="#a9aca7" opacity="0.78">
     <circle cx="18.96" cy="15.18" r="1.4"/>
     <circle cx="22.03" cy="15.18" r="1.4"/>
     <circle cx="25.09" cy="15.18" r="1.4"/>
@@ -36,15 +36,15 @@
     <circle cx="34.3" cy="22.47" r="1.4"/>
     <circle cx="37.37" cy="22.47" r="1.4"/>
   </g>
-  <g stroke="#8ea9b8" stroke-width="1.3" opacity="0.68" stroke-linecap="round">
+  <g stroke="#9db6c4" stroke-width="1.3" opacity="0.68" stroke-linecap="round">
     <line x1="18.96" y1="27.72" x2="45.04" y2="27.72"/>
     <line x1="18.96" y1="30.15" x2="45.04" y2="30.15"/>
     <line x1="18.96" y1="32.58" x2="45.04" y2="32.58"/>
     <line x1="18.96" y1="35.01" x2="45.04" y2="35.01"/>
     <line x1="18.96" y1="37.43" x2="45.04" y2="37.43"/>
   </g>
-  <line x1="23.82" y1="26.18" x2="23.82" y2="38.46" stroke="#b97972" stroke-width="1.5" opacity="0.78" stroke-linecap="round"/>
-  <g stroke="#92a29b" stroke-width="0.75" opacity="0.36" stroke-linecap="square">
+  <line x1="23.82" y1="26.18" x2="23.82" y2="38.46" stroke="#d49a91" stroke-width="1.5" opacity="0.78" stroke-linecap="round"/>
+  <g stroke="#a2afa5" stroke-width="0.75" opacity="0.36" stroke-linecap="square">
     <line x1="18.96" y1="40.5" x2="18.96" y2="49.33"/>
     <line x1="21.13" y1="40.5" x2="21.13" y2="49.33"/>
     <line x1="23.3" y1="40.5" x2="23.3" y2="49.33"/>
