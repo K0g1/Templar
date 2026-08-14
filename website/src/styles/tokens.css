@@ -28,6 +28,7 @@
 
     /* Pigment */
     --oxblood: #8a3b2c;
+    --accent: #8a3b2c;
     --oxblood-deep: #6e2d21;
     --olive: #5f6d44;
     --olive-deep: #475232;
@@ -71,6 +72,18 @@
   }
 
   :root[data-theme='dark'] {
+    /* Surfaces and ink flip with the night desk: panels, cards, and the header go dark. */
+    --paper-0: #1d1813;
+    --paper-1: #241e17;
+    --paper-2: #2b241a;
+    --kraft-1: #3a3022;
+    --kraft-2: #4c3f2c;
+    --ink-1: #f2ead8;
+    --ink-2: #d0c4aa;
+    --ink-muted: #a6997f;
+    --accent: #e0795f;
+    --line: rgba(242, 234, 216, 0.12);
+    --line-strong: rgba(242, 234, 216, 0.22);
     --desk-ink-1: #f2ead8;
     --desk-ink-2: #d0c4aa;
     --desk-ink-muted: #a6997f;

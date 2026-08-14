@@ -25,7 +25,7 @@ function active(href: string) {
       <a href={repo}>GitHub</a>
     </nav>
     <div class="header-actions">
-      <button class="icon-button theme-toggle" type="button" aria-label="Use dark desk theme" title="Use dark desk theme" data-theme-toggle><Icon name="moon" /></button>
+      <button class="icon-button theme-toggle" type="button" aria-label="Use dark desk theme" title="Use dark desk theme" data-theme-toggle><span class="theme-icon theme-icon-moon"><Icon name="moon" /></span><span class="theme-icon theme-icon-sun"><Icon name="sun" /></span></button>
       <a class="button primary header-install" href={url('/installation/')}>Install {project.stage === 'stable' ? '' : 'Beta'} <Icon name="download" size={17} /></a>
       <button class="icon-button menu-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-nav" data-menu-toggle><Icon name="menu" /></button>
     </div>
@@ -36,4 +36,9 @@ function active(href: string) {
     <a class="button primary" href={url('/installation/')}>Install Templar</a>
   </nav>
 </header>
-
+<style>
+  .theme-icon { display: grid; }
+  .theme-icon-sun { display: none; }
+  :global([data-theme="dark"]) .theme-icon-moon { display: none; }
+  :global([data-theme="dark"]) .theme-icon-sun { display: grid; }
+</style>

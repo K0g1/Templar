@@ -81,7 +81,9 @@
 @layer utilities {
   [hidden] { display: none !important; }
   @media print {
-    .site-header, .site-footer, .skip-link, .install-cta, .live-note-window, .field-guide-tabs, .style-demo, .page-mode-demo { display: none !important; }
+    .site-header, .site-footer, .skip-link, .install-cta, .style-demo, .page-mode-demo { display: none !important; }
+    .live-note-pane { display: block !important; }
+    .live-note-pane.active .live-note-window { display: flex !important; }
     [data-reveal] { opacity: 1 !important; transform: none !important; }
     .paper-card, .paper-panel { break-inside: avoid; box-shadow: none; }
     a { text-decoration: none; }

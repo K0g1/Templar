@@ -103,11 +103,11 @@ const packs = [...new Set(samples.map((sample) => sample.folder))];
   .demo-tools { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
   .demo-tools strong { font-family: var(--display); font-size: 1.15rem; }
   .demo-tools span { font-size: 0.76rem; color: var(--ink-muted); }
-  .demo-search { display: flex; align-items: center; gap: 9px; padding: 9px 13px; margin-bottom: 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: rgba(253, 250, 240, 0.7); color: var(--ink-muted); }
+  .demo-search { display: flex; align-items: center; gap: 9px; padding: 9px 13px; margin-bottom: 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: color-mix(in srgb, var(--paper-0) 70%, transparent); color: var(--ink-muted); }
   .demo-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: 0.86rem var(--ui); color: var(--ink-1); }
-  .demo-search input::placeholder { color: var(--ink-muted); }
+  .demo-search input::placeholder { color: color-mix(in srgb, var(--ink-2) 62%, transparent); }
   .style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; overflow-y: auto; max-height: 660px; padding: 2px 6px 2px 2px; scrollbar-width: thin; scrollbar-color: rgba(92, 75, 51, 0.4) transparent; align-content: start; }
-  .style-swatch { display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.42); padding: 8px; text-align: left; font-size: 0.72rem; cursor: pointer; border-radius: var(--radius); transition: border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast); }
+  .style-swatch { display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--line); background: color-mix(in srgb, var(--paper-1) 55%, transparent); padding: 8px; text-align: left; font-size: 0.72rem; cursor: pointer; border-radius: var(--radius); transition: border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast); }
   .style-swatch:hover { transform: translateY(-1px); border-color: rgba(138, 59, 44, 0.45); }
   .style-swatch.selected { border-color: var(--oxblood); box-shadow: 0 0 0 2px rgba(138, 59, 44, 0.18); }
   .swatch-paper { display: block; height: 54px; margin-bottom: 1px; border: 1px solid rgba(0,0,0,0.08); overflow: hidden; position: relative; border-radius: 3px; }
@@ -122,7 +122,8 @@ const packs = [...new Set(samples.map((sample) => sample.folder))];
   html.js .demo-note-pane.active { display: flex; }
   html:not(.js) .demo-note-pane { margin-bottom: 26px; }
   .demo-note-topline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 24px; }
-  .preview-state { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--olive-deep); }
+  .preview-state { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--olive); }
+  :global([data-theme="dark"]) .preview-state { color: #aec094; }
   .demo-folder { margin-left: auto; font-size: 0.72rem; color: var(--ink-muted); border: 1px dashed var(--line-strong); border-radius: 999px; padding: 3px 10px; }
   .demo-note-frame { flex: 1; min-height: 420px; }
   .demo-note-frame .live-note-scope { height: 100%; }

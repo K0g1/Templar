@@ -55,6 +55,9 @@ const og = new URL(url(image), Astro.site);
         menu.setAttribute('aria-label', open ? 'Open menu' : 'Close menu');
         mobileNav?.classList.toggle('open', !open);
       });
+      window.addEventListener('scroll', () => {
+        document.body.classList.toggle('scrolled', window.scrollY > 60);
+      }, { passive: true });
       // Scroll-reveal is progressive enhancement: if the observer is missing or
       // throws, every section must stay visible rather than hidden forever.
       const revealEls = document.querySelectorAll('[data-reveal]');
