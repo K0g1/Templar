@@ -48,6 +48,7 @@ html[data-theme='dark'] .seal .mark-dark { display: block; }
   html[data-theme='dark'] h1 { color: #f2ead8; }
   html[data-theme='dark'] p { color: #d0c4aa; }
   html[data-theme='dark'] .button { background: rgba(242,234,216,.06); color: #f2ead8; border-color: rgba(242,234,216,.22); }
+  html[data-theme='dark'] .eyebrow { color: #e0795f; border-color: rgba(224,121,95,.35); background: rgba(224,121,95,.12); }
 </style>
 <script>
   try {
