@@ -97,8 +97,13 @@
   .hero .tagline { font-family: var(--display); color: var(--ink-muted); font-size: 1.15rem; }
   .hero .sl-link-button.primary { background: linear-gradient(#8f4130, #7a3223); border-color: var(--oxblood-deep); color: #fff7ee; border-radius: var(--radius); }
   .hero .sl-link-button.secondary { border-color: var(--line-strong); color: var(--ink-1); border-radius: var(--radius); }
-  .pagination-links a { background: var(--paper-0); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-paper); }
-  .starlight-aside { background: var(--paper-0); border: 1px solid var(--line); border-radius: var(--radius); }
+  /* Pagination cards stay paper in both themes, so their text must stay ink. */
+  .pagination-links a { background: var(--paper-0); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-paper); color: var(--ink-2); }
+  .pagination-links a:hover { color: var(--oxblood); border-color: var(--oxblood); }
+  .pagination-links .link-title { color: var(--ink-1); font-family: var(--display); }
+  .pagination-links .link-preview { color: var(--ink-muted); }
+  .starlight-aside { background: var(--paper-0); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-2); }
+  .starlight-aside .aside-title { color: var(--ink-1); }
   .tab a[role='tab'][aria-selected='true'] { border-color: var(--sl-color-accent); }
   .right-sidebar { background: transparent; }
   .mobile-sidebar-toggle { background: transparent; }
@@ -112,3 +117,10 @@
   }
 }
 
+
+  /* Docs content surfaces that keep paper-like backgrounds must keep ink text in dark mode. */
+  :root[data-theme="dark"] .pagination-links a { color: var(--ink-2); }
+  :root[data-theme="dark"] .pagination-links .link-title { color: var(--ink-1); }
+  :root[data-theme="dark"] .pagination-links .link-preview { color: var(--ink-muted); }
+  :root[data-theme="dark"] .starlight-aside { color: var(--ink-2); }
+  :root[data-theme="dark"] .starlight-aside .aside-title { color: var(--ink-1); }

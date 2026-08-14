@@ -1,12 +1,17 @@
 // render-field-guide.mjs — compiles the real Templar stylesheet for each field-guide note
 // (via the bundled plugin compiler) and renders the note bodies as Obsidian-reading-view
-// HTML. Output is consumed by the Astro components; the website displays live HTML, never
-// screenshots.
+// HTML. It also compiles every one of the 132 built-in styles for the interactive style
+// library. Output is consumed by the Astro components; the website displays live HTML,
+// never screenshots.
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { compilePageStyle } from './vendor/style-compiler.bundle.cjs';
 import { renderMarkdown, styleFromYaml } from './lib/note-render.mjs';
+
+const require = createRequire(import.meta.url);
+const { STYLE_LIBRARY } = require('./vendor/style-library.bundle.cjs');
 
 const websiteDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rootDir = path.resolve(websiteDir, '..');
@@ -14,6 +19,8 @@ const sourceDir = path.join(rootDir, 'examples', 'Templar Field Guide');
 const assetSourceDir = path.join(sourceDir, 'Assets');
 const assetOutputDir = path.join(websiteDir, 'public', 'field-guide');
 const outputFile = path.join(websiteDir, 'src', 'data', 'field-guide.generated.json');
+
+const PAGE_DEFAULTS = { mode: 'pageless', size: 'a4', width: 794, height: 1123, gap: 32, scaleToFit: true };
 
 function fitToGrid(requiredHeight, gridUnit) {
   if (gridUnit <= 0) return Math.max(0, requiredHeight);
@@ -143,47 +150,111 @@ for (const entry of (await fs.promises.readdir(sourceDir)).sort()) {
   });
 }
 
-// A tiny shared sample note for the interactive style demo.
+// ------------------------------------------------------------------------
+// Style library: all 132 built-in styles, compiled once each. The demo
+// renders every swatch and preview pane from these scoped stylesheets.
+// ------------------------------------------------------------------------
+const RANKED_PACK_ORDER = [
+  'Vintage & Editorial',
+  'Dark & Neon',
+  'Academia',
+  'Journaling & Wellness',
+  'Nature',
+  'Color Stories',
+  'Travel',
+  'Professional',
+  'Pastels',
+  'Seasons',
+  'Celebrations & Occasions',
+  'Fantasy & Whimsy',
+  'Essentials',
+];
+
+function rankedTemplates(templates) {
+  const byFolder = new Map();
+  for (const template of templates) {
+    const folder = template.metadata.folder || 'Unfiled';
+    if (!byFolder.has(folder)) byFolder.set(folder, []);
+    byFolder.get(folder).push(template);
+  }
+  const ordered = [];
+  for (const folder of RANKED_PACK_ORDER) {
+    const entries = byFolder.get(folder);
+    if (entries) ordered.push(...entries);
+  }
+  for (const [folder, entries] of byFolder) {
+    if (!RANKED_PACK_ORDER.includes(folder)) ordered.push(...entries);
+  }
+  return ordered;
+}
+
 const sampleMarkdown = [
   '# Field Notes',
   '',
-  'Today the light moved slowly across the ridge.',
+  'Today the light moved slowly across the ridge. ==Route planned==, camera packed.',
   '',
   '- Route planned',
   '- Camera packed',
   '- Thermos full',
 ].join('\n');
 const sampleHtml = rewriteAssetTargets(renderMarkdown(sampleMarkdown).html);
-const styleSamples = notes.map((note) => {
-  // Rebuild the style from its own note to produce a scoped stylesheet for the sample.
-  const sourceMarkdown = fs.readFileSync(path.join(sourceDir, note.basename + '.md'), 'utf8');
-  const style = styleFromYaml(extractTemplarBlock(splitFrontmatter(sourceMarkdown).frontmatter));
-  const scopeId = note.scopeId + '-sample';
-  return {
-    slug: note.slug,
-    label: note.styleName,
+
+const styleSamples = [];
+const styleBundleParts = [];
+for (const template of rankedTemplates(STYLE_LIBRARY)) {
+  const style = { ...template, page: { ...PAGE_DEFAULTS } };
+  const scopeId = 'templar-live-sample-' + template.id;
+  const css = compile(style, scopeId, 'style sample ' + template.id);
+  styleBundleParts.push(css);
+  styleSamples.push({
+    slug: template.id,
+    label: template.name,
+    folder: template.metadata.folder || 'Unfiled',
     paperColor: style.paper.color || '#fdfaf0',
     accentColor: style.blocks.linkColor || style.headings.h1.color || '#8a3b2c',
     scopeId,
-    css: compile(style, scopeId, note.slug + ' sample'),
-  };
-});
+  });
+}
+const styleBundle = styleBundleParts.join('\n');
+const styleBundleUrl = '/field-guide/style-library.css';
+await fs.promises.mkdir(assetOutputDir, { recursive: true });
+await fs.promises.writeFile(path.join(assetOutputDir, 'style-library.css'), styleBundle);
 
 // The page-mode demo: one style compiled pageless and paged against a shared sheet.
 const pageModeSource = fs.readFileSync(path.join(sourceDir, notes[0].basename + '.md'), 'utf8');
 const pageModeStyle = styleFromYaml(extractTemplarBlock(splitFrontmatter(pageModeSource).frontmatter));
 const pageModeMarkdown = [
-  '# One design. Two ways to read it.',
+  '# Trip Planning Notes',
   '',
-  'The stored page width remains fixed. In paged mode the entire sheet scales as one unit, preserving line breaks and page positions.',
+  '**Friday 14 Aug** · 08:12 · *draft, still packing*',
   '',
-  '![[Assets/field-manual-compass.svg]]',
+  '## Packing checklist',
   '',
-  '| Item | Packed |',
-  '| --- | ---: |',
-  '| Rope | 12 m |',
-  '| Water | 2 L |',
-  '| Map | 1:25k |',
+  '- [x] Tent and footprint',
+  '- [x] Stove and fuel canister',
+  '- [x] Map and compass',
+  '- [ ] First-aid kit',
+  '- [ ] Extra batteries',
+  '',
+  '## Route',
+  '',
+  '| Day | Leg | Distance | Notes |',
+  '| --- | --- | ---: | --- |',
+  '| 1 | Trailhead to Meadow Camp | 8.4 km | Water at km 6 |',
+  '| 2 | Meadow Camp to Ridge Pass | 11.2 km | ==Exposed after noon== |',
+  '| 3 | Ridge Pass to Lake Loop | 9.7 km | Easy descent |',
+  '',
+  '> [!tip] Leave no trace',
+  '> Pack out everything. Fires only in established rings.',
+  '',
+  '~~~text',
+  'Gear weight target: 14.2 kg',
+  'Food per day:      0.8 kg',
+  '~~~',
+  '',
+  '## Page behavior',
+  '',
+  'The stored page width stays fixed. In **paged** mode the entire sheet scales as one unit, preserving line breaks and page positions. Drag the pane-width slider to watch the sheet scale instead of reflow.',
 ].join('\n');
 const pageModeHtml = rewriteAssetTargets(renderMarkdown(pageModeMarkdown).html);
 const pagelessStyle = JSON.parse(JSON.stringify(pageModeStyle));
@@ -200,10 +271,11 @@ const output = {
   generatedAt: new Date().toISOString(),
   notes,
   styleSamples,
+  styleBundle: styleBundleUrl,
   sampleHtml,
   pageModeDemo,
 };
 await fs.promises.mkdir(path.dirname(outputFile), { recursive: true });
 await fs.promises.writeFile(outputFile, JSON.stringify(output, null, 2) + '\n');
 console.log('Wrote ' + outputFile);
-console.log('Notes:', notes.length, '| samples:', styleSamples.length, '| pageMode css: pageless ' + pageModeDemo.pageless.css.length + 'B, paged ' + pageModeDemo.paged.css.length + 'B');
+console.log('Notes:', notes.length, '| samples:', styleSamples.length, '| bundle: ' + styleBundle.length + 'B | pageMode css: pageless ' + pageModeDemo.pageless.css.length + 'B, paged ' + pageModeDemo.paged.css.length + 'B');

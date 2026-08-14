@@ -343,21 +343,16 @@ templar:
         .page h1, .page h2 { text-transform: uppercase; letter-spacing: 0.07em; }
         .page table { font-variant-numeric: tabular-nums; }
 ---
-
 # How a Page Is Compiled
 
-**Form + Function** · A short walk through the compiler that turns a <code>templar</code> block into a single stylesheet.
+**A short walk through the compiler** · *form + function*
 
-![[Assets/bauhaus-plate.svg]]
-
-## One scope, one leaf
-
-Every styled note is wrapped in a scoped element — <code>[data-templar-scope]</code> — and receives exactly one generated stylesheet. Two panes showing the same note stay isolated from each other.
+Every styled note is wrapped in a scoped element — `[data-templar-scope]` — and receives exactly one generated stylesheet. Two panes showing the same note stay isolated from each other.
 
 > [!example] The scope in action
-> The generated CSS never touches <code>body</code> or global selectors. It opens with <code>[data-templar-scope="templar-leaf-1"]</code> and every rule descends from that root.
+> The generated CSS never touches `body` or global selectors. It opens with `[data-templar-scope="templar-leaf-1"]` and every rule descends from that root.
 
-### From frontmatter to pixels
+## From frontmatter to pixels
 
 ~~~yaml
 templar:
@@ -366,16 +361,15 @@ templar:
   paper:
     color: "#f3f0e5"
     pattern: graph
-    pattern-color: rgba(33, 39, 45, 0.17)
   baseline:
     enabled: true
-    unit: 28
+    unit: 24
   typography:
     body-font: Futura, "Avenir Next", system-ui, sans-serif
     body-size: 15
 ~~~
 
-The compiler measures real fonts, fits every element to the baseline grid, and emits one stylesheet — capped at 1&nbsp;MiB for safety.
+The compiler measures real fonts, fits every element to the baseline grid, and emits one stylesheet — capped at 1 MiB for safety.
 
 | Safety boundary | Value |
 | --- | --- |
@@ -386,10 +380,10 @@ The compiler measures real fonts, fits every element to the baseline grid, and e
 
 ## What the compiler does
 
-1. Parses the note's <code>templar</code> block into a validated style.
-2. Measures the body, all six headings, and code against the real browser fonts.
+1. Parses the note's `templar` block into a validated style.
+2. Measures the body, all six headings, and code against real browser fonts.
 3. Emits paper, typography, blocks, lists, images, and attachments as scoped CSS.
-4. Compiles your custom CSS last so it wins — still inside the scope.
+4. Compiles custom CSS last so it wins — still inside the scope.
 
 > [!warning] Validation is not optional
 > Invalid selectors and unsafe values are rejected with an issue list, not silently rewritten. Protected data is never overwritten by a style upgrade.
@@ -402,15 +396,14 @@ The compiler measures real fonts, fits every element to the baseline grid, and e
   color: #24292d;
   font-family: Futura, "Avenir Next", system-ui, sans-serif;
   font-size: 15px;
-  line-height: 28px;
+  line-height: 24px;
 }
 ~~~
 
 - [x] Scoped to one leaf
 - [x] Real font metrics, not guesses
-- [x] Baseline-aware after variable-height blocks
+- [x] ==Baseline-aware== after variable-height blocks
 
 ---
 
 *If you can read the compiled stylesheet, you can trust the page.*
-

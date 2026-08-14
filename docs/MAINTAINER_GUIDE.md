@@ -221,4 +221,8 @@ When a change lands, update the narrowest contract document and the developer re
 - user-facing installation or feature summary → root `README.md`;
 - historical behavior → `CHANGELOG.md` and a new `docs/releases/<version>.md` entry, without rewriting older release notes.
 
+## Website sync
+
+The website is generated from the repository on every push to `main` (and checked on every pull request) by the "Build and deploy website" workflow: `npm run site:check && npm run site:build`. The build re-syncs the canonical documents in `docs/` into the website content tree (`website/scripts/sync-docs.mjs`), rebuilds the release notes from `docs/releases/`, regenerates the changelog and project data, recompiles the field-guide notes and the full style library, and then deploys `website/dist` to GitHub Pages. No separate documentation push is needed — merging a documentation change to `main` updates https://k0g1.github.io/Templar/ automatically. If a docs change fails to appear, check the workflow run for a failed `astro check` or content verification step.
+
 Before handing the repository to another maintainer, record the source commit/tag, whether `main.js` was rebuilt and copied to a live vault, the exact verification commands that passed, and any physical-device checks that remain pending. Never commit `data.json`, private notes, credentials, or unrelated vault assets.

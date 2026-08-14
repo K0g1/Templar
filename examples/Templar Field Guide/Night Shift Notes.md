@@ -343,15 +343,11 @@ templar:
         .page h1 { text-transform: uppercase; letter-spacing: 0.09em; }
         .page hr { opacity: 0.8; }
 ---
-
 # Night Shift Notes
 
-**Notes After Dark** · Dark pages, fixed canvases, and what happens when the screen gets small.
+**Notes after dark** · *01:47* · *dark pages, fixed canvases, small screens*
 
-![[Assets/synthwave-sunset.svg]]
-
-> [!note] Why dark pages exist
-> Some reading happens at night, on screens, at full focus. Dark &amp; Neon styles keep a page structured with grids and neon ink instead of sunlight.
+Some reading happens at night, on screens, at full focus. Dark & Neon styles keep a page structured with grids and neon ink instead of sunlight.
 
 ## Two ways a page can behave
 
@@ -386,11 +382,10 @@ Custom any px pair       exported with the note
 > [!quote] Field note, 01:47
 > The grid glows, the margins hold, and the words are exactly where I left them.
 
-1. Choose a dark style from **Dark &amp; Neon**.
+1. Choose a dark style from **Dark & Neon**.
 2. Toggle **Paged** from the page-mode command.
 3. Drag the pane narrow — watch the sheet scale, not reflow.
 
 ---
 
 *Even the darkest page keeps its ruler lines.*
-

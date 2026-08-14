@@ -1,24 +1,40 @@
 ---
-// StyleDemo — an interactive style library: every swatch is a miniature real
-// render driven by the plugin's compiled stylesheet, and the preview note
-// swaps styles live.
+// StyleDemo — the full built-in library: every one of the 132 styles is a
+// miniature real render driven by the plugin's compiled stylesheet (one shared,
+// cacheable stylesheet), and the preview note swaps styles live.
 import fieldGuide from '../data/field-guide.generated.json';
+import { url } from '../lib/site';
 const samples = fieldGuide.styleSamples;
 const sampleHtml = fieldGuide.sampleHtml;
+const packs = [...new Set(samples.map((sample) => sample.folder))];
 ---
+<link rel="stylesheet" href={url(fieldGuide.styleBundle)} />
 <div class="style-demo paper-panel" data-style-demo>
   <div class="demo-library">
-    <div class="demo-tools"><strong>Page Styles</strong><span>Search · Recent · Favorites</span></div>
-    <div class="style-grid">
+    <div class="demo-tools">
+      <strong>Page Styles</strong>
+      <span>{samples.length} styles · {packs.length} packs</span>
+    </div>
+    <label class="demo-search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+      <input type="search" placeholder="Search styles or packs" data-style-search aria-label="Search styles or packs" />
+    </label>
+    <div class="style-grid" role="listbox" aria-label="Page style library">
       {samples.map((sample, index) => (
-        <button type="button" class:list={['style-swatch', { selected: index === 0 }]} data-style={sample.slug} aria-pressed={index === 0 ? 'true' : 'false'} aria-label={'Preview the ' + sample.label + ' style'}>
-          <span class="swatch-paper" aria-hidden="true">
+        <button
+          type="button"
+          class:list={['style-swatch', { selected: index === 0 }]}
+          data-style={sample.slug}
+          data-style-label={(sample.label + ' ' + sample.folder).toLowerCase()}
+          aria-pressed={index === 0 ? 'true' : 'false'}
+          aria-label={'Preview the ' + sample.label + ' style'}
+        >
+          <span class="swatch-paper" style={'background:' + sample.paperColor} aria-hidden="true">
             <span class="live-note-scope" data-templar-scope={sample.scopeId} aria-hidden="true">
-              <style is:inline set:html={sample.css}></style>
               <div class="templar-page"><div class="templar-page-content swatch-content" set:html={sampleHtml} /></div>
             </span>
           </span>
-          <span aria-hidden="true">{sample.label}</span>
+          <span class="swatch-label" aria-hidden="true">{sample.label}</span>
         </button>
       ))}
     </div>
@@ -28,29 +44,31 @@ const sampleHtml = fieldGuide.sampleHtml;
       <div class:list={['demo-note-pane', { active: index === 0 }]} data-demo-pane={sample.slug}>
         <div class="demo-note-topline">
           <span class="preview-state" data-preview-state>Previewing · no note changes</span>
-          <span class="state-chip applied" hidden>Applied · design copied into note</span>
+          <span class="demo-folder">{sample.folder}</span>
         </div>
         <div class="demo-note-frame">
           <div class="live-note-scope" data-templar-scope={sample.scopeId}>
-            <style is:inline set:html={sample.css}></style>
             <div class="templar-page"><div class="templar-page-content" set:html={sampleHtml} /></div>
           </div>
         </div>
-        <button class="button primary" type="button" data-apply-style>Apply explicitly</button>
       </div>
     ))}
   </div>
 </div>
 <script>
   document.querySelectorAll<HTMLElement>('[data-style-demo]').forEach((demo) => {
-    const swatches = demo.querySelectorAll<HTMLButtonElement>('[data-style]');
+    const swatches = Array.from(demo.querySelectorAll<HTMLButtonElement>('[data-style]'));
     const panes = demo.querySelectorAll<HTMLElement>('[data-demo-pane]');
-    swatches.forEach((swatch) => swatch.addEventListener('click', () => {
+    const search = demo.querySelector<HTMLInputElement>('[data-style-search]');
+    let selected = swatches.find((swatch) => swatch.classList.contains('selected')) ?? swatches[0];
+
+    const select = (swatch: HTMLButtonElement) => {
       const slug = swatch.dataset.style;
+      selected = swatch;
       swatches.forEach((entry) => {
-        const selected = entry === swatch;
-        entry.classList.toggle('selected', selected);
-        entry.setAttribute('aria-pressed', String(selected));
+        const isSelected = entry === swatch;
+        entry.classList.toggle('selected', isSelected);
+        entry.setAttribute('aria-pressed', String(isSelected));
       });
       panes.forEach((pane) => {
         const active = pane.dataset.demoPane === slug;
@@ -58,35 +76,62 @@ const sampleHtml = fieldGuide.sampleHtml;
         if (active) {
           const state = pane.querySelector<HTMLElement>('[data-preview-state]');
           if (state) state.textContent = 'Previewing · no note changes';
-          const chip = pane.querySelector<HTMLElement>('.state-chip');
-          if (chip) chip.hidden = true;
         }
       });
-    }));
-    demo.querySelectorAll<HTMLButtonElement>('[data-apply-style]').forEach((button) => button.addEventListener('click', () => {
-      const pane = button.closest<HTMLElement>('[data-demo-pane]');
-      const state = pane?.querySelector<HTMLElement>('[data-preview-state]');
-      const chip = pane?.querySelector<HTMLElement>('.state-chip');
-      if (state) state.textContent = 'Applied · design copied into note';
-      if (chip) chip.hidden = false;
-    }));
+      // Keep the chosen swatch visible in the scrollable grid.
+      swatch.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+
+    swatches.forEach((swatch) => swatch.addEventListener('click', () => select(swatch)));
+
+    search?.addEventListener('input', () => {
+      const query = (search.value || '').trim().toLowerCase();
+      swatches.forEach((swatch) => {
+        const match = !query || (swatch.dataset.styleLabel || '').includes(query);
+        swatch.hidden = !match;
+      });
+      if (selected?.hidden && swatches.some((swatch) => !swatch.hidden)) {
+        const firstVisible = swatches.find((swatch) => !swatch.hidden);
+        if (firstVisible) select(firstVisible);
+      }
+    });
   });
 </script>
 <style>
-  .swatch-paper { display: block; height: 64px; margin-bottom: 8px; border: 1px solid rgba(0,0,0,0.1); overflow: hidden; position: relative; background: #fdfaf0; }
+  .style-demo { padding: 26px; display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 28px; align-items: stretch; }
+  .demo-library { min-width: 0; display: flex; flex-direction: column; }
+  .demo-tools { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .demo-tools strong { font-family: var(--display); font-size: 1.15rem; }
+  .demo-tools span { font-size: 0.76rem; color: var(--ink-muted); }
+  .demo-search { display: flex; align-items: center; gap: 9px; padding: 9px 13px; margin-bottom: 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: rgba(253, 250, 240, 0.7); color: var(--ink-muted); }
+  .demo-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: 0.86rem var(--ui); color: var(--ink-1); }
+  .demo-search input::placeholder { color: var(--ink-muted); }
+  .style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; overflow-y: auto; max-height: 660px; padding: 2px 6px 2px 2px; scrollbar-width: thin; scrollbar-color: rgba(92, 75, 51, 0.4) transparent; align-content: start; }
+  .style-swatch { display: flex; flex-direction: column; gap: 7px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.42); padding: 8px; text-align: left; font-size: 0.72rem; cursor: pointer; border-radius: var(--radius); transition: border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast); }
+  .style-swatch:hover { transform: translateY(-1px); border-color: rgba(138, 59, 44, 0.45); }
+  .style-swatch.selected { border-color: var(--oxblood); box-shadow: 0 0 0 2px rgba(138, 59, 44, 0.18); }
+  .swatch-paper { display: block; height: 54px; margin-bottom: 1px; border: 1px solid rgba(0,0,0,0.08); overflow: hidden; position: relative; border-radius: 3px; }
   .swatch-paper .live-note-scope { position: absolute; inset: 0; }
   .swatch-paper .templar-page { min-height: 0; height: auto; }
-  .swatch-paper .templar-page-content { transform: scale(0.28); transform-origin: top left; width: 357% !important; max-width: none !important; }
-  .demo-note-host { min-height: 380px; display: flex; flex-direction: column; }
-  .demo-note-pane { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  .swatch-paper .templar-page-content { transform: scale(0.26); transform-origin: top left; width: 384.6% !important; max-width: none !important; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; }
+  .swatch-label { line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 2.6em; }
+
+  .demo-note-host { min-width: 0; display: flex; flex-direction: column; }
+  .demo-note-pane { display: flex; flex-direction: column; gap: 12px; flex: 1; }
   html.js .demo-note-pane { display: none; }
   html.js .demo-note-pane.active { display: flex; }
-  html:not(.js) .demo-note-pane { margin-bottom: 28px; }
-  .demo-note-topline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .demo-note-frame { flex: 1; min-height: 280px; }
+  html:not(.js) .demo-note-pane { margin-bottom: 26px; }
+  .demo-note-topline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 24px; }
+  .preview-state { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--olive-deep); }
+  .demo-folder { margin-left: auto; font-size: 0.72rem; color: var(--ink-muted); border: 1px dashed var(--line-strong); border-radius: 999px; padding: 3px 10px; }
+  .demo-note-frame { flex: 1; min-height: 420px; }
   .demo-note-frame .live-note-scope { height: 100%; }
   .demo-note-frame .templar-page { height: 100%; overflow: auto; }
   .demo-note-frame .templar-page-content { box-shadow: 0 12px 28px rgba(45, 37, 28, 0.2); border: 1px solid rgba(40, 32, 20, 0.14); }
-  .demo-note-host .button { align-self: flex-start; }
-</style>
 
+  @media (max-width: 1050px) {
+    .style-demo { grid-template-columns: 1fr; }
+    .style-grid { max-height: 380px; }
+    .demo-note-host { min-height: 440px; }
+  }
+</style>
