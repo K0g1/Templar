@@ -8,6 +8,9 @@ const website = path.resolve(import.meta.dirname, '..');
 const dist = path.join(website, 'dist');
 const base = (process.env.SITE_BASE ?? '/Templar').replace(/\/$/, '');
 const mark = await fs.readFile(path.join(website, 'public', 'favicon.svg'), 'utf8');
+const stripIds = (svg) => svg.replace(/<title id="title">[^<]*<\/title>/g, '').replace(/<desc id="desc">[^<]*<\/desc>/g, '').replace(/aria-labelledby="title desc"/g, 'aria-hidden="true"');
+const markLight = stripIds(mark);
+const markDark = stripIds(mark).replace(/#767a77/g, '#c6c9c3').replace(/#9da19e/g, '#a9aca7').replace(/#8ea9b8/g, '#9db6c4').replace(/#b97972/g, '#d49a91').replace(/#92a29b/g, '#a2afa5');
 
 const html = `<!doctype html>
 <html lang="en">
@@ -26,7 +29,10 @@ const html = `<!doctype html>
   .card { position: relative; width: min(640px, 100%); padding: 56px 44px 64px; text-align: center; background: var(--paper-0); border: 1px solid rgba(85,63,39,.14); border-radius: 6px; box-shadow: 0 16px 36px rgba(48,38,24,.14), 0 2px 6px rgba(48,38,24,.08); }
   .card::after { content: ''; position: absolute; left: 1.5%; right: 1.5%; bottom: -7px; height: 9px; background: var(--paper-2); clip-path: polygon(0 0, 2.5% 42%, 6% 9%, 11% 48%, 17% 13%, 24% 46%, 30% 8%, 38% 50%, 45% 12%, 53% 47%, 61% 10%, 70% 49%, 78% 14%, 86% 46%, 93% 9%, 100% 0, 100% 100%, 0 100%); }
   .seal { width: 92px; margin: 0 auto 24px; }
-  .seal svg { display: block; width: 100%; height: auto; }
+.seal svg { display: block; width: 100%; height: auto; }
+.seal .mark-dark { display: none; }
+html[data-theme='dark'] .seal .mark-light { display: none; }
+html[data-theme='dark'] .seal .mark-dark { display: block; }
   .eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 700 .74rem/1 var(--ui); text-transform: uppercase; letter-spacing: .12em; color: var(--oxblood); background: rgba(138,59,44,.08); border: 1px solid rgba(138,59,44,.22); padding: 8px 12px; border-radius: 999px; }
   h1 { font-family: var(--display); font-weight: 600; font-size: clamp(2.1rem, 6vw, 3.2rem); letter-spacing: -.03em; margin: 22px 0 14px; }
   p { color: var(--ink-2); font-family: var(--display); font-size: 1.08rem; line-height: 1.6; margin: 0 auto; max-width: 460px; }
@@ -37,7 +43,11 @@ const html = `<!doctype html>
   a:focus-visible { outline: 3px solid color-mix(in srgb, var(--olive), white 25%); outline-offset: 3px; border-radius: 2px; }
   html[data-theme='dark'] { background: #0b0907; }
   html[data-theme='dark'] body { background: radial-gradient(1100px 640px at 18% -8%, rgba(214,170,104,.07), transparent 55%), linear-gradient(180deg, #171310, #0f0c09); }
-  html[data-theme='dark'] .card { box-shadow: 0 20px 46px rgba(0,0,0,.42), 0 3px 8px rgba(0,0,0,.32); }
+  html[data-theme='dark'] .card { background: #1d1813; border-color: rgba(242,234,216,.14); box-shadow: 0 20px 46px rgba(0,0,0,.42), 0 3px 8px rgba(0,0,0,.32); }
+  html[data-theme='dark'] .card::after { background: #241e17; }
+  html[data-theme='dark'] h1 { color: #f2ead8; }
+  html[data-theme='dark'] p { color: #d0c4aa; }
+  html[data-theme='dark'] .button { background: rgba(242,234,216,.06); color: #f2ead8; border-color: rgba(242,234,216,.22); }
 </style>
 <script>
   try {
@@ -48,7 +58,7 @@ const html = `<!doctype html>
 </head>
 <body>
   <main class="card">
-    <div class="seal">${mark}</div>
+    <div class="seal"><span class="mark-light">${markLight}</span><span class="mark-dark" hidden>${markDark}</span></div>
     <span class="eyebrow">Error 404</span>
     <h1>This page slipped out of the notebook.</h1>
     <p>The link may be old, or the page may have moved. The rest of the desk is right where you left it.</p>

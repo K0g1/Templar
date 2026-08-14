@@ -108,11 +108,11 @@ import { bratUrl, releasesUrl, url } from '../lib/site';
   .manual-list li { margin: 13px 0; }
   .manual-list code { font-family: var(--mono); font-size: 0.9em; }
   .assets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 30px; }
-  .assets span { padding: 22px; background: rgba(255, 255, 255, 0.45); border: 1px solid var(--line); font: 600 1.02rem var(--mono); border-radius: 4px; }
+  .assets span { padding: 22px; background: color-mix(in srgb, var(--paper-1) 50%, transparent); border: 1px solid var(--line); font: 600 1.02rem var(--mono); border-radius: 4px; }
   .assets small { display: block; font: 12px var(--ui); color: var(--ink-muted); margin-top: 6px; }
   .faq { display: grid; gap: 10px; }
   .canonical { text-align: center; margin-top: 22px; }
-  .canonical a { color: var(--oxblood); font-weight: 700; }
+  .canonical a { color: var(--accent); font-weight: 700; }
   @media (max-width: 850px) {
     .status-hero, .frozen { grid-template-columns: 1fr; }
     .route-actions { align-items: stretch; flex-direction: column; }
