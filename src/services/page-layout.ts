@@ -1,8 +1,10 @@
 import type { WorkspaceLeaf } from 'obsidian';
 import type { TemplarNoteStyle } from '../types';
-import { alignedPageGap, measuredGeometryScale } from '../utils/grid';
+import { measuredGeometryScale } from '../utils/grid';
 import { round } from '../utils/value';
 import { realmFor, type DomRealm } from './dom-realm';
+import type { PerformanceMonitor } from '../performance/performance-monitor';
+import { planPagination } from './page-layout-plan';
 
 interface PageLayoutState {
   realm: DomRealm;
@@ -10,6 +12,7 @@ interface PageLayoutState {
   mutationObserver: MutationObserver;
   frame: number | null;
   observedResizeTargets: Set<Element>;
+  pagePairs: PagePair[];
   scopeEl: HTMLElement;
 }
 
@@ -21,12 +24,17 @@ interface PagePair {
 export class PageLayoutService {
   private readonly states = new Map<WorkspaceLeaf, PageLayoutState>();
   private readonly scopes = new Map<WorkspaceLeaf, HTMLElement>();
+  private readonly ownedBreaks = new Map<HTMLElement, Set<HTMLElement>>();
+
+  public constructor(private readonly performanceMonitor?: PerformanceMonitor) {}
 
   public configure(
     leaf: WorkspaceLeaf,
     scopeEl: HTMLElement,
     style: TemplarNoteStyle,
   ): void {
+    this.performanceMonitor?.counter('pageLayout.configure.count');
+    const configure = (): void => {
     this.clear(leaf);
     this.scopes.set(leaf, scopeEl);
     scopeEl.dataset.templarMode = style.page.mode;
@@ -48,10 +56,19 @@ export class PageLayoutService {
       realm,
       frame: null,
       observedResizeTargets: new Set(),
+      pagePairs,
       scopeEl,
-      resizeObserver: new realm.ResizeObserver(() => this.schedule(leaf, style)),
-      mutationObserver: new realm.MutationObserver(() => {
-        this.observeResizeTargets(state);
+      resizeObserver: new realm.ResizeObserver((entries) => {
+        this.performanceMonitor?.counter('pageLayout.resizeObserver.callback');
+        this.performanceMonitor?.counter('pageLayout.resizeObserver.entryCount', entries.length);
+        this.schedule(leaf, style);
+      }),
+      mutationObserver: new realm.MutationObserver((records) => {
+        this.performanceMonitor?.counter('pageLayout.mutationObserver.callback');
+        if (records.some((record) => record.type === 'childList')) {
+          state.pagePairs = this.pagePairs(state.scopeEl);
+          this.observeResizeTargets(state);
+        }
         this.schedule(leaf, style);
       }),
     };
@@ -65,6 +82,12 @@ export class PageLayoutService {
     }
     this.observeResizeTargets(state);
     this.schedule(leaf, style);
+    };
+    if (this.performanceMonitor) {
+      this.performanceMonitor.measureSync('pageLayout.configure', configure);
+    } else {
+      configure();
+    }
   }
 
   public clear(leaf: WorkspaceLeaf): void {
@@ -90,6 +113,9 @@ export class PageLayoutService {
     }
     this.states.delete(leaf);
     this.scopes.delete(leaf);
+    this.performanceMonitor?.gauge('pageLayout.states', this.states.size);
+    this.performanceMonitor?.gauge('pageLayout.scopes', this.scopes.size);
+    this.performanceMonitor?.gauge('pageLayout.observedTargets', this.observedTargetCount());
   }
 
   public destroy(): void {
@@ -121,24 +147,38 @@ export class PageLayoutService {
     this.schedule(leaf, style);
   }
 
+  public snapshot(): Record<string, number> {
+    return {
+      states: this.states.size,
+      scopes: this.scopes.size,
+      observedTargets: this.observedTargetCount(),
+      scheduledFrames: [...this.states.values()].filter((state) => state.frame !== null).length,
+    };
+  }
+
   private schedule(leaf: WorkspaceLeaf, style: TemplarNoteStyle): void {
     const state = this.states.get(leaf);
+    this.performanceMonitor?.counter('pageLayout.schedule.attempt');
     if (!state || state.frame !== null) {
+      this.performanceMonitor?.counter('pageLayout.schedule.dedupe');
       return;
     }
     state.frame = state.realm.window.requestAnimationFrame(() => {
       state.frame = null;
+      this.performanceMonitor?.counter('pageLayout.raf.execute');
       this.layout(state.scopeEl, style);
     });
   }
 
   private layout(scopeEl: HTMLElement, style: TemplarNoteStyle): void {
+    const operation = (): void => {
     for (const { pageRoot, pageContent } of this.pagePairs(scopeEl)) {
+      this.performanceMonitor?.counter('pageLayout.geometry.clientWidthRead');
       if (pageRoot.clientWidth <= 0) {
         continue;
       }
       const view = pageRoot.ownerDocument.defaultView;
-      const computed = view?.getComputedStyle(pageRoot);
+      const computed = this.readComputedStyle(view, pageRoot, 'pageLayout.computedStyle.read');
       const inlinePadding =
         this.pixelValue(computed?.paddingInlineStart) +
         this.pixelValue(computed?.paddingInlineEnd);
@@ -151,16 +191,22 @@ export class PageLayoutService {
         ? Math.min(1, availableWidth / style.page.width)
         : 1;
       const appliedScale = round(scale, 5);
-      pageContent.style.setProperty(
-        '--templar-page-scale',
-        String(appliedScale),
-      );
+      if (pageContent.style.getPropertyValue('--templar-page-scale') !== String(appliedScale)) {
+        pageContent.style.setProperty('--templar-page-scale', String(appliedScale));
+        this.performanceMonitor?.counter('pageLayout.canvasScale.write');
+      }
       const geometryScale = measuredGeometryScale(
-        pageContent.getBoundingClientRect().width,
+        this.readRect(pageContent, 'pageLayout.geometry.read').width,
         style.page.width,
         appliedScale,
       );
       this.paginate(pageContent, style, geometryScale);
+    }
+    };
+    if (this.performanceMonitor) {
+      this.performanceMonitor.measureSync('pageLayout.layout', operation);
+    } else {
+      operation();
     }
   }
 
@@ -179,14 +225,16 @@ export class PageLayoutService {
 
   private observeResizeTargets(state: PageLayoutState): void {
     const nextTargets = new Set<Element>();
-    for (const { pageRoot, pageContent } of this.pagePairs(state.scopeEl)) {
+    for (const { pageRoot, pageContent } of state.pagePairs) {
       nextTargets.add(pageRoot);
       nextTargets.add(pageContent);
-      for (const candidate of this.pageBreakCandidates(pageContent)) {
-        nextTargets.add(candidate);
-      }
-      for (const image of pageContent.querySelectorAll('img')) {
-        nextTargets.add(image);
+      for (const element of pageContent.querySelectorAll<HTMLElement>([
+        'img', 'table', '.callout', 'pre', 'code', 'math', '.math-block',
+        '.mermaid', '.internal-embed', '.file-embed', 'details', 'figure',
+        'iframe', 'object', 'video', 'audio', 'canvas', '.cm-table-widget',
+        '.cm-embed-block',
+      ].join(','))) {
+        nextTargets.add(element);
       }
     }
     for (const target of state.observedResizeTargets) {
@@ -200,6 +248,8 @@ export class PageLayoutService {
       }
     }
     state.observedResizeTargets = nextTargets;
+    this.performanceMonitor?.gauge('pageLayout.observedTargets', this.observedTargetCount());
+    this.performanceMonitor?.gauge('pageLayout.pagePairCount', state.pagePairs.length);
   }
 
   private pixelValue(value: string | undefined): number {
@@ -213,70 +263,46 @@ export class PageLayoutService {
     geometryScale: number,
     pageGapOverride?: number,
   ): void {
+    this.performanceMonitor?.counter('pageLayout.pagination.count');
+    const operation = (): void => {
     this.clearBreaks(pageContent);
     const candidates = this.pageBreakCandidates(pageContent);
-    const gridded = style.baseline.enabled && style.baseline.mode !== 'free';
-    const pageGap = pageGapOverride ?? (gridded
-      ? alignedPageGap(style.page.height, style.page.gap, style.baseline.unit)
-      : style.page.gap);
-    const pageSpan = style.page.height + pageGap;
-    const usableHeight = Math.max(
-      style.baseline.unit,
-      style.page.height - style.layout.paddingTop - style.layout.paddingBottom,
-    );
-
-    for (const element of candidates) {
-      const contentRect = pageContent.getBoundingClientRect();
-      const rect = element.getBoundingClientRect();
-      const top = (rect.top - contentRect.top) / geometryScale;
-      const height = rect.height / geometryScale;
-      if (height <= 0) {
-        continue;
-      }
-      const positionInPage = ((top % pageSpan) + pageSpan) % pageSpan;
-      const crossesBottom = positionInPage + height > style.page.height - style.layout.paddingBottom;
-      const startsInGap = positionInPage >= style.page.height;
-      const overTallAwayFromTop =
-        height > usableHeight &&
-        Math.abs(positionInPage - style.layout.paddingTop) > 1;
-      const shouldMove =
-        startsInGap ||
-        (height > usableHeight ? overTallAwayFromTop : crossesBottom);
-      if (!shouldMove) {
-        continue;
-      }
-      const nextPage = Math.floor(top / pageSpan) + 1;
-      const nextTop = nextPage * pageSpan + style.layout.paddingTop;
-      const breakOffset = Math.max(0, nextTop - top);
-      const computed = pageContent.ownerDocument.defaultView?.getComputedStyle(element);
-      element.style.setProperty(
-        '--templar-original-margin-top',
-        computed?.marginTop ?? '0px',
+    this.performanceMonitor?.counter('pageLayout.candidate.count', candidates.length);
+    this.performanceMonitor?.gauge('pageLayout.candidateCount', candidates.length);
+    const contentRect = this.readRect(pageContent, 'pageLayout.geometry.contentRectRead');
+    const measurements = candidates.map((element) => {
+      const rect = this.readRect(element, 'pageLayout.geometry.read');
+      const computed = this.readComputedStyle(
+        pageContent.ownerDocument.defaultView,
+        element,
+        'pageLayout.computedStyle.read',
       );
-      element.style.setProperty('--templar-page-break', `${String(round(breakOffset))}px`);
+      return {
+        element,
+        naturalTop: rect.top - contentRect.top,
+        height: rect.height,
+        marginEnd: this.pixelValue(computed?.marginBlockEnd ?? computed?.marginBottom),
+        marginTop: computed?.marginTop ?? '0px',
+      };
+    });
+    const plan = planPagination(measurements, style, { geometryScale, pageGapOverride });
+    for (const breakPlan of plan.breaks) {
+      breakPlan.element.style.setProperty('--templar-original-margin-top', breakPlan.originalMarginTop);
+      breakPlan.element.style.setProperty('--templar-page-break', `${String(round(breakPlan.breakOffset))}px`);
+      this.performanceMonitor?.counter('pageLayout.break.write');
     }
-
-    const contentRect = pageContent.getBoundingClientRect();
-    let contentBottom = style.layout.paddingTop;
-    for (const element of candidates) {
-      const rect = element.getBoundingClientRect();
-      contentBottom = Math.max(
-        contentBottom,
-        (rect.bottom - contentRect.top) / geometryScale +
-          this.pixelValue(
-            pageContent.ownerDocument.defaultView?.getComputedStyle(element).marginBlockEnd,
-          ),
-      );
+    this.ownedBreaks.set(pageContent, new Set(plan.breaks.map((breakPlan) => breakPlan.element)));
+    const canvasHeight = `${String(round(plan.canvasHeight))}px`;
+    if (pageContent.style.getPropertyValue('--templar-canvas-height') !== canvasHeight) {
+      pageContent.style.setProperty('--templar-canvas-height', canvasHeight);
+      this.performanceMonitor?.counter('pageLayout.canvasHeight.write');
     }
-    contentBottom += style.layout.paddingBottom;
-    const finalPageIndex = Math.floor(
-      Math.max(0, contentBottom - 1) / pageSpan,
-    );
-    const canvasHeight = finalPageIndex * pageSpan + style.page.height;
-    pageContent.style.setProperty(
-      '--templar-canvas-height',
-      `${String(round(canvasHeight))}px`,
-    );
+    };
+    if (this.performanceMonitor) {
+      this.performanceMonitor.measureSync('pageLayout.pagination', operation);
+    } else {
+      operation();
+    }
   }
 
   private pageBreakCandidates(pageContent: HTMLElement): HTMLElement[] {
@@ -299,12 +325,36 @@ export class PageLayoutService {
       ? [container]
       : container.querySelectorAll<HTMLElement>('.templar-page-content')) {
       pageContent.style.removeProperty('--templar-canvas-height');
+      const owned = this.ownedBreaks.get(pageContent);
+      for (const element of owned ?? []) {
+        element.style.removeProperty('--templar-page-break');
+        element.style.removeProperty('--templar-original-margin-top');
+      }
+      this.ownedBreaks.delete(pageContent);
+      if (!owned) {
+        for (const element of pageContent.querySelectorAll<HTMLElement>(
+          '[style*="--templar-page-break"], [style*="--templar-original-margin-top"]',
+        )) {
+          element.style.removeProperty('--templar-page-break');
+          element.style.removeProperty('--templar-original-margin-top');
+        }
+      }
     }
-    for (const element of container.querySelectorAll<HTMLElement>(
-      '[style*="--templar-page-break"], [style*="--templar-original-margin-top"]',
-    )) {
-      element.style.removeProperty('--templar-page-break');
-      element.style.removeProperty('--templar-original-margin-top');
-    }
+  }
+
+  private readRect(element: Element, metric: string): DOMRect {
+    this.performanceMonitor?.counter(metric);
+    return element.getBoundingClientRect();
+  }
+
+  private readComputedStyle(view: Window | null | undefined, element: Element, metric: string): CSSStyleDeclaration | undefined {
+    this.performanceMonitor?.counter(metric);
+    return view?.getComputedStyle(element);
+  }
+
+  private observedTargetCount(): number {
+    let count = 0;
+    for (const state of this.states.values()) count += state.observedResizeTargets.size;
+    return count;
   }
 }

@@ -2,6 +2,8 @@ import { DEFAULT_TEMPLATE_ID } from '../constants';
 import type TemplarPlugin from '../main';
 import type { Plugin } from 'obsidian';
 import { runUserAction } from '../ui/async-actions';
+import { TEMPLAR_PERF_ENABLED } from '../performance/performance-types';
+import { registerPerformanceCommands } from '../performance/profile-commands';
 
 type CommandDefinition = Parameters<Plugin['addCommand']>[0];
 
@@ -15,6 +17,7 @@ export function registerCommand(
 
 /** Register all Templar commands against the already-composed plugin services. */
 export function registerCommands(plugin: TemplarPlugin): void {
+  if (TEMPLAR_PERF_ENABLED) registerPerformanceCommands(plugin);
   registerCommand(plugin, {
     id: 'open-templar-recovery',
     name: 'Open Templar recovery for current note',

@@ -64,7 +64,7 @@ export class CreateStyledNoteModal extends Modal {
     const file = await this.app.vault.create(path, '');
     await this.plugin.applyTemplate(this.template, file, this.pageOptions, { notify: false });
     await this.app.workspace.getLeaf(false).openFile(file);
-    this.plugin.renderer.scheduleRefreshAll();
+    this.plugin.renderer.scheduleRefreshAll('explicit-refresh');
     this.plugin.refreshSidebars();
     new Notice(`Created ${file.path}.`);
     this.close();

@@ -41,6 +41,9 @@ import { PluginUiController } from './ui/plugin-ui-controller';
 import { TemplarSettingTab } from './ui/settings-tab';
 import { TemplarStylesView } from './ui/styles-view';
 import { reportSingleFileOperation, runBackgroundTask, runUserAction } from './ui/async-actions';
+import { PerformanceMonitor } from './performance/performance-monitor';
+import { TEMPLAR_PERF_ENABLED } from './performance/performance-types';
+import { exportPerformanceCapture } from './performance/performance-export';
 
 export default class TemplarPlugin extends Plugin {
   public settings: TemplarSettings = clone(DEFAULT_SETTINGS);
@@ -50,6 +53,7 @@ export default class TemplarPlugin extends Plugin {
   public recovery!: RecoveryService;
   public fontMetrics!: FontMetricsService;
   public renderer!: PageRenderer;
+  public perf!: PerformanceMonitor;
   public preview!: PreviewSessionService;
   public usageIndex = new NoteStyleIndex();
   public printService!: PrintService;
@@ -83,14 +87,18 @@ export default class TemplarPlugin extends Plugin {
       new Notice('Templar loaded older settings in compatibility mode. Finalize migration to write versioned settings. A recovery copy will be created first.');
     }
     this.frontmatter = new FrontmatterService(this.app);
-    this.fontMetrics = new FontMetricsService(() => this.settings.fontCacheSize);
+    this.perf = new PerformanceMonitor();
+    if (TEMPLAR_PERF_ENABLED) console.warn('[Templar Perf] profile instrumentation enabled');
+    this.fontMetrics = new FontMetricsService(() => this.settings.fontCacheSize, this.perf);
     this.library = new TemplateLibrary(this.settings, this.settingsStore);
     this.renderer = new PageRenderer(
       this.app,
       this.settings,
       this.frontmatter,
       this.fontMetrics,
+      this.perf,
     );
+    this.perf.setStateProvider(() => this.renderer.stateSnapshot());
     this.preview = new PreviewSessionService(
       this.settings,
       this.frontmatter,
@@ -101,8 +109,8 @@ export default class TemplarPlugin extends Plugin {
       library: this.library,
       usageIndex: this.usageIndex,
       settings: this.settings,
-      refreshFile: (file) => this.renderer.refreshFile(file),
-      refreshDeferred: () => this.renderer.scheduleRefreshAll(),
+      refreshFile: (file) => this.renderer.refreshFile(file, 'explicit-refresh'),
+      refreshDeferred: () => this.renderer.scheduleRefreshAll('explicit-refresh'),
       getCurrentFile: (path) => {
         const candidate = this.app.vault.getAbstractFileByPath(path);
         return candidate instanceof TFile && candidate.extension === 'md' ? candidate : null;
@@ -153,7 +161,7 @@ export default class TemplarPlugin extends Plugin {
     const fonts = document.fonts;
     const handleFontsLoaded = (): void => {
       this.fontMetrics.clear();
-      this.renderer.scheduleRefreshAll();
+      this.renderer.scheduleRefreshAll('font-loadingdone');
     };
     fonts.addEventListener('loadingdone', handleFontsLoaded);
     this.register(() => fonts.removeEventListener('loadingdone', handleFontsLoaded));
@@ -167,7 +175,7 @@ export default class TemplarPlugin extends Plugin {
           runBackgroundTask(() => this.evaluateStyleRules(file, false), 'Could not evaluate style rules for the new note');
         }
       }));
-      this.renderer.scheduleRefreshAll();
+      this.renderer.scheduleRefreshAll('explicit-refresh');
       this.updateStatusBar();
     });
   }
@@ -177,6 +185,14 @@ export default class TemplarPlugin extends Plugin {
     this.printService.destroy();
     this.preview.destroy();
     this.renderer.destroy();
+    this.perf.snapshot('afterCleanup');
+    this.perf.stopScenario();
+  }
+
+  public async exportLatestPerformanceCapture(): Promise<string | null> {
+    if (!TEMPLAR_PERF_ENABLED) return null;
+    const capture = this.perf.latest();
+    return capture ? exportPerformanceCapture(this.app, capture) : null;
   }
 
   public async loadSettings(): Promise<void> {
@@ -499,7 +515,7 @@ export default class TemplarPlugin extends Plugin {
   public refreshEverything(): void {
     this.fontMetrics.clear();
     this.app.workspace.updateOptions();
-    this.renderer.scheduleRefreshAll();
+    this.renderer.scheduleRefreshAll('settings-refresh');
     this.refreshSidebars();
     this.updateStatusBar();
   }

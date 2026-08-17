@@ -9,6 +9,8 @@
   "include": [
     "*.mjs",
     "scripts/**/*.mjs",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.profile.config.ts",
+    "vitest.overhead.config.ts"
   ]
 }

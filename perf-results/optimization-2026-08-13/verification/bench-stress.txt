@@ -1,0 +1,29 @@
+
+> templar@1.2.0-alpha.2 bench:stress
+> TEMPLAR_BENCH_STRESS=1 vitest bench --run tests/page-renderer-performance.bench.ts
+
+Benchmarking is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+
+ RUN  v3.2.7 /Users/K0g1/Library/Mobile Documents/iCloud~md~obsidian/Documents/Lightweight Vault/Templar
+
+
+ ✓ tests/page-renderer-performance.bench.ts > full PageRenderer performance fixtures 4643ms
+     name                                                                 hz       min       max      mean       p75       p99      p995      p999     rme  samples
+   · 100 blocks / one leaf / pageless A4                             24.9785   40.0344   40.0344   40.0344   40.0344   40.0344   40.0344   40.0344  ±0.00%        1
+   · 1,000 blocks / three leaves / paged A4                           1.9427    514.76    514.76    514.76    514.76    514.76    514.76    514.76  ±0.00%        1
+   · 1,000 blocks / three same-file leaves / one preview / paged A4   1.8290    546.75    546.75    546.75    546.75    546.75    546.75    546.75  ±0.00%        1
+   · 100 blocks / ten different files / paged Letter                  4.9808    200.77    200.77    200.77    200.77    200.77    200.77    200.77  ±0.00%        1
+   · 100 images / one leaf / pageless A4                             44.7851   22.3288   22.3288   22.3288   22.3288   22.3288   22.3288   22.3288  ±0.00%        1
+   · 5,000 blocks / one leaf / paged Letter                           0.9774  1,023.14  1,023.14  1,023.14  1,023.14  1,023.14  1,023.14  1,023.14  ±0.00%        1
+   · 10,000 blocks / one leaf / paged Custom                          0.4382  2,282.03  2,282.03  2,282.03  2,282.03  2,282.03  2,282.03  2,282.03  ±0.00%        1
+
+ BENCH  Summary
+
+  100 images / one leaf / pageless A4 - tests/page-renderer-performance.bench.ts > full PageRenderer performance fixtures
+    1.79x faster than 100 blocks / one leaf / pageless A4
+    8.99x faster than 100 blocks / ten different files / paged Letter
+    23.05x faster than 1,000 blocks / three leaves / paged A4
+    24.49x faster than 1,000 blocks / three same-file leaves / one preview / paged A4
+    45.82x faster than 5,000 blocks / one leaf / paged Letter
+    102.20x faster than 10,000 blocks / one leaf / paged Custom

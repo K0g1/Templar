@@ -1,0 +1,29 @@
+{
+  "algorithm": "median of 12 compile samples or 8 controller samples; all raw sample timing is retained in the test process only",
+  "rows": [
+    {
+      "fixture": "compilePageStyle",
+      "normalMs": 20.34633299999996,
+      "profileCaptureOffMs": 17.78454099999999,
+      "profileCaptureOnMs": 24.983124999999973,
+      "captureOffOverheadPercent": -12.590927318450817,
+      "captureOnOverheadPercent": 22.78932523123466
+    },
+    {
+      "fixture": "controllers-1000",
+      "normalMs": 24.267333000000008,
+      "profileCaptureOffMs": 14.300041999999848,
+      "profileCaptureOnMs": 14.281290999999783,
+      "captureOffOverheadPercent": -41.07287356216753,
+      "captureOnOverheadPercent": -41.15014204486427
+    },
+    {
+      "fixture": "controllers-5000",
+      "normalMs": 155.95554200000015,
+      "profileCaptureOffMs": 124.62229199999956,
+      "profileCaptureOnMs": 101.10179100000005,
+      "captureOffOverheadPercent": -20.091142384667908,
+      "captureOnOverheadPercent": -35.172684661632644
+    }
+  ]
+}

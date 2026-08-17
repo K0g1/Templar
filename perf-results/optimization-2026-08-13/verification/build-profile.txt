@@ -1,0 +1,7 @@
+
+> templar@1.2.0-alpha.2 build:profile
+> npm run typecheck:runtime && node esbuild.config.mjs profile
+
+
+> templar@1.2.0-alpha.2 typecheck:runtime
+> tsc -p tsconfig.runtime.json --noEmit

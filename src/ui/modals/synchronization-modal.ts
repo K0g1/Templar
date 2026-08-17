@@ -207,7 +207,7 @@ export class SynchronizationReviewModal extends Modal {
 
     if (results.some((result) => result.noteWritten)) {
       try {
-        this.plugin.renderer.scheduleRefreshAll();
+        this.plugin.renderer.scheduleRefreshAll('explicit-refresh');
       } catch (error) {
         addWarning(results, 'refresh', `The notes were written, but the final refresh failed: ${errorMessage(error)}`);
       }
