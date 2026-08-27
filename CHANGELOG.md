@@ -4,6 +4,15 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.2.0-beta.2 — 2026-08-27
+
+### Ruled-line alignment
+
+- Hardened baseline alignment for headings, inline code, keyboard text, highlights, superscripts, subscripts, editor lines, lists, and variable-height blocks.
+- Added post-layout rhythm and paper-origin reconciliation for tables, callouts, embeds, diagrams, media, dividers, and other rendered elements across Reading View and Live Preview.
+- Added the **Run ruled-line alignment diagnostic** command for checking text and block geometry in the active note.
+- Added regression coverage for the alignment controllers and style compiler, including A4, Letter, custom, and pageless page templates.
+
 ## 1.2.0-beta.1 — 2026-08-12
 
 ### Beta promotion

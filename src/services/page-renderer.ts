@@ -17,12 +17,16 @@ import { clone } from '../utils/value';
 import { FontMetricsService } from './font-metrics';
 import type { FrontmatterService } from './frontmatter';
 import { PageLayoutService } from './page-layout';
-import { compilePageStyle } from './style-compiler';
+import { compilePageStyle, type PageMetricSet } from './style-compiler';
 import { ImageSnapController } from './rendering/image-snap-controller';
 import { PaperOriginController } from './rendering/paper-origin-controller';
 import { ReadingWhitespaceController } from './rendering/reading-whitespace-controller';
 import { OwnedStyleHost } from './rendering/style-host';
 import { VariableBlockRhythmController } from './rendering/variable-block-rhythm-controller';
+import {
+  diagnoseBaselineAlignment,
+  type BaselineDiagnosticReport,
+} from './baseline-diagnostic';
 
 interface StyledView {
   contentEl: HTMLElement;
@@ -45,6 +49,7 @@ export class PageRenderer {
   private scheduled = false;
   private readonly leafGenerations = new WeakMap<WorkspaceLeaf, number>();
   private readonly leafScopeIds = new WeakMap<WorkspaceLeaf, number>();
+  private readonly metricsByLeaf = new WeakMap<WorkspaceLeaf, PageMetricSet>();
   private nextLeafScopeId = 1;
   private readonly styledViews = new Map<WorkspaceLeaf, StyledView>();
   private readonly issuesByLeaf = new Map<WorkspaceLeaf, LeafIssueState>();
@@ -186,6 +191,14 @@ export class PageRenderer {
     );
   }
 
+  public baselineDiagnostic(leaf: WorkspaceLeaf): BaselineDiagnosticReport | null {
+    const styled = this.styledViews.get(leaf);
+    const metrics = this.metricsByLeaf.get(leaf);
+    this.paperOrigin.refresh(leaf);
+    this.rhythm.refresh(leaf);
+    return styled && metrics ? diagnoseBaselineAlignment(styled.contentEl, metrics) : null;
+  }
+
   public registerReadingSection(
     element: HTMLElement,
     context: MarkdownPostProcessorContext,
@@ -248,6 +261,7 @@ export class PageRenderer {
     ) {
       return;
     }
+    this.metricsByLeaf.set(leaf, metrics);
 
     this.prepareViewRoots(view.contentEl);
     let leafScopeId = this.leafScopeIds.get(leaf);
@@ -275,6 +289,14 @@ export class PageRenderer {
     this.imageSnap.configure(leaf, view.contentEl, style);
     this.rhythm.configure(leaf, view.contentEl, style);
     this.pageLayout.configure(leaf, view.contentEl, style);
+    // Paged layout applies scale on its next animation frame. Re-measure
+    // rhythm-owned blocks after that scale exists so snap tails use CSS page
+    // pixels rather than the rendered viewport pixels.
+    view.contentEl.ownerDocument.defaultView?.requestAnimationFrame(() => {
+      if (this.styledViews.get(leaf)?.contentEl === view.contentEl) {
+        this.rhythm.refresh(leaf);
+      }
+    });
     const readingRoot = view.contentEl.querySelector<HTMLElement>(
       ':scope > .markdown-reading-view > .markdown-preview-view, :scope > .markdown-preview-view',
     );
@@ -372,6 +394,7 @@ export class PageRenderer {
     this.readingWhitespace.pruneDisconnected();
     if (!preserveIssue) this.issuesByLeaf.delete(leaf);
     this.styledViews.delete(leaf);
+    this.metricsByLeaf.delete(leaf);
   }
 
 }

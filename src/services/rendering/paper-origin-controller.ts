@@ -19,6 +19,9 @@ interface PaperOriginObservationState {
   observedElements: Set<HTMLElement>;
   pageContents: Set<HTMLElement>;
   resizeObserver: ResizeObserver;
+  rescan: () => void;
+  scrollHandler: EventListener;
+  scrollRoots: Set<HTMLElement>;
   targets: Map<HTMLElement, PaperOriginTarget>;
   view: Window;
 }
@@ -65,6 +68,7 @@ export class PaperOriginController {
       const nextPageContents = new Set(
         contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`),
       );
+      const nextScrollRoots = new Set<HTMLElement>();
       const nextObserved = new Set<HTMLElement>();
       for (const previous of state.pageContents) {
         if (!nextPageContents.has(previous)) {
@@ -73,30 +77,18 @@ export class PaperOriginController {
         }
       }
       for (const pageContent of nextPageContents) {
+        const pageRoot = pageContent.closest<HTMLElement>(`.${TEMPLAR_PAGE_CLASS}`);
+        if (pageRoot) nextScrollRoots.add(pageRoot);
         nextObserved.add(pageContent);
         for (const prefix of pageContent.querySelectorAll<HTMLElement>(
           ':scope > .inline-title, :scope > .metadata-container, :scope > .mod-frontmatter, :scope > .mod-header',
         )) nextObserved.add(prefix);
 
-        let target = state.targets.get(pageContent);
-        if (target?.element.isConnected) {
-          const refreshed = pageContent.hasClass('cm-sizer')
-            ? findEditorPaperOriginTarget(pageContent, metrics)
-            : findReadingPaperOriginTarget(pageContent, metrics);
-          if (refreshed?.element === target.element) {
-            target = refreshed;
-            state.targets.set(pageContent, refreshed);
-          }
-        }
-        if (!target?.element.isConnected) {
-          const pageRoot = pageContent.closest<HTMLElement>(`.${TEMPLAR_PAGE_CLASS}`);
-          const atDocumentStart = !pageRoot || pageRoot.scrollTop <= 1;
-          if (target && !atDocumentStart) continue;
-          target = (pageContent.hasClass('cm-sizer')
+        const target = (pageContent.hasClass('cm-sizer')
             ? findEditorPaperOriginTarget(pageContent, metrics)
             : findReadingPaperOriginTarget(pageContent, metrics)) ?? undefined;
-          if (target) state.targets.set(pageContent, target);
-        }
+        if (target) state.targets.set(pageContent, target);
+        else state.targets.delete(pageContent);
         if (!target) {
           pageContent.style.removeProperty('--templar-paper-baseline-position');
           continue;
@@ -105,7 +97,8 @@ export class PaperOriginController {
         const contentRect = pageContent.getBoundingClientRect();
         const targetRect = target.element.getBoundingClientRect();
         const targetStyle = view.getComputedStyle(target.element);
-        const scale = measuredGeometryScale(contentRect.width, pageContent.offsetWidth, 1);
+        const horizontalScale = measuredGeometryScale(contentRect.width, pageContent.offsetWidth, 1);
+        const scale = measuredGeometryScale(contentRect.height, pageContent.offsetHeight, horizontalScale);
         const origin = round(measuredPaperOrigin(
           contentRect.top,
           targetRect.top,
@@ -130,6 +123,13 @@ export class PaperOriginController {
       }
       state.observedElements = nextObserved;
       state.pageContents = nextPageContents;
+      for (const previous of state.scrollRoots) {
+        if (!nextScrollRoots.has(previous)) previous.removeEventListener('scroll', state.scrollHandler);
+      }
+      for (const root of nextScrollRoots) {
+        if (!state.scrollRoots.has(root)) root.addEventListener('scroll', state.scrollHandler, { passive: true });
+      }
+      state.scrollRoots = nextScrollRoots;
     };
     const scheduleFrame = (): void => {
       if (state.frame !== null) return;
@@ -138,6 +138,7 @@ export class PaperOriginController {
         scan();
       });
     };
+    const scrollHandler: EventListener = () => scheduleFrame();
     state = {
       contentEl,
       frame: null,
@@ -145,6 +146,9 @@ export class PaperOriginController {
       observedElements: new Set(),
       pageContents,
       resizeObserver: new ResizeObserverConstructor(scheduleFrame),
+      rescan: () => undefined,
+      scrollHandler,
+      scrollRoots: new Set(),
       targets: new Map(),
       view,
     };
@@ -155,7 +159,13 @@ export class PaperOriginController {
       subtree: true,
     });
     this.states.set(leaf, state);
+    state.rescan = scan;
     scan();
+  }
+
+  /** Re-anchor immediately before a diagnostic or other synchronous read. */
+  public refresh(leaf: WorkspaceLeaf): void {
+    this.states.get(leaf)?.rescan();
   }
 
   public clear(leaf: WorkspaceLeaf): void {
@@ -163,6 +173,9 @@ export class PaperOriginController {
     if (state?.frame !== null && state) state.view.cancelAnimationFrame(state.frame);
     state?.resizeObserver.disconnect();
     state?.mutationObserver.disconnect();
+    if (state) {
+      for (const root of state.scrollRoots) root.removeEventListener('scroll', state.scrollHandler);
+    }
     if (state) this.cleanupOwnedDom(state.contentEl);
     this.states.delete(leaf);
   }

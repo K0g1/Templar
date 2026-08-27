@@ -64,6 +64,10 @@ ${scope} .templar-grid-snap-block:is(table, iframe, object, video, audio, canvas
   margin-block-end: calc(var(--templar-grid-natural-margin-end, 0px) + var(--templar-grid-snap, 0px)) !important;
 }
 
+${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line:not(.templar-no-editor-tail) {
+  margin-block-end: var(--templar-editor-line-tail, 0px) !important;
+}
+
 ` : ''}${scope} .markdown-preview-view.templar-page .templar-blank-line-spacer {
   height: calc(var(--templar-body-line-height) * var(--templar-blank-lines, 1));
   margin: 0 !important;

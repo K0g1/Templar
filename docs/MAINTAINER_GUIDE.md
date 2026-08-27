@@ -2,7 +2,7 @@
 
 The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). It records the beta version, command/settings surface, source map, persistence and lifecycle contracts, release artifacts, and known limitations. This guide is the executable smoke-test and release checklist.
 
-At `1.2.0-beta.1`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT plus the three manual release artifacts are supported beta distribution paths. Physical iOS and Android evidence remains required for stable promotion; see [`INSTALLATION.md`](INSTALLATION.md).
+At `1.2.0-beta.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT plus the three manual release artifacts are supported beta distribution paths. Physical iOS and Android evidence remains required for stable promotion; see [`INSTALLATION.md`](INSTALLATION.md).
 
 ## Promotion policy
 

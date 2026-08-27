@@ -41,7 +41,7 @@ function headingRule(
       bodyBaseline,
       metric.baseline,
       gridUnit,
-      metric.lineHeight,
+      lineHeight,
     )
     : { top: 0, bottom: 0 };
   const readingMargin = gridded ? `${px(gridUnit)} 0` : '1.35em 0.55em';

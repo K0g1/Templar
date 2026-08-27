@@ -1,7 +1,8 @@
 import { DEFAULT_TEMPLATE_ID } from '../constants';
 import type TemplarPlugin from '../main';
-import type { Plugin } from 'obsidian';
+import { Notice, type Plugin } from 'obsidian';
 import { runUserAction } from '../ui/async-actions';
+import { formatBaselineDiagnostic } from '../services/baseline-diagnostic';
 
 type CommandDefinition = Parameters<Plugin['addCommand']>[0];
 
@@ -15,6 +16,24 @@ export function registerCommand(
 
 /** Register all Templar commands against the already-composed plugin services. */
 export function registerCommands(plugin: TemplarPlugin): void {
+  registerCommand(plugin, {
+    id: 'run-baseline-alignment-diagnostic',
+    name: 'Run ruled-line alignment diagnostic',
+    checkCallback: (checking) => {
+      const leaf = plugin.activeMarkdownLeaf();
+      const file = plugin.activeFile();
+      const available = leaf !== null && file !== null && plugin.frontmatter.hasStyle(file);
+      if (available && !checking && leaf) {
+        const report = plugin.renderer.baselineDiagnostic(leaf);
+        if (!report) {
+          new Notice('Ruled-line diagnostic is unavailable until the current page finishes rendering.');
+          return available;
+        }
+        new Notice(formatBaselineDiagnostic(report));
+      }
+      return available;
+    },
+  });
   registerCommand(plugin, {
     id: 'open-templar-recovery',
     name: 'Open Templar recovery for current note',

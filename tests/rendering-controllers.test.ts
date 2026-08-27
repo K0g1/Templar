@@ -5,7 +5,7 @@ import { OwnedStyleHost } from '../src/services/rendering/style-host';
 import { ReadingRootRegistry } from '../src/services/rendering/reading-root-registry';
 import { ImageSnapController, imageSnapPixels } from '../src/services/rendering/image-snap-controller';
 import { PaperOriginController } from '../src/services/rendering/paper-origin-controller';
-import { VariableBlockRhythmController, variableBlockSnapPixels } from '../src/services/rendering/variable-block-rhythm-controller';
+import { editorLineTailPixels, VariableBlockRhythmController, variableBlockSnapPixels } from '../src/services/rendering/variable-block-rhythm-controller';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
 import { templateToNoteStyle } from '../src/templates/note-format';
 import type { PageMetricSet } from '../src/services/style-compiler';
@@ -40,6 +40,8 @@ describe('renderer ownership primitives', () => {
     expect(registry.get(root)).toBeUndefined();
     expect(imageSnapPixels(47, 30)).toBeTypeOf('number');
     expect(variableBlockSnapPixels(47, 30)).toBeTypeOf('number');
+    expect(editorLineTailPixels(58.5, 29)).toBe(-0.5);
+    expect(editorLineTailPixels(58, 29)).toBe(0);
   });
 
   it('gives each observer controller an explicit configure/clear lifecycle', () => {
@@ -51,8 +53,13 @@ describe('renderer ownership primitives', () => {
     const pageContent = harness.window.document.createElement('div');
     pageContent.className = 'templar-content';
     const image = harness.window.document.createElement('img');
+    const editor = harness.window.document.createElement('div');
+    editor.className = 'cm-content';
+    const editorBuffer = harness.window.document.createElement('img');
+    editorBuffer.className = 'cm-widgetBuffer';
     const table = harness.window.document.createElement('table');
-    pageContent.append(image, table);
+    editor.append(editorBuffer);
+    pageContent.append(image, editor, table);
     page.append(pageContent);
     content.append(page);
     harness.window.document.body.append(content);
@@ -82,6 +89,7 @@ describe('renderer ownership primitives', () => {
     rhythmController.configure(leaf, content, style);
     expect(harness.resizeInstances).toHaveLength(3);
     expect(harness.mutationInstances).toHaveLength(3);
+    expect(editorBuffer.style.getPropertyValue('--templar-image-snap')).toBe('');
 
     imageController.clear(leaf);
     paperController.clear(leaf);
