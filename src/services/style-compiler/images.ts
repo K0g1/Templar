@@ -94,7 +94,7 @@ export function compileImages(context: StyleCompilerContext): string {
   display: block;
   filter: ${imageFilter(style)};
   float: ${style.images.float};
-  margin-block: ${px(style.images.topSpacing)} calc(${px(style.images.bottomSpacing)} + var(--templar-image-snap, 0px));
+  margin-block: ${px(style.images.topSpacing)} ${px(style.images.bottomSpacing)};
   margin-inline: ${style.images.float === 'left' ? '0 1em 0 0' : style.images.float === 'right' ? '0 0 0 1em' : 'auto'};
   max-height: ${paged ? px(printableHeight) : 'none'};
   max-width: ${String(style.images.maxWidth)}%;

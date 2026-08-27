@@ -10,6 +10,7 @@ import { compilePageBase } from './page';
 import { compilePagedGuards } from './paged-guards';
 import { compileTypography } from './typography';
 import { compileWatermark } from './watermark';
+import { compileBaselineGrid } from './baseline-grid';
 import type { PageMetricSet, StyleCompilation } from './types';
 
 export type { PageMetricSet, StyleCompilation, StyleCompilerContext } from './types';
@@ -34,6 +35,7 @@ export function compilePageStyle(
     compileAttachments(context),
     custom.css,
     compilePagedGuards(context),
+    compileBaselineGrid(context),
   ].filter(Boolean);
   const css = fragments.join('\n\n');
   if (new TextEncoder().encode(css).length > MAX_GENERATED_STYLE_BYTES) {

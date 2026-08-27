@@ -23,9 +23,10 @@ export function compilePageBase(context: StyleCompilerContext): string {
   } = context;
   return `${scope} {
   --templar-grid: ${px(context.unit)};
+  --templar-grid-origin: ${px(baselinePosition)};
   --templar-baseline-position: ${px(baselinePosition)};
   --templar-editor-baseline-position: ${px(baselinePosition)};
-  --templar-paper-baseline-position: var(--templar-editor-baseline-position);
+  --templar-paper-baseline-position: var(--templar-grid-origin);
   --templar-image-border: ${imageBorder};
   --templar-page-width: ${px(style.page.width)};
   --templar-page-height: ${px(style.page.height)};
@@ -108,7 +109,6 @@ ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content {
 ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line {
   box-sizing: border-box;
   margin-block: 0 !important;
-  margin-block-end: var(--templar-editor-line-tail, 0px) !important;
 }
 
 ${paged ? `${scope} .templar-page .cm-line,

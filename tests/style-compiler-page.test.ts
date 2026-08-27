@@ -6,8 +6,9 @@ describe('page compiler fragment', () => {
   it('emits scoped paper and page geometry', () => {
     const css = compilePageBase(fragmentContext());
     expect(css).toContain('--templar-baseline-position: 81px');
+    expect(css).toContain('--templar-grid-origin: 81px');
     expect(css).toContain('.templar-page-content::before');
     expect(css).toContain('isolation: isolate;');
-    expect(css).toContain('margin-block-end: var(--templar-editor-line-tail, 0px) !important;');
+    expect(css).not.toContain('--templar-editor-line-tail');
   });
 });

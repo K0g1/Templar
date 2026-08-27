@@ -18,11 +18,9 @@ import { FontMetricsService } from './font-metrics';
 import type { FrontmatterService } from './frontmatter';
 import { PageLayoutService } from './page-layout';
 import { compilePageStyle, type PageMetricSet } from './style-compiler';
-import { ImageSnapController } from './rendering/image-snap-controller';
-import { PaperOriginController } from './rendering/paper-origin-controller';
+import { BaselineGridController } from './rendering/baseline-grid/controller';
 import { ReadingWhitespaceController } from './rendering/reading-whitespace-controller';
 import { OwnedStyleHost } from './rendering/style-host';
-import { VariableBlockRhythmController } from './rendering/variable-block-rhythm-controller';
 import {
   diagnoseBaselineAlignment,
   type BaselineDiagnosticReport,
@@ -57,9 +55,7 @@ export class PageRenderer {
   private readonly pageLayout = new PageLayoutService();
   private readonly styleHost = new OwnedStyleHost();
   private readonly previews = new Map<WorkspaceLeaf, PreviewState>();
-  private readonly imageSnap = new ImageSnapController();
-  private readonly paperOrigin = new PaperOriginController();
-  private readonly rhythm = new VariableBlockRhythmController();
+  private readonly baselineGrid = new BaselineGridController();
   private readonly readingWhitespace: ReadingWhitespaceController;
 
   public constructor(
@@ -194,9 +190,13 @@ export class PageRenderer {
   public baselineDiagnostic(leaf: WorkspaceLeaf): BaselineDiagnosticReport | null {
     const styled = this.styledViews.get(leaf);
     const metrics = this.metricsByLeaf.get(leaf);
-    this.paperOrigin.refresh(leaf);
-    this.rhythm.refresh(leaf);
-    return styled && metrics ? diagnoseBaselineAlignment(styled.contentEl, metrics) : null;
+    this.baselineGrid.refresh(leaf);
+    return styled && metrics
+      ? diagnoseBaselineAlignment(styled.contentEl, metrics, {
+        roots: this.baselineGrid.diagnosticRoots(leaf),
+        stats: this.baselineGrid.stats(leaf),
+      })
+      : null;
   }
 
   public registerReadingSection(
@@ -212,9 +212,7 @@ export class PageRenderer {
     }
     this.destroyed = true;
     this.readingWhitespace.destroy();
-    this.imageSnap.destroy();
-    this.paperOrigin.destroy();
-    this.rhythm.destroy();
+    this.baselineGrid.destroy();
     this.pageLayout.destroy();
     this.previews.clear();
     for (const leaf of [...this.styledViews.keys()]) {
@@ -285,18 +283,7 @@ export class PageRenderer {
     const styleEl = this.styleHost.ensure(view.contentEl);
     styleEl.textContent = compiled.css;
     this.styledViews.set(leaf, { contentEl: view.contentEl, filePath: file.path });
-    this.paperOrigin.configure(leaf, view.contentEl, style, metrics);
-    this.imageSnap.configure(leaf, view.contentEl, style);
-    this.rhythm.configure(leaf, view.contentEl, style);
     this.pageLayout.configure(leaf, view.contentEl, style);
-    // Paged layout applies scale on its next animation frame. Re-measure
-    // rhythm-owned blocks after that scale exists so snap tails use CSS page
-    // pixels rather than the rendered viewport pixels.
-    view.contentEl.ownerDocument.defaultView?.requestAnimationFrame(() => {
-      if (this.styledViews.get(leaf)?.contentEl === view.contentEl) {
-        this.rhythm.refresh(leaf);
-      }
-    });
     const readingRoot = view.contentEl.querySelector<HTMLElement>(
       ':scope > .markdown-reading-view > .markdown-preview-view, :scope > .markdown-preview-view',
     );
@@ -306,6 +293,14 @@ export class PageRenderer {
     } else if (readingRoot) {
       this.readingWhitespace.deactivateRoot(readingRoot);
     }
+    this.baselineGrid.configure(leaf, { contentEl: view.contentEl, style, metrics });
+    // Paged layout applies scale on its next animation frame. Re-measure the
+    // absolute grid after that scale exists so corrections use CSS pixels.
+    view.contentEl.ownerDocument.defaultView?.requestAnimationFrame(() => {
+      if (this.styledViews.get(leaf)?.contentEl === view.contentEl) {
+        this.baselineGrid.refresh(leaf);
+      }
+    });
   }
 
   private prepareViewRoots(contentEl: HTMLElement): void {
@@ -371,7 +366,7 @@ export class PageRenderer {
     const contentEl =
       styled?.contentEl ??
       (leaf.view instanceof MarkdownView ? leaf.view.contentEl : undefined);
-    this.paperOrigin.clear(leaf);
+    this.baselineGrid.clear(leaf);
     if (contentEl) {
       contentEl.removeClass(TEMPLAR_CLASS);
       delete contentEl.dataset.templarScope;
@@ -389,8 +384,6 @@ export class PageRenderer {
       );
       if (readingRoot) this.readingWhitespace.clearRoot(readingRoot);
     }
-    this.imageSnap.clear(leaf);
-    this.rhythm.clear(leaf);
     this.readingWhitespace.pruneDisconnected();
     if (!preserveIssue) this.issuesByLeaf.delete(leaf);
     this.styledViews.delete(leaf);
