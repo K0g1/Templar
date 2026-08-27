@@ -108,6 +108,7 @@ ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content {
 ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line {
   box-sizing: border-box;
   margin-block: 0 !important;
+  margin-block-end: var(--templar-editor-line-tail, 0px) !important;
 }
 
 ${paged ? `${scope} .templar-page .cm-line,

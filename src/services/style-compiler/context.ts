@@ -51,7 +51,7 @@ export function createStyleCompilerContext(
       paddingLeft,
     ),
     codePadding: gridded
-      ? headingBaselinePadding(metrics.body.baseline, metrics.code.baseline, unit, metrics.code.lineHeight)
+      ? headingBaselinePadding(metrics.body.baseline, metrics.code.baseline, unit, bodyLineHeight)
       : { top: unit / 2, bottom: unit / 2 },
     bodyFont: safeValue(style.typography.bodyFont, 'Georgia, serif'),
     paperColor: safeValue(style.paper.color, '#fffdf7'),

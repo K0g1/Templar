@@ -98,10 +98,8 @@ export function findReadingPaperOriginTarget(
     'h1, h2, h3, h4, h5, h6, p, li, pre > code',
   );
   for (const candidate of candidates) {
-    if (
-      !hasVisibleText(candidate) ||
-      candidate.closest(NON_RHYTHMIC_READING_ANCESTORS)
-    ) {
+    const excludedAncestor = candidate.closest(NON_RHYTHMIC_READING_ANCESTORS);
+    if (!hasVisibleText(candidate) || (excludedAncestor && excludedAncestor !== candidate)) {
       continue;
     }
     return { element: candidate, metric: metricForElement(candidate, metrics) };

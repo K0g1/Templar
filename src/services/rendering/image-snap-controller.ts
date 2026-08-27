@@ -74,7 +74,11 @@ export class ImageSnapController {
     };
     scanImages = (): void => {
       const nextImages = new Set(
-        contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_PAGE_CLASS} img`),
+        [...contentEl.querySelectorAll<HTMLElement>(`.${TEMPLAR_PAGE_CLASS} img`)]
+          // CodeMirror uses zero-width image buffers for formatting and
+          // widgets. They are part of an editor line, not document media;
+          // adding a grid tail to them changes the line box itself.
+          .filter((image) => !image.closest('.cm-content')),
       );
       for (const image of state.observedImages) {
         if (!nextImages.has(image)) resizeObserver.unobserve(image);

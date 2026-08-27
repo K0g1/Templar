@@ -13,7 +13,7 @@ BRAT is a supported beta installation path. At this documentation update, BRAT 2
 
 You can also try the deep link: [Add Templar to BRAT](obsidian://brat?plugin=K0g1/Templar). If your renderer does not make the link clickable, copy `obsidian://brat?plugin=K0g1/Templar` and use the command-palette route above.
 
-BRAT normally tracks the current release. To reproduce a report against a specific version, run **BRAT: Add a beta plugin with frozen version based on a release tag**, enter `K0g1/Templar`, and enter the exact release tag, for example `1.2.0-beta.1`. A frozen plugin does not follow later updates automatically.
+BRAT normally tracks the current release. To reproduce a report against a specific version, run **BRAT: Add a beta plugin with frozen version based on a release tag**, enter `K0g1/Templar`, and enter the exact release tag, for example `1.2.0-beta.2`. A frozen plugin does not follow later updates automatically.
 
 BRAT updates can be enabled at startup from BRAT's settings. The plugin folder should be `.obsidian/plugins/templar/`; compare the installed `manifest.json` version when diagnosing an update that appears stuck.
 

@@ -1,14 +1,29 @@
 import type { WorkspaceLeaf } from 'obsidian';
-import { TEMPLAR_PAGE_CLASS } from '../../constants';
+import { TEMPLAR_CONTENT_CLASS, TEMPLAR_PAGE_CLASS } from '../../constants';
 import type { TemplarNoteStyle } from '../../types';
-import { gridCompensation, naturalOuterFootprint } from '../../utils/grid';
+import {
+  gridCompensation,
+  measuredGeometryScale,
+  naturalOuterFootprint,
+  positiveModulo,
+} from '../../utils/grid';
 import { round } from '../../utils/value';
 import { realmFor } from '../dom-realm';
 
+export function editorLineTailPixels(height: number, unit: number): number {
+  if (unit <= 0 || height <= 0) return 0;
+  const remainder = positiveModulo(height, unit);
+  const boundaryTolerance = Math.min(0.05, unit / 1000);
+  if (remainder <= boundaryTolerance || unit - remainder <= boundaryTolerance) return 0;
+  return -round(remainder);
+}
+
 const VARIABLE_BLOCK_SELECTORS = [
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'blockquote',
   'table', '.mermaid', '[class*="block-language-"]', '.math-block', '.callout',
   '.internal-embed', '.file-embed', 'pre', 'details', 'figure', 'iframe',
-  'object', 'video', 'audio', 'canvas', '.cm-table-widget', '.cm-embed-block',
+  'object', 'video', 'audio', 'canvas', 'img', '.cm-table-widget', '.cm-embed-block',
+  '.cm-content > .cm-line',
 ] as const;
 
 interface RhythmObservationState {
@@ -19,6 +34,7 @@ interface RhythmObservationState {
   observedBlocks: Set<HTMLElement>;
   pendingMeasurements: Map<HTMLElement, number | undefined>;
   resizeObserver: ResizeObserver;
+  rescan: () => void;
   view: Window;
 }
 
@@ -51,6 +67,25 @@ export class VariableBlockRhythmController {
     if (!enabled || !ResizeObserverConstructor || !MutationObserverConstructor) return;
 
     const update = (block: HTMLElement, measuredHeight?: number): void => {
+      const pageContent = block.closest<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`);
+      const contentRect = pageContent?.getBoundingClientRect();
+      const horizontalScale = pageContent
+        ? measuredGeometryScale(contentRect?.width ?? 0, pageContent.offsetWidth, 1)
+        : 1;
+      const scale = pageContent
+        ? measuredGeometryScale(contentRect?.height ?? 0, pageContent.offsetHeight, horizontalScale)
+        : 1;
+      const renderedHeight = block.getBoundingClientRect().height / scale;
+      const normalizedHeight = renderedHeight > 0
+        ? renderedHeight
+        : measuredHeight ?? block.offsetHeight;
+      if (block.matches('.cm-content > .cm-line')) {
+        block.style.setProperty(
+          '--templar-editor-line-tail',
+          `${String(editorLineTailPixels(normalizedHeight, style.baseline.unit))}px`,
+        );
+        return;
+      }
       const marginTail = block.matches('table, iframe, object, video, audio, canvas');
       const computed = view.getComputedStyle(block);
       if (!block.style.getPropertyValue('--templar-grid-natural-margin-end')) {
@@ -64,7 +99,7 @@ export class VariableBlockRhythmController {
         block.style.getPropertyValue('--templar-grid-snap'),
       ) || 0;
       const naturalHeight = naturalOuterFootprint(
-        measuredHeight ?? block.offsetHeight,
+        normalizedHeight,
         Number.parseFloat(computed.marginBlockStart || computed.marginTop) || 0,
         Number.parseFloat(block.style.getPropertyValue('--templar-grid-natural-margin-end')) || 0,
         previous,
@@ -115,6 +150,7 @@ export class VariableBlockRhythmController {
       observedBlocks: new Set(),
       pendingMeasurements: new Map(),
       resizeObserver,
+      rescan: () => undefined,
       view,
     };
     scanBlocks = (): void => {
@@ -141,6 +177,12 @@ export class VariableBlockRhythmController {
     state.mutationObserver.observe(contentEl, { childList: true, subtree: true });
     this.states.set(leaf, state);
     scanBlocks();
+    state.rescan = scanBlocks;
+  }
+
+  /** Re-measures blocks after paged layout applies its CSS zoom. */
+  public refresh(leaf: WorkspaceLeaf): void {
+    this.states.get(leaf)?.rescan();
   }
 
   public clear(leaf: WorkspaceLeaf): void {
@@ -160,6 +202,11 @@ export class VariableBlockRhythmController {
     if (element.closest('.mod-frontmatter, .metadata-container')) return null;
     const editorWidget = element.closest<HTMLElement>('.cm-table-widget, .cm-embed-block');
     if (editorWidget) return editorWidget;
+    if (element.matches('.cm-content > .cm-line')) return element;
+    // CodeMirror uses small image widgets as line buffers and formatting
+    // placeholders. They are not document images and must not become
+    // flow-root/grid-snap blocks inside a source line.
+    if (element.closest('.cm-content')) return null;
     const readingRoot = element.closest<HTMLElement>('.markdown-preview-section');
     if (readingRoot) {
       let owner = element;
@@ -173,6 +220,7 @@ export class VariableBlockRhythmController {
     block.removeClass('templar-grid-snap-block');
     block.style.removeProperty('--templar-grid-snap');
     block.style.removeProperty('--templar-grid-natural-margin-end');
+    block.style.removeProperty('--templar-editor-line-tail');
   }
 
   private cleanupOwnedDom(contentEl: HTMLElement): void {

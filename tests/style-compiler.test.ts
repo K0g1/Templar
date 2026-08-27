@@ -150,6 +150,20 @@ describe('structured style compiler', () => {
     expect(css).toContain('letter-spacing: 0px');
   });
 
+  it('calculates heading padding from the emitted grid line-height', () => {
+    const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
+    const css = compilePageStyle(
+      style,
+      '[data-templar-scope="templar-heading-rhythm"]',
+      'heading-rhythm',
+      metrics,
+    ).css;
+    // H3 emits a 30px grid line-height in this fixture. Its padding must
+    // close that emitted line-height to a whole 30px row, even though the
+    // measured natural font line box is different.
+    expect(css).toContain('padding-block: 27px 3px !important');
+  });
+
   it('honors an explicit body line height', () => {
     const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
     style.baseline.mode = 'free';

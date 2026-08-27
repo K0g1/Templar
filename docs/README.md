@@ -2,7 +2,7 @@
 
 Technical documentation for the Templar Obsidian plugin.
 
-The current implementation snapshot is `1.2.0-beta.1`: 132 built-in styles, leaf-scoped live try-on, note customization, source synchronization, event-driven style rules and usage indexing, bounded pack import/export, settled Reading-mode print preparation, keyboard-first browsing, three density modes, paged/pageless notes, measured cross-view paper origins, variable-height rhythm correction, recovery-backed protected writes, and migration-aware compatibility handling. [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md) is the handoff document for the complete feature map, source map, persistence rules, test/release runbook, and known limitations.
+The current implementation snapshot is `1.2.0-beta.2`: 132 built-in styles, leaf-scoped live try-on, note customization, source synchronization, event-driven style rules and usage indexing, bounded pack import/export, settled Reading-mode print preparation, keyboard-first browsing, three density modes, paged/pageless notes, measured cross-view paper origins, variable-height rhythm correction, ruled-line alignment diagnostics, recovery-backed protected writes, and migration-aware compatibility handling. [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md) is the handoff document for the complete feature map, source map, persistence rules, test/release runbook, and known limitations.
 
 ## Getting started
 
@@ -22,6 +22,7 @@ The current implementation snapshot is `1.2.0-beta.1`: 132 built-in styles, leaf
 - [`PERFORMANCE.md`](PERFORMANCE.md) — benchmark fixtures and coverage commands for renderer, catalog, vault matching, and pagination work.
 - [`ASSET_OPTIMIZATION.md`](ASSET_OPTIMIZATION.md) — lossless screenshot conversion record and before/after sizes.
 - [`releases/`](releases/) — versioned GitHub release notes, including validation status and known beta limitations.
+- [`releases/1.2.0-beta.2.md`](releases/1.2.0-beta.2.md) — corrective beta for ruled-line alignment across text and rendered elements, with disclosed mobile limitations.
 - [`releases/1.2.0-beta.1.md`](releases/1.2.0-beta.1.md) — beta compatibility target with packaged desktop/recovery evidence and disclosed mobile limitations.
 - [`releases/1.2.0-alpha.5.md`](releases/1.2.0-alpha.5.md) — published remediation validation candidate for recovery, migration, automatic-write safety, and CSS trust boundaries.
 - [`releases/1.2.0-alpha.4.md`](releases/1.2.0-alpha.4.md) — immutable validation-tag notes; the workflow did not publish artifacts, so alpha.5 supersedes it as the package under test.

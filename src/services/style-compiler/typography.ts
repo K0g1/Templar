@@ -3,7 +3,15 @@ import { px, safeValue } from './paper';
 
 /** Compiles text, code, links, quotes, and shared inline semantics. */
 export function compileTypography(context: StyleCompilerContext): string {
-  const { style, scope, unit, bodyLineHeight, textColor, mutedColor } = context;
+  const {
+    style,
+    scope,
+    unit,
+    bodyLineHeight,
+    textColor,
+    mutedColor,
+    metrics,
+  } = context;
   const codePadding = context.codePadding;
   return `${scope} .templar-page :is(a, .cm-hmd-internal-link, .cm-link, .cm-url) {
   color: ${safeValue(style.blocks.linkColor, '#315f86')};
@@ -33,6 +41,26 @@ ${scope} .templar-page :is(code, .cm-inline-code) {
   font-size: ${px(style.blocks.codeSize)};
 }
 
+${context.gridded ? `${scope} .templar-page :is(code, .cm-inline-code, kbd, mark) {
+  line-height: inherit;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+}
+
+${scope} .templar-page :is(sup, sub) {
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+${scope} .templar-page sup {
+  inset-block-start: -0.35em;
+}
+
+${scope} .templar-page sub {
+  inset-block-start: 0.2em;
+}` : ''}
+
 ${scope} .templar-page pre {
   background: ${safeValue(style.blocks.codeBackground, 'rgba(0, 0, 0, 0.08)')};
   color: ${safeValue(style.blocks.codeTextColor, textColor)};
@@ -54,6 +82,8 @@ ${scope} .templar-page pre > code {
 ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line.HyperMD-codeblock {
   font-family: ${safeValue(style.blocks.codeFont, 'monospace')};
   font-size: ${px(style.blocks.codeSize)};
+  position: relative;
+  inset-block-start: ${px(metrics.body.baseline - metrics.code.baseline)};
   line-height: ${px(bodyLineHeight)} !important;
   min-height: ${px(bodyLineHeight)} !important;
   padding-block: 0 !important;
