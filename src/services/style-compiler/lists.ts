@@ -7,7 +7,7 @@ export function listSelector(ordered: boolean): string {
 
 /** Compiles list markers, indentation, and optional paragraph typography. */
 export function compileLists(context: StyleCompilerContext): string {
-  const { style, scope, gridded } = context;
+  const { style, scope } = context;
   return `${scope} .templar-page :is(ul, ol) :is(ul, ol) {
   ${style.lists.nestedIndent > 0
     ? `padding-inline-start: ${px(style.lists.nestedIndent)} !important;`
@@ -45,27 +45,6 @@ ${scope} .templar-page-content .HyperMD-header + .HyperMD-paragraph::first-lette
   line-height: 0.8;
   margin-block-start: 0.04em;
   margin-inline-end: 0.1em;
-}
-
-` : ''}${gridded ? `${scope} .templar-grid-snap-block:not(:is(table, iframe, object, video, audio, canvas)) {
-  display: flow-root;
-}
-
-${scope} .templar-grid-snap-block:not(:is(table, iframe, object, video, audio, canvas))::after {
-  block-size: var(--templar-grid-snap, 0px);
-  clear: both;
-  content: "";
-  display: block;
-  inline-size: 100%;
-  pointer-events: none;
-}
-
-${scope} .templar-grid-snap-block:is(table, iframe, object, video, audio, canvas) {
-  margin-block-end: calc(var(--templar-grid-natural-margin-end, 0px) + var(--templar-grid-snap, 0px)) !important;
-}
-
-${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line:not(.templar-no-editor-tail) {
-  margin-block-end: var(--templar-editor-line-tail, 0px) !important;
 }
 
 ` : ''}${scope} .markdown-preview-view.templar-page .templar-blank-line-spacer {

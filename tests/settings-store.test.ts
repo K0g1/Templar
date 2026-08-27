@@ -64,4 +64,44 @@ describe('SettingsStore', () => {
     expect(settings).toBe(reference);
     expect(settings.enableLivePreview).toBe(false);
   });
+
+  it('allows the exact style-rule limits but rejects overflow before normalization', async () => {
+    const settings = clone(DEFAULT_SETTINGS);
+    const store = new SettingsStore(settings, async () => undefined);
+    const condition = { type: 'tag' as const, tag: 'qa' };
+    const rule = (index: number) => ({
+      id: `rule-${String(index)}`,
+      name: `Rule ${String(index)}`,
+      enabled: true,
+      conditions: [condition],
+      templateId: settings.defaultTemplateId,
+      pageFlow: 'default' as const,
+    });
+
+    await store.transaction((draft) => { draft.styleRules = Array.from({ length: 128 }, (_, index) => rule(index)); });
+    expect(settings.styleRules).toHaveLength(128);
+    await expect(store.transaction((draft) => { draft.styleRules.push(rule(128)); }))
+      .rejects.toThrow('at most 128 style rules');
+    expect(settings.styleRules).toHaveLength(128);
+  });
+
+  it('rejects a condition overflow without truncating the draft', async () => {
+    const settings = clone(DEFAULT_SETTINGS);
+    const store = new SettingsStore(settings, async () => undefined);
+    await store.transaction((draft) => {
+      draft.styleRules = [{
+        id: 'conditions',
+        name: 'Conditions',
+        enabled: true,
+        conditions: Array.from({ length: 32 }, (_, index) => ({ type: 'tag' as const, tag: `tag-${String(index)}` })),
+        templateId: settings.defaultTemplateId,
+        pageFlow: 'default',
+      }];
+    });
+    expect(settings.styleRules[0]?.conditions).toHaveLength(32);
+    await expect(store.transaction((draft) => {
+      draft.styleRules[0]?.conditions.push({ type: 'tag', tag: 'overflow' });
+    })).rejects.toThrow('at most 32 conditions');
+    expect(settings.styleRules[0]?.conditions).toHaveLength(32);
+  });
 });

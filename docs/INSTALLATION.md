@@ -13,7 +13,7 @@ BRAT is a supported beta installation path. At this documentation update, BRAT 2
 
 You can also try the deep link: [Add Templar to BRAT](obsidian://brat?plugin=K0g1/Templar). If your renderer does not make the link clickable, copy `obsidian://brat?plugin=K0g1/Templar` and use the command-palette route above.
 
-BRAT normally tracks the current release. To reproduce a report against a specific version, run **BRAT: Add a beta plugin with frozen version based on a release tag**, enter `K0g1/Templar`, and enter the exact release tag, for example `1.2.0-beta.2`. A frozen plugin does not follow later updates automatically.
+BRAT normally tracks the current release. To reproduce a report against a specific version, run **BRAT: Add a beta plugin with frozen version based on a release tag**, enter `K0g1/Templar`, and enter the exact release tag, for example `1.2.0-beta.3`. A frozen plugin does not follow later updates automatically.
 
 BRAT updates can be enabled at startup from BRAT's settings. The plugin folder should be `.obsidian/plugins/templar/`; compare the installed `manifest.json` version when diagnosing an update that appears stuck.
 
@@ -39,4 +39,4 @@ Before updating an alpha build, export or back up important notes. Templar store
 - If Templar does not appear, reload Obsidian and check **Installed plugins** rather than Browse; Templar is not yet in the Community Plugins directory.
 - If an update appears stale, inspect `.obsidian/plugins/templar/manifest.json` and verify its `version`, then reinstall through BRAT.
 - If the plugin fails to load, compare all three filenames and confirm that `main.js`, `manifest.json`, and `styles.css` are in the lowercase `templar` folder.
-- If the current alpha is incompatible with an older Obsidian build, use a release whose `minAppVersion` is compatible or fall back to the manual release assets. Do not override the manifest minimum version.
+- If the current beta is incompatible with an older Obsidian build, use a release whose `minAppVersion` is compatible or fall back to the manual release assets. Do not override the manifest minimum version. Beta.3's interactive desktop evidence is on Obsidian 1.13.7; the declared 1.8.0 floor remains a compatibility target and should be verified separately before stable promotion.

@@ -44,6 +44,17 @@ describe('RecoveryService', () => {
     expect(record).toContain('"preserved": true');
   });
 
+  it('records the settings schema version for settings recovery copies', async () => {
+    const harness = setup();
+    const service = new RecoveryService(harness.app, '1.2.0');
+    await service.backupSettings({ version: 1, settings: true });
+    const serialized = [...harness.files.values()].find((entry) => entry.data)?.data;
+    expect(serialized).toBeTruthy();
+    const record = JSON.parse(serialized!) as Record<string, unknown>;
+    expect(record.kind).toBe('settings');
+    expect(record.currentSupportedSchemaVersion).toBe(1);
+  });
+
   it('fails when a folder component is a file', async () => {
     const harness = setup();
     harness.files.set('Templar Recovery', { kind: 'file' });

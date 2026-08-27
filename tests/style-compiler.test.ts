@@ -23,13 +23,11 @@ describe('structured style compiler', () => {
       'test',
       metrics,
     );
-    expect(result.css).toContain('--templar-baseline-position: 81px');
-    expect(result.css).toContain('--templar-editor-baseline-position: 81px');
     expect(result.css).toContain(
-      '--templar-paper-baseline-position: var(--templar-editor-baseline-position)',
+      '--templar-grid-origin: 81px',
     );
     expect(result.css).toContain(
-      'background-position: 0 0, 0 var(--templar-paper-baseline-position)',
+      'background-position: 0 0, 0 var(--templar-grid-origin)',
     );
     expect(result.css).toContain('line-height: 30px');
   });
@@ -51,10 +49,10 @@ describe('structured style compiler', () => {
     ).css;
 
     expect(dotCss).toContain(
-      'background-position: calc(min(96px, 18%) - 14px) calc(var(--templar-paper-baseline-position) - 14px)',
+      'background-position: calc(min(96px, 18%) - 14px) calc(var(--templar-grid-origin) - 14px)',
     );
     expect(graphCss).toContain(
-      'background-position: min(96px, 18%) var(--templar-paper-baseline-position)',
+      'background-position: min(96px, 18%) var(--templar-grid-origin)',
     );
     expect(graphCss).toContain(
       '.templar-page :is(p, li, .HyperMD-paragraph, .HyperMD-list-line, .HyperMD-quote)',
@@ -63,6 +61,14 @@ describe('structured style compiler', () => {
     expect(graphCss).toContain('margin-block: 0 0px !important');
     expect(graphCss).toContain('.cm-line.HyperMD-list-line');
     expect(graphCss).toContain('line-height: 24px !important');
+    expect(graphCss).toContain('.templar-baseline-debug-overlay');
+    expect(graphCss).toContain('.templar-baseline-grid-list-item');
+    expect(graphCss).toContain('inset-block-start: var(--templar-grid-list-shift, 0px)');
+    expect(graphCss).toContain('.templar-baseline-grid-composite-text');
+    expect(graphCss).toContain('var(--templar-grid-composite-text-shift, 0px)');
+    expect(graphCss).toContain('.cm-content > .templar-baseline-grid-item.templar-baseline-grid-atomic');
+    expect(graphCss).not.toContain('--templar-editor-line-tail');
+    expect(graphCss).not.toContain('--templar-paper-baseline-position');
   });
 
   it('baseline-corrects Reading code blocks and styles H4', () => {
@@ -350,9 +356,10 @@ describe('structured style compiler', () => {
     expect(css).toContain('.markdown-preview-view.templar-page :is(p, ul, ol, blockquote, pre, table)');
     expect(css).toContain('.markdown-source-view.mod-cm6 .templar-page :is(.HyperMD-header-1, .inline-title)');
     expect(css).toContain('margin-block: 0 !important;\n  padding-block:');
-    expect(css).toContain('.templar-grid-snap-block:not(:is(table, iframe, object, video, audio, canvas))::after');
+    expect(css).not.toContain('.templar-baseline-grid-item::after');
+    expect(css).toContain('.templar-baseline-grid-prefix');
+    expect(css).toContain('.cm-content > .cm-line > *');
     expect(css).toContain('display: flow-root;');
-    expect(css).toContain('block-size: var(--templar-grid-snap, 0px);');
 
     style.baseline.mode = 'free';
     const freeCss = compilePageStyle(

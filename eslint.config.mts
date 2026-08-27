@@ -8,6 +8,10 @@ export default defineConfig(
     'main.js',
     '.release',
     'coverage',
+    // User-owned trailer workspaces are kept beside the plugin but are not
+    // part of the TypeScript/Obsidian build.
+    'trailer',
+    'trailer-v2',
     'esbuild.config.mjs',
     'version-bump.mjs',
     'versions.json',

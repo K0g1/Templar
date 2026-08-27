@@ -96,9 +96,9 @@ function fixture(
     const sizer = harness.window.document.createElement('div');
     sizer.className = 'markdown-preview-sizer';
     Object.defineProperty(readingRoot, 'clientWidth', { configurable: true, value: 1_024 });
+    const section = harness.window.document.createElement('div');
+    section.className = 'markdown-preview-section';
     for (let index = 0; index < blocks; index += 1) {
-      const section = harness.window.document.createElement('div');
-      section.className = 'markdown-preview-section';
       const kind = index % 9;
       const block = harness.window.document.createElement(
         kind === 0 ? 'h2' : kind === 1 ? 'blockquote' : kind === 2 ? 'table' : kind === 3 ? 'pre' : kind === 8 ? 'ul' : 'div',
@@ -115,14 +115,14 @@ function fixture(
       } else if (kind === 6) {
         block.className = 'internal-embed';
       } else if (kind === 7) {
-        block.className = 'templar-variable-block';
+        block.className = 'block-language-mermaid';
       } else if (kind === 8) {
         block.append(harness.window.document.createElement('li'));
       }
       block.textContent = `Benchmark block ${String(index)}`;
       section.append(block);
-      sizer.append(section);
     }
+    sizer.append(section);
     for (let index = 0; index < images; index += 1) {
       const section = harness.window.document.createElement('div');
       section.className = 'markdown-preview-section';

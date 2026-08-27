@@ -2,8 +2,8 @@ import { Window as HappyWindow } from 'happy-dom';
 
 export interface ObserverHarness {
   window: Window;
-  resizeInstances: Array<{ disconnects: number; observes: Element[] }>;
-  mutationInstances: Array<{ disconnects: number; observes: Element[] }>;
+  resizeInstances: Array<{ disconnects: number; observes: Element[]; callback: ResizeObserverCallback }>;
+  mutationInstances: Array<{ disconnects: number; observes: Element[]; callback: MutationCallback }>;
   pendingAnimationFrames: Set<number>;
 }
 
@@ -18,9 +18,10 @@ export function createObserverHarness(): ObserverHarness {
   let nextAnimationFrame = 1;
 
   class RealmResizeObserver {
-    private readonly record = { disconnects: 0, observes: [] as Element[] };
+    private readonly record: ObserverHarness['resizeInstances'][number];
 
-    public constructor(_callback: ResizeObserverCallback) {
+    public constructor(callback: ResizeObserverCallback) {
+      this.record = { disconnects: 0, observes: [], callback };
       resizeInstances.push(this.record);
     }
 
@@ -36,9 +37,10 @@ export function createObserverHarness(): ObserverHarness {
   }
 
   class RealmMutationObserver {
-    private readonly record = { disconnects: 0, observes: [] as Element[] };
+    private readonly record: ObserverHarness['mutationInstances'][number];
 
-    public constructor(_callback: MutationCallback) {
+    public constructor(callback: MutationCallback) {
+      this.record = { disconnects: 0, observes: [], callback };
       mutationInstances.push(this.record);
     }
 

@@ -2,7 +2,7 @@
 
 The current handoff snapshot is [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). It records the beta version, command/settings surface, source map, persistence and lifecycle contracts, release artifacts, and known limitations. This guide is the executable smoke-test and release checklist.
 
-At `1.2.0-beta.2`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT plus the three manual release artifacts are supported beta distribution paths. Physical iOS and Android evidence remains required for stable promotion; see [`INSTALLATION.md`](INSTALLATION.md).
+At `1.2.0-beta.3`, the built-in catalog is 132 styles (28 core + 104 generated across 13 themed packs), the minimum Obsidian version is 1.8.0, and BRAT plus the three manual release artifacts are supported beta distribution paths. The fixed baseline-grid controller has been validated against the packaged desktop build in Obsidian 1.13.7; physical iOS and Android evidence remains required for stable promotion; see [`INSTALLATION.md`](INSTALLATION.md).
 
 ## Promotion policy
 
@@ -39,7 +39,11 @@ The CI workflow runs the same check on every pull request and push to `main`; ta
 
 - `grid.test.ts`: grid fitting, actual line-box-aware heading correction, image/outer-footprint compensation, aligned page gaps.
 - `font-metrics.test.ts`: baseline probe geometry, browser-expanded line-box measurement, document-specific caching, and the no-DOM fallback.
-- `paper-origin.test.ts`: Source/Live Preview/Reading target selection, Properties/frontmatter exclusion, zoom normalization, and measured paper phases.
+- `baseline-grid-math.test.ts`: absolute phase, fractional origins, all supported units, legal snapping, and 10,000-block drift.
+- `baseline-grid-classifier.test.ts`: Reading/Live Preview vocabulary, wrapper semantics, and one-owner composites/widgets.
+- `baseline-grid-controller.test.ts`: fixed origin, no scroll rescans, dirty observation, composite text, debug overlay, and the CodeMirror line invariant.
+- `baseline-grid-diagnostic.test.ts`: structured text/block/widget/row/blank/page failures and translated Live Preview virtual-gap exits.
+- `baseline-grid-performance.test.ts`: mixed 10,000-block scan and image dirty-pass behavior.
 - `scope.test.ts`: collision-free per-leaf renderer scope values.
 - `hide-metadata.test.ts`: exact root `templar:` YAML hiding without consuming body lines or unrelated properties.
 - `reading-whitespace.test.ts`: exact source-line gaps and fenced-code exclusion.
@@ -49,7 +53,7 @@ The CI workflow runs the same check on every pull request and push to `main`; ta
 - `builtins.test.ts`: catalog size and uniqueness, stable export/normalize round trips, pack/folder diversity, schema/CSS validity, and palette contrast.
 - `catalog-render-matrix.test.ts`: all 132 built-ins across pageless/A4/Letter, every pattern family, scope integrity, and finite compiled output without full preview renderers.
 - `css.test.ts`: functional virtual mapping, leaf scope guarantees, keyframes, malformed-string/global/resource rejection, gridded-rhythm protection, and paged media-query rules.
-- `style-compiler.test.ts`: measured paper-origin hooks, editor list/line-box normalization, Reading code padding, highlight palettes, frontmatter/CSS injection containment, fixed-page CSS, extended headings, watermark/divider/table/list/callout declarations, outer block snapping, duotone/float, and every pattern variant.
+- `style-compiler.test.ts`: fixed lattice origin, editor line-box normalization, Reading code padding, highlight palettes, frontmatter/CSS injection containment, fixed-page CSS, extended headings, watermark/divider/table/list/callout declarations, composite text correction CSS, duotone/float, and every pattern variant.
 - `template-library.test.ts`: immutable built-in/custom snapshots, IDs, duplicate/save/remove behavior, and favorites.
 - `synchronization.test.ts`: status classification, key-order-insensitive comparisons, note/source separation, page/attachment preservation, and recursive three-way merge.
 - `style-rules.test.ts`: folder/tag/filename/frontmatter AND matching, metadata readiness, priority, and page presets.
@@ -58,7 +62,7 @@ The CI workflow runs the same check on every pull request and push to `main`; ta
 - `settings.test.ts`: migration/normalization for default page flow, density, Recent, and rules.
 - `print-service.test.ts`: A4, Letter, custom, and pageless print-size selection.
 - `tests/*integration.test.ts`: happy-dom realm ownership, renderer cleanup, pop-out preview isolation, clipboard focus, frontmatter settlement, and print restoration/concurrency paths.
-- `performance.bench.ts`: repeatable renderer, catalog, vault-matching, compiler, and pagination fixtures; see [`PERFORMANCE.md`](PERFORMANCE.md).
+- `performance.bench.ts`, `baseline-grid-performance.bench.ts`, `page-renderer-performance.bench.ts`: repeatable math, mixed baseline-controller, and full-renderer fixtures; see [`PERFORMANCE.md`](PERFORMANCE.md).
 
 Pure tests deliberately avoid importing Obsidian's Electron runtime. The integration harness uses small DOM/fake-owner fixtures; it complements rather than replaces a real Obsidian smoke test.
 
@@ -66,7 +70,7 @@ Use `npm run test:coverage` for a V8 report of lines, statements, functions, and
 
 The generated bundle is intentionally ignored by source control. A local live test must run `npm run build`, then copy `main.js`, `manifest.json`, and `styles.css` into the test vault's `.obsidian/plugins/templar/` directory before reloading the plugin. If the UI appears stale, compare artifact hashes and confirm the plugin folder is the one Obsidian has enabled.
 
-The current alpha's structured BRAT E2E matrix and physical-device smoke results are pending maintainer execution. The alpha policy permits those checks to remain pending only when release notes say so; automated build, mobile-bundle, privacy, and test gates do not substitute for BRAT or physical-device evidence.
+The beta's structured BRAT E2E installation and physical-device smoke results are not available in this environment. The release note records that limitation; automated build, mobile-bundle, privacy, and test gates do not substitute for an install-from-release check or physical-device evidence.
 
 Repository-level GitHub controls are recorded in [`REPOSITORY_GOVERNANCE.md`](REPOSITORY_GOVERNANCE.md). The active `main` ruleset and classic protection both require the observed `check` CI job, pull requests, and conversation resolution while blocking force pushes and deletion. Dependabot alerts/security updates and future-release immutability are enabled; do not mutate the existing alpha release to retrofit immutability.
 
@@ -127,7 +131,7 @@ For paged mode, follow `docs/PAGED_LAYOUT.md`'s resize matrix. For per-note isol
 8. Export/import standalone templates and packs. Test valid/warning/error members, custom keep/replace/copy conflicts, built-in protection, keyboard selection, and a pack whose folder labels contain separators.
 9. Print paged A4/Letter/custom and pageless notes after late fonts/images. Inspect backgrounds, patterns, watermarks, frames, tables, callouts, code, pagination, removed gaps/shadows, and restored screen layout after cancelling print.
 10. Test multiple consecutive Markdown dividers and every divider style in strict/balanced ruled and graph templates at several units, in Reading/Live Preview and near A4/Letter boundaries. Every following block must remain on the grid.
-11. In strict and balanced ruled/graph templates, place prose after a table, Mermaid diagram, callout, note embed, and resizable media block. Compare Reading and Live Preview before and after each async renderer settles: the first following text baseline must land on the nearest non-overlapping ruled row. Add zero, one, and three explicit empty source lines after each block and confirm those rows remain visible in addition to the measured correction. Repeat once near an A4/Letter page boundary; inspect the console while resizing and require zero ResizeObserver-loop warnings. The whole `.markdown-preview-section` document root and frontmatter UI must never receive `templar-grid-snap-block`.
+11. In strict and balanced ruled/graph templates, place prose after a table, Mermaid diagram, callout, note embed, and resizable media block. Compare Reading and Live Preview before and after each async renderer settles: the first following text baseline must land on the nearest non-overlapping ruled row. Add zero, one, and three explicit empty source lines after each block and confirm those rows remain visible in addition to the measured correction. Repeat once near an A4/Letter page boundary; inspect the console while resizing and require zero ResizeObserver-loop warnings. The whole `.markdown-preview-section` document root and frontmatter UI must never receive `templar-baseline-grid-item` or `data-templar-baseline-owner`; no beta2 `templar-grid-snap-block` artifact may remain.
 12. Use a body-font sample containing `agpqy` and toggle Source Mode → Live Preview → Reading View at the same location in strict/balanced ruled and graph templates. Ordinary lowercase bottoms must meet the active rule, descenders must cross below it, and the pattern/text relationship must not jump by one row. Confirm the first Reading spacer count starts after the closing YAML delimiter, not on it. Repeat with at least two fonts, two grid units, and paged/pageless layouts.
 13. Close preview/inspector/sidebar/leaf and unload the plugin while work is pending. Confirm temporary styles, frames, observers, listeners, print CSS, and draft state are released.
 

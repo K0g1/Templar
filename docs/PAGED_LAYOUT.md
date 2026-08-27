@@ -65,7 +65,7 @@ The requested gap is adjusted upward to make this equation true:
 
 Because the page span is a grid multiple, a continuous repeating ruling has the same phase at the top of every sheet. The paper therefore follows the measured font baseline on page 2 exactly as on page 1.
 
-The compiler provides a fallback paper origin, then `PageRenderer` measures the first real rhythmic text target in each active Source, Live Preview, or Reading content root. It converts that DOM baseline into unscaled page coordinates and stores the resulting grid phase on the content root. Properties/frontmatter UI and independently snapped renderer widgets are excluded. The established document phase stays locked while Obsidian virtualizes blocks away from the beginning of the note. Pagination and paper paint therefore use the exact active adapter geometry, so ordinary glyphs rest on the rule and descenders cross below it without a one-row phase change when the view switches or a note omits Properties.
+The compiler emits a fixed paper origin from configured top padding plus the measured body baseline. `BaselineGridController` uses that absolute lattice in both active adapters; it never derives phase from the first currently attached child and never changes phase on scroll. Properties/frontmatter UI is excluded from ownership, renderer widgets are measured at their outer owner, and ordinary Live Preview lines remain CodeMirror-owned. Pagination and paper paint therefore use the same lattice, so ordinary glyphs rest on the rule and descenders cross below it without a one-row phase change when the view switches or a note omits Properties.
 
 ## Page-break fitting
 
@@ -75,7 +75,7 @@ CSS alone cannot paginate editable CodeMirror DOM vertically. `PageLayoutService
 2. Coalesce work into one animation frame.
 3. Clear prior computed break variables.
 4. Enumerate visible top-level Reading blocks or CodeMirror lines/widgets.
-5. Measure each block in unscaled page coordinates.
+5. Measure each block in unscaled page coordinates against the same absolute baseline lattice used by both view adapters.
 6. If a block would cross the printable bottom or begins in a gap, add a computed top-margin offset to the next sheet's content start.
 7. Continue sequentially so later measurements include earlier breaks.
 
@@ -125,7 +125,7 @@ With strict or balanced baseline alignment, a Markdown horizontal rule owns one 
 
 ## Variable-height block rhythm
 
-Tables, Mermaid and other rendered fenced blocks, callouts, embeds, and media retain their natural height. In strict/balanced modes, `PageRenderer` observes each direct renderer-owned Reading section or Live Preview widget and appends only the missing fraction to make its complete border-box-plus-margins footprint the next baseline multiple. It never observes the whole Reading document. Precise resize measurements and DOM writes are coalesced to an animation frame, and the previous owned tail is subtracted before recalculation so the observer cannot feed back into itself. Wrappers use an owned trailing pseudo-element; direct table/replaced elements extend their captured natural end margin. The page-layout observer sees the corrected size and schedules normal block fitting, including after an async diagram or embed changes height. Explicit blank-line rows are separate from this correction, so pagination measures and preserves them. Pageless, A4, Letter, and custom pages share the same calculation; free/disabled baseline modes skip it.
+Tables, Mermaid and other rendered fenced blocks, callouts, embeds, and media retain their natural height. In strict/balanced modes, `BaselineGridController` observes each direct renderer-owned Reading section or Live Preview widget and appends only the missing fraction to make its complete border-box-plus-margins footprint the next baseline multiple. It never observes the whole Reading document. Precise resize measurements and DOM writes are coalesced to an animation frame, and the previous owned tail is subtracted before recalculation so the observer cannot feed back into itself. Trailing rhythm is written as an explicit occupied margin; no pseudo-element is used to fake flow height. The page-layout observer sees the corrected size and schedules normal block fitting, including after an async diagram or embed changes height. Explicit blank-line rows are separate from this correction, so pagination measures and preserves them. Pageless, A4, Letter, and custom pages share the same calculation; free/disabled baseline modes skip it.
 
 ## Mobile behavior
 

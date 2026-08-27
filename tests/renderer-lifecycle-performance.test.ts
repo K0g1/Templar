@@ -10,9 +10,7 @@ vi.mock('obsidian', () => ({
 import { MarkdownView, TFile, type WorkspaceLeaf } from 'obsidian';
 import { PageRenderer } from '../src/services/page-renderer';
 import { DEFAULT_SETTINGS } from '../src/templates/defaults';
-import { ImageSnapController } from '../src/services/rendering/image-snap-controller';
-import { PaperOriginController } from '../src/services/rendering/paper-origin-controller';
-import { VariableBlockRhythmController } from '../src/services/rendering/variable-block-rhythm-controller';
+import { BaselineGridController } from '../src/services/rendering/baseline-grid/controller';
 import { OwnedStyleHost } from '../src/services/rendering/style-host';
 import { BUILT_IN_TEMPLATES } from '../src/templates/builtins';
 import { templateToNoteStyle } from '../src/templates/note-format';
@@ -108,9 +106,12 @@ describe('renderer lifecycle invariants', () => {
     const page = harness.window.document.createElement('div');
     page.className = 'templar-page';
     const pageContent = harness.window.document.createElement('div');
-    pageContent.className = 'templar-page-content';
-    pageContent.append(harness.window.document.createElement('img'));
-    pageContent.append(harness.window.document.createElement('table'));
+    pageContent.className = 'templar-page-content markdown-preview-sizer';
+    const section = harness.window.document.createElement('div');
+    section.className = 'markdown-preview-section';
+    section.append(harness.window.document.createElement('img'));
+    section.append(harness.window.document.createElement('table'));
+    pageContent.append(section);
     page.append(pageContent);
     content.append(page);
     harness.window.document.body.append(content);
@@ -119,22 +120,17 @@ describe('renderer lifecycle invariants', () => {
     style.baseline.mode = 'balanced';
     style.baseline.snapImages = true;
     const metric = { baseline: 14, ascent: 11, descent: 4, lineHeight: 24, measuredAt: 0 };
-    const metrics = { body: metric, h1: metric, h2: metric, h3: metric, h4: metric, h5: metric, h6: metric, code: metric };
     const leaf = {} as WorkspaceLeaf;
-    const image = new ImageSnapController();
-    const paper = new PaperOriginController();
-    const rhythm = new VariableBlockRhythmController();
-    image.configure(leaf, content, style);
-    paper.configure(leaf, content, style, metrics);
-    rhythm.configure(leaf, content, style);
-    image.configure(leaf, content, style);
-    paper.configure(leaf, content, style, metrics);
-    rhythm.configure(leaf, content, style);
-    expect(harness.resizeInstances).toHaveLength(6);
-    expect(harness.resizeInstances.slice(0, 3).every((instance) => instance.disconnects > 0)).toBe(true);
-    image.destroy();
-    paper.destroy();
-    rhythm.destroy();
+    const controller = new BaselineGridController();
+    controller.configure(leaf, { contentEl: content, style, metrics: {
+      body: metric, h1: metric, h2: metric, h3: metric, h4: metric, h5: metric, h6: metric, code: metric,
+    } });
+    controller.configure(leaf, { contentEl: content, style, metrics: {
+      body: metric, h1: metric, h2: metric, h3: metric, h4: metric, h5: metric, h6: metric, code: metric,
+    } });
+    expect(harness.resizeInstances).toHaveLength(2);
+    expect(harness.resizeInstances[0]?.disconnects).toBe(1);
+    controller.destroy();
     expect(harness.resizeInstances.every((instance) => instance.disconnects > 0)).toBe(true);
     expect(harness.mutationInstances.every((instance) => instance.disconnects > 0)).toBe(true);
 
