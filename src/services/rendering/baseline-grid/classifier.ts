@@ -15,7 +15,31 @@ const READING_BLOCK_SELECTOR = [
   'figure', 'details', 'iframe', 'object', 'video', 'audio', 'canvas', 'img', '.inline-title',
 ].join(',');
 
+const READING_ATOMIC_SELECTOR = [
+  '.internal-embed', '.file-embed', '.markdown-embed', '.mermaid',
+  '[class*="block-language-"]', '.math-block', 'figure', 'details',
+  'iframe', 'object', 'video', 'audio', 'canvas', 'img',
+].join(',');
+
+/**
+ * Obsidian 1.13+ commonly wraps a rendered Markdown block in an `el-*`
+ * section element.  The wrapper is the layout owner; its first rendered
+ * Markdown descendant supplies the semantic kind and baseline target.
+ */
+function readingSemanticElement(element: HTMLElement): HTMLElement | null {
+  if (element.matches(READING_BLOCK_SELECTOR)) return element;
+  // An embed can be wrapped by an `el-p`/`el-div` container whose first
+  // descendant is a paragraph, title, or rendered property.  The wrapper is
+  // still the flow owner, but the embed must own its height and must not be
+  // measured as ordinary text.  Prefer the atomic descendant before falling
+  // back to the first semantic Markdown block.
+  const atomic = element.querySelector<HTMLElement>(READING_ATOMIC_SELECTOR);
+  if (atomic) return atomic;
+  return element.querySelector<HTMLElement>(READING_BLOCK_SELECTOR);
+}
+
 const EDITOR_WIDGET_SELECTOR = [
+  '.cm-gap',
   '.cm-table-widget', '.cm-embed-block', '.cm-callout', '.cm-math-block',
   '.cm-image-widget', '.cm-rendered-markdown', '.mermaid', '[class*="block-language-"]',
 ].join(',');
@@ -39,8 +63,10 @@ export function classifyFlowElement(element: HTMLElement, view: BaselineView): R
   if (isNonRhythmicUi(element)) return 'non-rhythmic-ui';
 
   if (view === 'live-preview' || element.hasClass('cm-line')) {
+    if (element.hasClass('cm-gap')) return 'editor-widget';
     if (element.hasClass('cm-line')) {
       if (element.hasClass('HyperMD-frontmatter')) return null;
+      if (element.hasClass('HyperMD-hr')) return 'divider';
       if (element.hasClass('HyperMD-header-1') || element.hasClass('HyperMD-header-2') ||
         element.hasClass('HyperMD-header-3') || element.hasClass('HyperMD-header-4') ||
         element.hasClass('HyperMD-header-5') || element.hasClass('HyperMD-header-6')) return 'heading';
@@ -56,16 +82,25 @@ export function classifyFlowElement(element: HTMLElement, view: BaselineView): R
     return null;
   }
 
-  if (!element.matches(READING_BLOCK_SELECTOR)) return null;
-  if (element.matches('h1, h2, h3, h4, h5, h6, .inline-title')) return 'heading';
-  if (element.matches('ul, ol')) return 'list';
-  if (element.matches('pre')) return 'code';
-  if (element.matches('table, .callout')) return 'composite';
-  if (element.matches('img')) return 'image';
-  if (element.matches('.mermaid, [class*="block-language-"], .math-block, .internal-embed, .file-embed, .markdown-embed, figure, details, iframe, object, video, audio, canvas')) {
+  const semantic = readingSemanticElement(element);
+  if (!semantic) return null;
+  if (semantic.matches('h1, h2, h3, h4, h5, h6, .inline-title')) return 'heading';
+  if (semantic.matches('ul, ol')) return 'list';
+  if (semantic.matches('pre')) return 'code';
+  if (semantic.matches('blockquote')) return 'composite';
+  if (semantic.matches('table, .callout')) return 'composite';
+  if (semantic.matches('img')) return 'image';
+  if (semantic.matches('hr')) return 'divider';
+  if (semantic.matches('.mermaid, [class*="block-language-"], .math-block, .internal-embed, .file-embed, .markdown-embed, figure, details, iframe, object, video, audio, canvas')) {
     return 'atomic';
   }
   return 'text';
+}
+
+/** Returns the rendered Markdown element represented by a flow owner. */
+export function flowTarget(element: HTMLElement, view: BaselineView): HTMLElement {
+  if (view !== 'reading') return element;
+  return readingSemanticElement(element) ?? element;
 }
 
 function readingSection(pageContent: HTMLElement): HTMLElement | null {
@@ -134,7 +169,7 @@ export function flowOwner(element: HTMLElement, view: BaselineView): HTMLElement
 }
 
 export function isAtomicKind(kind: RhythmKind): boolean {
-  return kind === 'atomic' || kind === 'image' || kind === 'editor-widget' || kind === 'composite';
+  return kind === 'atomic' || kind === 'image' || kind === 'divider' || kind === 'editor-widget' || kind === 'composite';
 }
 
 export function isTextKind(kind: RhythmKind): boolean {
@@ -144,3 +179,4 @@ export function isTextKind(kind: RhythmKind): boolean {
 export const BASELINE_GRID_ITEM_CLASS = 'templar-baseline-grid-item';
 export const BASELINE_GRID_ATOMIC_CLASS = 'templar-baseline-grid-atomic';
 export const BASELINE_GRID_INTENTIONAL_CLASS = 'templar-baseline-grid-intentional';
+export const BASELINE_GRID_LIST_ITEM_CLASS = 'templar-baseline-grid-list-item';

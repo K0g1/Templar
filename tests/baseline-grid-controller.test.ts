@@ -71,6 +71,37 @@ function styledRoot(owner: Window): { root: HTMLElement; content: HTMLElement; p
   return { root, content, paragraph, image };
 }
 
+function rect(top: number, height: number, width = 800): DOMRect {
+  return { top, bottom: top + height, left: 0, right: width, width, height, x: 0, y: top, toJSON: () => ({}) };
+}
+
+function setRect(element: HTMLElement, value: DOMRect): void {
+  Object.defineProperty(element, 'getBoundingClientRect', { configurable: true, value: () => value });
+  Object.defineProperty(element, 'offsetWidth', { configurable: true, value: value.width });
+  Object.defineProperty(element, 'offsetHeight', { configurable: true, value: value.height });
+}
+
+function liveRoot(owner: Window): { root: HTMLElement; content: HTMLElement; line: HTMLElement; widget: HTMLElement } {
+  const root = owner.document.createElement('div');
+  root.className = 'templar-page';
+  const content = owner.document.createElement('div');
+  content.className = 'templar-page-content cm-sizer';
+  content.setCssProps({ '--templar-grid-origin': '81px', '--templar-page-span': '1170px' });
+  const editor = owner.document.createElement('div');
+  editor.className = 'cm-content';
+  const line = owner.document.createElement('div');
+  line.className = 'cm-line HyperMD-paragraph';
+  line.textContent = 'Live line';
+  const widget = owner.document.createElement('div');
+  widget.className = 'cm-table-widget';
+  widget.textContent = 'Rendered table widget';
+  editor.append(line, widget);
+  content.append(editor);
+  root.append(content);
+  owner.document.body.append(root);
+  return { root, content, line, widget };
+}
+
 function testStyle() {
   const style = templateToNoteStyle(BUILT_IN_TEMPLATES[0]!);
   style.baseline.enabled = true;
@@ -97,6 +128,18 @@ describe('BaselineGridController', () => {
     expect(controller.stats(leaf)).toEqual(before);
     expect(dom.content.style.getPropertyValue('--templar-grid-origin')).toBe('81px');
     expect(dom.content.style.getPropertyValue('--templar-paper-baseline-position')).toBe('');
+    controller.destroy();
+  });
+
+  it('handles Obsidian sizers that also carry the preview-section class', () => {
+    const owner = harness();
+    const dom = styledRoot(owner.window);
+    dom.content.addClass('markdown-preview-section');
+    const controller = new BaselineGridController();
+    const leaf = {} as WorkspaceLeaf;
+    controller.configure(leaf, { contentEl: dom.root, style: testStyle(), metrics: testMetrics() });
+    expect(controller.stats(leaf)!.nodesMeasured).toBeGreaterThan(0);
+    expect(dom.paragraph.hasClass('templar-baseline-grid-item')).toBe(true);
     controller.destroy();
   });
 
@@ -137,10 +180,126 @@ describe('BaselineGridController', () => {
     expect(dom.content.querySelectorAll('.templar-baseline-debug-overlay')).toHaveLength(1);
     const overlay = dom.content.querySelector<SVGElement>('.templar-baseline-debug-overlay')!;
     expect(overlay.dataset.templarOwned).toBe('true');
+    expect(overlay.querySelectorAll('text').length).toBeGreaterThan(0);
+    expect(overlay.getAttribute('aria-hidden')).toBe('true');
     expect(controller.toggleDebugOverlay(leaf)).toBe(false);
     expect(dom.content.querySelectorAll('.templar-baseline-debug-overlay')).toHaveLength(0);
     controller.destroy();
     expect(owner.resize.disconnects).toBe(1);
     expect(owner.mutation.disconnects).toBe(1);
+  });
+
+  it('ignores its own debug-layer mutations but schedules real flow mutations', () => {
+    const owner = harness();
+    const dom = styledRoot(owner.window);
+    const controller = new BaselineGridController();
+    const leaf = {} as WorkspaceLeaf;
+    controller.configure(leaf, { contentEl: dom.root, style: testStyle(), metrics: testMetrics() });
+    controller.toggleDebugOverlay(leaf);
+    const overlay = dom.content.querySelector<SVGElement>('.templar-baseline-debug-overlay')!;
+    owner.mutation.callback([{
+      type: 'childList',
+      target: overlay,
+      addedNodes: [],
+      removedNodes: [],
+    } as unknown as MutationRecord], {} as MutationObserver);
+    expect(owner.frames).toHaveLength(0);
+    owner.mutation.callback([{
+      type: 'childList',
+      target: dom.content,
+      addedNodes: [owner.window.document.createElement('p')],
+      removedNodes: [],
+    } as unknown as MutationRecord], {} as MutationObserver);
+    expect(owner.frames).toHaveLength(1);
+    controller.destroy();
+  });
+
+  it('keeps CodeMirror line boxes untouched while giving editor widgets an exit tail', () => {
+    const owner = harness();
+    const dom = liveRoot(owner.window);
+    const controller = new BaselineGridController();
+    const leaf = {} as WorkspaceLeaf;
+    controller.configure(leaf, { contentEl: dom.root, style: testStyle(), metrics: testMetrics() });
+    expect(dom.line.hasClass('templar-baseline-grid-item')).toBe(false);
+    expect(dom.line.style.getPropertyValue('--templar-grid-before')).toBe('');
+    expect(dom.line.style.getPropertyValue('--templar-grid-after')).toBe('');
+    expect(dom.line.style.getPropertyValue('margin-block-end')).toBe('');
+    expect(dom.widget.hasClass('templar-baseline-grid-atomic')).toBe(true);
+    expect(dom.widget.style.getPropertyValue('--templar-grid-after')).not.toBe('');
+    controller.destroy();
+    expect(dom.line.hasClass('templar-baseline-grid-item')).toBe(false);
+    expect(dom.widget.style.getPropertyValue('--templar-grid-after')).toBe('');
+  });
+
+  it('corrects fractional text inside a Reading composite without changing its flow footprint', () => {
+    const owner = harness();
+    const dom = styledRoot(owner.window);
+    const section = dom.content.querySelector<HTMLElement>('.markdown-preview-section')!;
+    dom.paragraph.remove();
+    dom.image.remove();
+    const wrapper = owner.window.document.createElement('div');
+    wrapper.className = 'el-blockquote';
+    const blockquote = owner.window.document.createElement('blockquote');
+    const quoted = owner.window.document.createElement('p');
+    quoted.textContent = 'Formatted **quoted** text';
+    const fractional = owner.window.document.createElement('p');
+    fractional.textContent = 'A second paragraph with fractional geometry.';
+    blockquote.append(quoted, fractional);
+    wrapper.append(blockquote);
+    section.append(wrapper);
+
+    setRect(dom.root, rect(0, 600));
+    setRect(dom.content, rect(0, 600));
+    setRect(section, rect(0, 600));
+    Object.defineProperty(wrapper, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => {
+        const before = Number.parseFloat(wrapper.style.getPropertyValue('--templar-grid-before')) || 0;
+        return rect(120 + before, 60);
+      },
+    });
+    Object.defineProperty(wrapper, 'offsetWidth', { configurable: true, value: 800 });
+    Object.defineProperty(wrapper, 'offsetHeight', { configurable: true, value: 60 });
+    Object.defineProperty(blockquote, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => {
+        const before = Number.parseFloat(wrapper.style.getPropertyValue('--templar-grid-before')) || 0;
+        return rect(120 + before, 60);
+      },
+    });
+    Object.defineProperty(blockquote, 'offsetWidth', { configurable: true, value: 800 });
+    Object.defineProperty(blockquote, 'offsetHeight', { configurable: true, value: 60 });
+    Object.defineProperty(quoted, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => {
+        const before = Number.parseFloat(wrapper.style.getPropertyValue('--templar-grid-before')) || 0;
+        const shift = Number.parseFloat(quoted.style.getPropertyValue('--templar-grid-composite-text-shift')) || 0;
+        return rect(150 + before + shift, 29);
+      },
+    });
+    Object.defineProperty(quoted, 'offsetWidth', { configurable: true, value: 800 });
+    Object.defineProperty(quoted, 'offsetHeight', { configurable: true, value: 29 });
+    Object.defineProperty(fractional, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => {
+        const before = Number.parseFloat(wrapper.style.getPropertyValue('--templar-grid-before')) || 0;
+        const shift = Number.parseFloat(fractional.style.getPropertyValue('--templar-grid-composite-text-shift')) || 0;
+        return rect(181 + before + shift, 29);
+      },
+    });
+    Object.defineProperty(fractional, 'offsetWidth', { configurable: true, value: 800 });
+    Object.defineProperty(fractional, 'offsetHeight', { configurable: true, value: 29 });
+
+    const controller = new BaselineGridController();
+    const leaf = {} as WorkspaceLeaf;
+    controller.configure(leaf, { contentEl: dom.root, style: testStyle(), metrics: testMetrics() });
+
+    expect(quoted.hasClass('templar-baseline-grid-composite-text')).toBe(true);
+    expect(quoted.style.getPropertyValue('--templar-grid-composite-text-shift')).toBe('0px');
+    expect(fractional.style.getPropertyValue('--templar-grid-composite-text-shift')).toBe('-1px');
+    expect(controller.stats(leaf)!.nonConvergedElements).toEqual([]);
+    expect(wrapper.style.getPropertyValue('--templar-grid-after')).not.toBe('');
+    controller.destroy();
+    expect(quoted.style.getPropertyValue('--templar-grid-composite-text-shift')).toBe('');
   });
 });

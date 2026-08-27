@@ -12,6 +12,7 @@ export type RhythmKind =
   | 'composite'
   | 'atomic'
   | 'image'
+  | 'divider'
   | 'editor-line'
   | 'editor-widget'
   | 'blank-space'

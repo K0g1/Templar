@@ -8,7 +8,7 @@ This is the current implementation reference for Templar. It is deliberately mor
 | --- | --- |
 | Product | Templar, an Obsidian plugin that gives each Markdown note a portable visual page style |
 | Repository | [`K0g1/Templar`](https://github.com/K0g1/Templar) |
-| Current release | `1.2.0-beta.2` (published corrective beta compatibility target) |
+| Current release | `1.2.0-beta.3` (published corrective beta compatibility target) |
 | Minimum Obsidian version | `1.8.0` |
 | Runtime target | Browser APIs only; `isDesktopOnly: false` |
 | Installation channel | BRAT and manual release artifacts supported for beta testing; not listed in Community Plugins yet |
@@ -17,7 +17,7 @@ This is the current implementation reference for Templar. It is deliberately mor
 | Template format | Version 1 (`templar-template` exports and `templar` note frontmatter) |
 | Test status at this snapshot | Run `npm test` for the current pure plus targeted DOM integration count; `npm run check` and `npm run verify:ship -- <version>` are the required gates |
 
-`1.2.0-beta.2` preserves the remediation compatibility contracts from beta.1 and adds cross-view ruled-line alignment for text, editor lines, and variable-height rendered blocks, plus an active-note alignment diagnostic. It retains the v1 note/template schema and never repoints earlier immutable tags. The release note is [`releases/1.2.0-beta.2.md`](releases/1.2.0-beta.2.md).
+`1.2.0-beta.3` preserves the v1 note/template schema and the earlier remediation contracts, then replaces child-following paper reconciliation with one fixed absolute baseline lattice. Reading and Live Preview use one controller with explicit ownership, settled diagnostics, composite-text/list handling, widget-only Live Preview corrections, and a pointer-free SVG debug overlay. The release note is [`releases/1.2.0-beta.3.md`](releases/1.2.0-beta.3.md); [`releases/1.2.0-beta.2.md`](releases/1.2.0-beta.2.md) remains historical.
 
 ### Source-of-truth rules
 
@@ -199,7 +199,7 @@ note metadata
   → FontMetricsService measurements
   → compilePageStyle (structured CSS + validated custom CSS)
   → scoped style element in that Markdown leaf
-  → image/variable-block rhythm compensation and, for paged notes, PageLayoutService
+  → BaselineGridController ownership/correction and, for paged notes, PageLayoutService
 ```
 
 ### Startup and events
@@ -217,13 +217,13 @@ The event responsibilities are:
 | Vault create/rename/delete | Evaluate eligible rules or update/remove/transfer one index/frontmatter path. |
 | Plugin unload/leaf cleanup | Disconnect observers, cancel frames, remove owned style/scale/break properties, and prune Reading-root section state. |
 
-`PageRenderer` owns per-leaf generation tokens, persistent/temporary style selection, style elements, image and variable-block observers, page-layout services, and Reading-root registries. Generation tokens prevent late font measurements from overwriting a newer render. Preview state belongs to a leaf and owner, never a file, so a second pane remains persistent. Reading sections are recorded during the post-processor, compacted when Obsidian marks them stale, and spacers are inserted synchronously inside their owning section so the virtual scroller retains them. Variable-height tables, rendered code/Mermaid blocks, callouts, embeds, and media are measured at their outer layout owner and receive only the trailing fraction required to reach the next grid row; blank-line spacers remain independent and follow that correction.
+`PageRenderer` owns per-leaf generation tokens, persistent/temporary style selection, style elements, the `BaselineGridController`, page-layout services, and Reading-root registries. Generation tokens prevent late font measurements from overwriting a newer render. Preview state belongs to a leaf and owner, never a file, so a second pane remains persistent. Reading sections are recorded during the post-processor, compacted when Obsidian marks them stale, and spacers are inserted synchronously inside their owning section so the virtual scroller retains them. `BaselineGridController` classifies one top-level owner per flow item, measures first baselines and occupied tails, writes absolute corrections in a second pass, and observes only Reading owners plus Live Preview widgets/virtual gaps; ordinary `.cm-line` elements remain CodeMirror-owned. Variable-height tables, rendered code/Mermaid blocks, callouts, embeds, and media receive only the trailing fraction required to reach the next grid row; blank-line spacers remain independent and follow that correction.
 
 ### CSS and view isolation
 
 Each styled Markdown leaf receives a collision-free runtime scope token and plugin-owned `.templar-page`/`.templar-page-content` classes. Scope identity belongs to the leaf rather than its file path, so two panes showing one file cannot share preview CSS. The generated style element is owned by that leaf. Structured CSS and imported CSS never target global workspace elements. Live Preview selectors are expanded from the public virtual vocabulary, including selectors nested in functional pseudos; Obsidian's internal classes are adapters, not a template authoring contract.
 
-CodeMirror owns editor line measurement and pointer hit-testing. Templar's adapter keeps every direct `.cm-line` margin-free and places heading space inside a `border-box` with padding. Reading blocks retain their configured margins. Do not consolidate those view-specific rules into a shared selector: vertical margins on editor lines produce a visible caret/click offset because they are outside CodeMirror's measured line box.
+CodeMirror owns editor line measurement and pointer hit-testing. Templar's adapter keeps every direct `.cm-line` free of controller-owned classes and vertical margins; only rendered widgets and virtual gaps receive dynamic tails. Reading blocks retain their configured margins, while fractional list and composite text line boxes can receive a position-relative visual shift that does not change flow height. Do not consolidate those view-specific rules into a shared selector: vertical margins on editor lines produce a visible caret/click offset because they are outside CodeMirror's measured line box.
 
 Paper and watermark pseudo-elements use negative z-indices inside the isolated content stacking context. This is the key invariant behind the alpha.3 fix: the pattern is below Markdown content but is not hidden behind the page's opaque background.
 
@@ -233,7 +233,7 @@ Paper compilation builds parallel arrays for images, sizes, positions, and repea
 
 The Reading post-processor derives exact source blank-line runs from current section ranges, ignoring blank lines inside fenced code. It creates owned grid-sized spacer elements synchronously and places them inside the following section. For the first section, Obsidian's `frontmatterPosition.end.line` identifies the closing YAML delimiter, so the body origin is `end.line + 1` (or line zero when YAML is absent). This preserves leading body returns without rendering hidden frontmatter or inventing an extra row. A deferred reconciliation pass handles style changes and cached Reading views. Reading-root registries are keyed by both DOM root and current file path because Obsidian reuses roots across note switches; changing files clears the prior context and section ownership. Cached metadata section mappings are sufficient for deferred inter-section reconciliation when Obsidian skips post-processors. If both adjacent sections remain rendered while source whitespace changes, the new gap converges when either section is rendered again; this is an Obsidian measurement limitation, not a body rewrite.
 
-`FontMetricsService` waits for available fonts, measures body/H1–H6/code baselines and actual browser-expanded line boxes, and stores a bounded document-specific cache. `PageRenderer` then measures the first real rhythmic text target in each Source, Live Preview, or Reading content root and assigns that target's alphabetic baseline as the repeating paper origin. Properties/frontmatter UI is excluded, and the established origin is retained while Obsidian virtualizes content away from the document start. All three adapters therefore place the alphabetic baseline on the apparent ruling while descenders extend below it without a template-specific phase constant. Strict/balanced grid helpers keep block offsets on whole grid rows; code, headings, lists, images, and measured variable-height renderer outputs receive whole-grid corrections. Image and variable-block measurements include external margins, subtract any previous owned tail, and are animation-frame coalesced; each Reading section wrapper or Live Preview widget owns its correction, never the whole document. See [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md) for the separate fixed-canvas algorithm.
+`FontMetricsService` waits for available fonts, measures body/H1–H6/code baselines and actual browser-expanded line boxes, and stores a bounded document-specific cache. The compiler emits the fixed grid origin from page padding plus measured body baseline; `BaselineGridController` never derives phase from the first currently attached child and never uses scroll position. Reading and Live Preview use separate adapters against that same lattice, with two-pass measure/write settling and structured failure reporting. Properties/frontmatter UI is excluded, outer composite owners are unique, inner composite text is checked, and ordinary Live Preview `.cm-line` DOM is never dynamically decorated. Strict/balanced grid helpers keep block offsets on whole grid rows; code, headings, lists, images, and measured variable-height renderer outputs receive whole-grid corrections. See [`PAGED_LAYOUT.md`](PAGED_LAYOUT.md) for the fixed-canvas algorithm.
 
 Strict/balanced horizontal rules are compiled as exactly one unit in both view adapters, with zero theme margins and a centered stroke. Print preparation temporarily switches the exact leaf to Reading View, forces the current renderer generation, waits for fonts, image decode, mutation/resize quiet and page fitting, then invokes the host print action under a busy lock. Cleanup restores the original view state and removes all temporary print ownership on success, cancellation, failure, or service destruction.
 
@@ -278,10 +278,14 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 | `src/services/style-compiler.ts` / `src/services/style-compiler/` | Stable compiler barrel and ordered pure structured compiler fragments for paper, typography, headings, lists, blocks, images, attachments, page, and watermark. |
 | `src/services/css-validator.ts` | AST validation for custom CSS selectors, at-rules, values, geometry, resources, and performance hazards. |
 | `src/services/css-compiler.ts` | Virtual-selector expansion, per-leaf scope replacement, and keyframe namespacing. |
-| `src/services/page-renderer.ts` / `src/services/rendering/` | Leaf orchestration plus focused style-host, realm, observer, paper-origin, whitespace, and compensation ownership primitives. |
+| `src/services/page-renderer.ts` / `src/services/rendering/` | Leaf orchestration plus focused style-host, DOM-realm, whitespace, page-layout, and fixed baseline-grid ownership primitives. |
 | `src/services/page-layout.ts` | Paged scale, geometry detection, rendered-block fitting, observers, and page-break cleanup. |
 | `src/services/font-metrics.ts` | Browser font loading, baseline probes, Canvas diagnostics, and bounded LRU measurements. |
-| `src/services/paper-origin.ts` | Pure Source/Live Preview/Reading rhythm-target selection and measured paper-origin calculation. |
+| `src/services/baseline-diagnostic.ts` | Structured alignment report, ownership/blank/page checks, stable command formatting, and clipboard serialization. |
+| `src/services/rendering/baseline-grid/math.ts` | Pure absolute-phase lattice math, legal non-overlap snapping, and exit-tail calculations. |
+| `src/services/rendering/baseline-grid/classifier.ts` | Reading/Live Preview flow vocabulary, semantic target resolution, and one-owner collection. |
+| `src/services/rendering/baseline-grid/controller.ts` | Fixed-lattice controller, two-pass measurements/writes, observer filtering, widget/list/composite corrections, debug overlay, and cleanup. |
+| `src/services/rendering/baseline-grid/types.ts` | Baseline-grid views, flow kinds, measurements, corrections, diagnostics, and controller stats. |
 | `src/services/reading-whitespace.ts` | Pure blank-line parsing and spacer construction helpers. |
 
 ### UI and editor
@@ -300,17 +304,17 @@ Strict/balanced horizontal rules are compiled as exactly one unit in both view a
 
 | Path | Responsibility |
 | --- | --- |
-| `src/utils/grid.ts` | Grid fitting, heading/image/variable-block correction, page-gap alignment, and geometry scale helpers. |
+| `src/utils/grid.ts` | Grid fitting, heading/image/variable-height correction, fixed page-gap alignment, and geometry scale helpers. |
 | `src/utils/scope.ts` | Collision-free runtime leaf scope values for renderer CSS isolation. |
 | `src/utils/value.ts` | Safe unknown-value coercion, enum/array handling, cloning, slugification, CSS attribute escaping, and rounding. |
 | `src/utils/clipboard.ts` | Browser/mobile-safe clipboard write with a selection fallback and owner-document focus restoration. |
 | `src/services/settings-store.ts` | Serialized settings transactions; publish only after durable persistence succeeds. |
 | `src/services/style-application.ts` | Single note-application contract for frontmatter, recents, usage index, batch results, and renderer refresh. |
 | `src/services/dom-realm.ts` | Derives DOM constructors, timers, and windows from the target leaf. |
-| `src/services/rendering/` | Focused renderer ownership primitives and compatibility re-exports for stylesheet, observer, whitespace, and paper-origin concerns. |
+| `src/services/rendering/` | Focused renderer ownership primitives for stylesheet, DOM realm, whitespace, page layout, and baseline-grid correction. |
 | `src/services/style-compiler/` | Structured compiler entry point plus pure fragment modules; `src/services/style-compiler.ts` remains a stable barrel. |
 | `tests/*integration.test.ts` | happy-dom/fake-owner lifecycle coverage; these tests are not a substitute for a real Obsidian smoke test. |
-| `tests/performance.bench.ts`, `tests/renderer-performance.bench.ts`, `tests/page-renderer-performance.bench.ts` | Pure, controller, and full-renderer workload fixtures; run with `npm run bench`. |
+| `tests/performance.bench.ts`, `tests/baseline-grid-performance.bench.ts`, `tests/page-renderer-performance.bench.ts` | Pure, mixed baseline-controller, and full-renderer workload fixtures; run with `npm run bench`. |
 | `tests/*.test.ts` | Pure schema/catalog/CSS/compiler/grid/font/whitespace plus synchronization, rules, index, settings, packs, and print regression suites. |
 | `scripts/verify-mobile-bundle.mjs` | Scans generated `main.js` for Node/Electron imports and runtime globals. |
 | `scripts/verify-release.mjs` | Confirms a release tag, package/manifest/lockfile/versions metadata, and matching release-notes file agree. |
@@ -367,10 +371,10 @@ npm test                    # pure plus targeted DOM integration tests
 npm run test:coverage       # V8 lines/statements/functions/branches report
 npm run build               # runtime tsc, production browser bundle, mobile/privacy guards
 npm run check               # lint + test-inclusive tsc + test + build + BRAT verifier
-npm run verify:ship -- 1.2.0-beta.2
+npm run verify:ship -- 1.2.0-beta.3
 npm run verify:mobile       # scan the generated main.js directly
-npm run verify:release -- 1.2.0-beta.2
-npm run verify:brat -- 1.2.0-beta.2
+npm run verify:release -- 1.2.0-beta.3
+npm run verify:brat -- 1.2.0-beta.3
 git diff --check
 ```
 

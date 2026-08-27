@@ -1,7 +1,7 @@
 import type { WorkspaceLeaf } from 'obsidian';
 import type { FontMetrics, TemplarNoteStyle } from '../../../types';
 import { TEMPLAR_CONTENT_CLASS } from '../../../constants';
-import { measuredGeometryScale } from '../../../utils/grid';
+import { alignedPageGap, measuredGeometryScale } from '../../../utils/grid';
 import { round } from '../../../utils/value';
 import type { PageMetricSet } from '../../style-compiler';
 import { realmFor, type DomRealm } from '../../dom-realm';
@@ -9,7 +9,9 @@ import {
   BASELINE_GRID_ATOMIC_CLASS,
   BASELINE_GRID_INTENTIONAL_CLASS,
   BASELINE_GRID_ITEM_CLASS,
+  BASELINE_GRID_LIST_ITEM_CLASS,
   collectFlowItems,
+  flowTarget,
   isAtomicKind,
   isTextKind,
   classifyFlowElement,
@@ -17,7 +19,9 @@ import {
 import {
   distanceToGrid,
   exitTailToGrid,
+  nearestGridDelta,
   nearestLegalGridDelta,
+  nextGridDelta,
   type GridLattice,
 } from './math';
 import type {
@@ -34,13 +38,31 @@ const BASELINE_BEFORE_PROPERTY = '--templar-grid-before';
 const BASELINE_AFTER_PROPERTY = '--templar-grid-after';
 const NATURAL_MARGIN_BEFORE_PROPERTY = '--templar-grid-natural-margin-before';
 const NATURAL_MARGIN_AFTER_PROPERTY = '--templar-grid-natural-margin-after';
+const LIST_SHIFT_PROPERTY = '--templar-grid-list-shift';
+const PREFIX_SHIFT_PROPERTY = '--templar-grid-prefix-shift';
+const PREFIX_NATURAL_MARGIN_PROPERTY = '--templar-grid-prefix-natural-margin-end';
+const PREFIX_CLASS = 'templar-baseline-grid-prefix';
+const COMPOSITE_TEXT_SHIFT_PROPERTY = '--templar-grid-composite-text-shift';
+const COMPOSITE_TEXT_CLASS = 'templar-baseline-grid-composite-text';
 const OWNER_PROPERTY = 'data-templar-baseline-owner';
 const DEFAULT_TOLERANCE = 0.4;
+const CORRECTION_STABILITY_EPSILON = 0.02;
 const MAX_SETTLE_PASSES = 8;
+
+const COMPOSITE_TEXT_SELECTOR = [
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'pre > code', '.callout-title', 'th', 'td',
+].join(',');
+
+const RENDERER_ATOMIC_SELECTOR = [
+  '.internal-embed', '.file-embed', '.markdown-embed', '.mermaid',
+  '[class*="block-language-"]', '.math-block', 'figure', 'details',
+  'iframe', 'object', 'video', 'audio', 'canvas', 'img',
+].join(',');
 
 interface RootRuntime extends BaselineGridRootState {
   geometryScale: number;
   parent: HTMLElement;
+  prefixElement: HTMLElement | null;
 }
 
 interface ObservationState {
@@ -57,6 +79,7 @@ interface ObservationState {
   mutationObserver: MutationObserver;
   resizeObserver: ResizeObserver;
   observedTargets: Set<HTMLElement>;
+  observedSizes: Map<HTMLElement, { width: number; height: number }>;
   stats: BaselineGridStats;
   view: Window;
 }
@@ -91,23 +114,53 @@ function metricForElement(element: HTMLElement, metrics: PageMetricSet): FontMet
   return metrics.body;
 }
 
-function firstBaselineTarget(element: HTMLElement, kind: RhythmKind): HTMLElement | null {
-  if (kind === 'heading' || kind === 'text' || kind === 'code' || kind === 'editor-line') {
-    return element;
+function firstBaselineTarget(element: HTMLElement, kind: RhythmKind, view: BaselineView): HTMLElement | null {
+  const semantic = flowTarget(element, view);
+  if (kind === 'heading' || kind === 'editor-line') {
+    return semantic;
+  }
+  if (kind === 'text') {
+    if (semantic.matches('blockquote')) {
+      return semantic.querySelector<HTMLElement>('p, li, pre, code') ?? semantic;
+    }
+    return semantic;
+  }
+  if (kind === 'code') {
+    return semantic.matches('pre')
+      ? semantic.querySelector<HTMLElement>(':scope > code') ?? semantic
+      : semantic;
   }
   if (kind === 'list') {
-    return element.querySelector<HTMLElement>(':scope > li, :scope li');
+    return semantic.querySelector<HTMLElement>(':scope > li, :scope li');
   }
   if (kind === 'composite') {
-    if (element.matches('table')) return element.querySelector<HTMLElement>('th, td');
-    if (element.matches('.callout')) {
-      return element.querySelector<HTMLElement>('.callout-title, .callout-content p, .callout-content li, .callout-content code');
+    if (semantic.matches('table')) return semantic.querySelector<HTMLElement>('th, td');
+    if (semantic.matches('blockquote')) {
+      return semantic.querySelector<HTMLElement>('p, li, pre, code') ?? semantic;
+    }
+    if (semantic.matches('.callout')) {
+      return semantic.querySelector<HTMLElement>('.callout-title, .callout-content p, .callout-content li, .callout-content code');
     }
   }
   if (kind === 'editor-widget') {
-    return element.querySelector<HTMLElement>('.cm-line, p, td, th, .callout-title');
+    return semantic.querySelector<HTMLElement>('.cm-line, p, td, th, .callout-title');
   }
   return null;
+}
+
+function compositeTextTargets(semantic: HTMLElement): HTMLElement[] {
+  return [...semantic.querySelectorAll<HTMLElement>(COMPOSITE_TEXT_SELECTOR)].filter((target) => {
+    // A list item's visual line is corrected as a unit, including its marker;
+    // shifting the nested paragraph as well would apply the same correction
+    // twice. Renderer-owned embeds likewise retain their own internal layout.
+    if (target.closest('li')) return false;
+    const renderer = target.closest<HTMLElement>(RENDERER_ATOMIC_SELECTOR);
+    return !renderer || renderer === semantic;
+  });
+}
+
+function compositeTextShift(element: HTMLElement): number {
+  return parsePixels(element.style.getPropertyValue(COMPOSITE_TEXT_SHIFT_PROPERTY));
 }
 
 function baselineFor(
@@ -117,23 +170,28 @@ function baselineFor(
   scale: number,
   metrics: PageMetricSet,
   view: Window,
+  viewType: BaselineView,
 ): number | undefined {
-  const target = firstBaselineTarget(element, kind);
+  const target = firstBaselineTarget(element, kind, viewType);
   if (!target) return undefined;
   const rect = target.getBoundingClientRect();
   if (rect.height <= 0 && rect.width <= 0) return undefined;
   const computed = view.getComputedStyle(target);
   const metric = metricForElement(target, metrics);
+  const listShift = parsePixels(
+    target.closest<HTMLElement>(`.${BASELINE_GRID_LIST_ITEM_CLASS}`)?.style.getPropertyValue(LIST_SHIFT_PROPERTY),
+  );
+  const innerTextShift = compositeTextShift(target);
   return (rect.top - contentRect.top) / scale +
     parsePixels(computed.paddingTop) +
     parsePixels(computed.borderTopWidth) +
-    metric.baseline;
+    metric.baseline - listShift - innerTextShift;
 }
 
 function pageIndexFor(position: number, style: TemplarNoteStyle, unit: number): number {
   if (style.page.mode !== 'paged') return 0;
   const gap = style.baseline.enabled && style.baseline.mode !== 'free'
-    ? style.page.gap + ((-(style.page.height + style.page.gap)) % unit + unit) % unit
+    ? alignedPageGap(style.page.height, style.page.gap, unit)
     : style.page.gap;
   const span = style.page.height + gap;
   return span > 0 ? Math.max(0, Math.floor(Math.max(0, position) / span)) : 0;
@@ -193,6 +251,15 @@ class BaselineDebugOverlay {
       circle.setAttribute('data-baseline-id', point.id);
       if (point.error !== undefined) circle.setAttribute('data-baseline-error', String(round(point.error, 3)));
       svg.append(circle);
+      const label = addSvgElement(document, 'text');
+      label.setAttribute('x', String(Math.min(width - 3, Math.max(3, point.x + 6))));
+      label.setAttribute('y', String(point.y - 5));
+      label.setAttribute('fill', '#1f2937');
+      label.setAttribute('font-size', '8');
+      label.setAttribute('font-family', 'monospace');
+      label.setAttribute('pointer-events', 'none');
+      label.textContent = point.id;
+      svg.append(label);
     }
     snapshot.root.append(svg);
   }
@@ -243,13 +310,26 @@ export class BaselineGridController {
         state.stats.resizeObserverCallbacks += 1;
         for (const entry of entries) {
           if (!isHTMLElement(entry.target)) continue;
+          const nextSize = { width: entry.contentRect.width, height: entry.contentRect.height };
+          const previousSize = state.observedSizes.get(entry.target);
+          state.observedSizes.set(entry.target, nextSize);
+          const widthChanged = !previousSize || Math.abs(previousSize.width - nextSize.width) > 0.01;
+          const heightChanged = !previousSize || Math.abs(previousSize.height - nextSize.height) > 0.01;
+          if (!widthChanged && !heightChanged) continue;
           const root = state.roots.find((candidate) => candidate.pageContent === entry.target);
-          if (root) state.needsFullScan = true;
+          if (root) {
+            // CodeMirror's sizer height includes widget margins and can be
+            // reported again after our own write. Width changes are real
+            // reflow boundaries; height-only root changes are handled by the
+            // widget/virtual-gap owner and must not start a scan loop.
+            if (root.view === 'reading' || widthChanged) state.needsFullScan = true;
+          }
           else state.dirty.add(entry.target);
         }
         this.schedule(leaf);
       }),
       observedTargets: new Set(),
+      observedSizes: new Map(),
       stats: this.emptyStats(),
       view: realm.window,
     };
@@ -359,6 +439,7 @@ export class BaselineGridController {
   private fullScan(leaf: WorkspaceLeaf, state: ObservationState): void {
     state.needsFullScan = false;
     state.dirty.clear();
+    state.stats.nonConvergedElements = [];
     state.stats.fullScans += 1;
     const nextRoots = this.collectRoots(state);
     const previousItems = new Set(state.roots.flatMap((root) => root.flowItems));
@@ -368,7 +449,23 @@ export class BaselineGridController {
     }
     state.roots = nextRoots;
     this.observeTargets(state);
-    for (const root of state.roots) this.processRoot(root, 0);
+    // A diagnostic command and the first paint must see the settled result,
+    // not the pre-correction geometry from the first measurement pass. Keep
+    // measurement and mutation separate inside each pass, then synchronously
+    // repeat until the absolute correction map stops changing. ResizeObserver
+    // remains the incremental path for later layout changes.
+    for (const root of state.roots) {
+      let settled = false;
+      for (let pass = 0; pass < MAX_SETTLE_PASSES; pass += 1) {
+        if (!this.processRoot(root, 0)) {
+          settled = true;
+          break;
+        }
+      }
+      if (!settled) {
+        for (const element of root.flowItems) this.markNonConverged(state, element);
+      }
+    }
     if (state.debug) for (const root of state.roots) this.overlay.render(this.debugSnapshot(root));
     state.settlePasses = 0;
   }
@@ -387,7 +484,8 @@ export class BaselineGridController {
           : null;
       if (!view) return [];
       const parent = view === 'reading'
-        ? pageContent.querySelector<HTMLElement>(':scope > .markdown-preview-section')
+        ? pageContent.querySelector<HTMLElement>(':scope > .markdown-preview-section') ??
+          (pageContent.hasClass('markdown-preview-section') ? pageContent : null)
         : pageContent.querySelector<HTMLElement>(':scope > .cm-content, :scope > .cm-contentContainer > .cm-content');
       if (!parent) return [];
       const pageRect = pageContent.getBoundingClientRect();
@@ -408,6 +506,7 @@ export class BaselineGridController {
         corrections: new Map(),
         geometryScale,
         parent,
+        prefixElement: this.prefixElementFor(pageContent, parent, view),
       }];
     });
   }
@@ -416,10 +515,20 @@ export class BaselineGridController {
     const targets = new Set<HTMLElement>();
     for (const root of state.roots) {
       targets.add(root.pageContent);
-      for (const item of root.flowItems) targets.add(item);
+      for (const item of root.flowItems) {
+        // Ordinary CodeMirror lines have a fixed source footprint and must
+        // remain free of controller-owned margins/classes for cursor mapping.
+        // Only virtual gaps and rendered widgets can change the following
+        // line's phase.
+        if (root.view === 'live-preview' && classifyFlowElement(item, root.view) === 'editor-line') continue;
+        targets.add(item);
+      }
     }
     for (const target of state.observedTargets) {
-      if (!targets.has(target)) state.resizeObserver.unobserve(target);
+      if (!targets.has(target)) {
+        state.resizeObserver.unobserve(target);
+        state.observedSizes.delete(target);
+      }
     }
     for (const target of targets) {
       if (!state.observedTargets.has(target)) state.resizeObserver.observe(target);
@@ -430,17 +539,56 @@ export class BaselineGridController {
   private processRoot(root: RootRuntime, startIndex: number, endIndex = root.flowItems.length): boolean {
     const measurements = this.measureRoot(root, startIndex, endIndex);
     if (measurements.length === 0) return false;
+    // Obsidian keeps the inactive editor/view in the DOM and often gives it a
+    // zero-sized layout box. It is still safe to mark its owners, but there is
+    // no geometry to correct until that view becomes visible. Treating zero
+    // geometry as a real position would make the absolute correction bounce
+    // forever (the test DOM has the same characteristic).
+    const pageRect = root.pageContent.getBoundingClientRect();
+    const hidden = pageRect.width <= 0 && pageRect.height <= 0 &&
+      root.pageContent.offsetWidth <= 0 && root.pageContent.offsetHeight <= 0;
+    if (hidden) {
+      const corrections = new Map<HTMLElement, RhythmCorrection>();
+      for (const measurement of measurements) {
+        corrections.set(measurement.element, { before: 0, after: 0, reason: 'baseline' });
+      }
+      const changed = measurements.some((measurement) => {
+        const previous = root.corrections.get(measurement.element);
+        const next = corrections.get(measurement.element);
+        return this.correctionChanged(previous, next);
+      });
+      this.writeCorrections(root, measurements, corrections);
+      for (const measurement of measurements) root.measurements.set(measurement.element, measurement);
+      for (const [element, correction] of corrections) root.corrections.set(element, correction);
+      return changed;
+    }
+    const prefixChanged = startIndex === 0 && this.writeLivePrefixCorrection(root, measurements);
     const tableRowDeltas = this.prepareTableRows(root, measurements);
     const corrections = this.computeCorrections(root, measurements, startIndex, tableRowDeltas);
-    const changed = measurements.some((measurement) => {
+    const changed = prefixChanged || measurements.some((measurement) => {
       const previous = root.corrections.get(measurement.element);
       const next = corrections.get(measurement.element);
-      return previous?.before !== next?.before || previous?.after !== next?.after || previous?.reason !== next?.reason;
+      return this.correctionChanged(previous, next);
     });
     this.writeCorrections(root, measurements, corrections);
+    this.writeListLineCorrections(root, measurements);
+    this.writeCompositeTextCorrections(
+      root,
+      measurements,
+      startIndex === 0 && endIndex >= root.flowItems.length,
+    );
     for (const measurement of measurements) root.measurements.set(measurement.element, measurement);
     for (const [element, correction] of corrections) root.corrections.set(element, correction);
     return changed;
+  }
+
+  private correctionChanged(previous: RhythmCorrection | undefined, next: RhythmCorrection | undefined): boolean {
+    if (!previous || !next) return previous !== next;
+    // Browser layout can move a box by a few thousandths of a CSS pixel when
+    // a scroll anchor or an async renderer settles. That is below the public
+    // diagnostic tolerance and must not be reported as non-convergence.
+    return Math.abs(previous.before - next.before) > CORRECTION_STABILITY_EPSILON ||
+      Math.abs(previous.after - next.after) > CORRECTION_STABILITY_EPSILON;
   }
 
   private measureRoot(root: RootRuntime, startIndex: number, endIndex = root.flowItems.length): RhythmMeasurement[] {
@@ -459,7 +607,15 @@ export class BaselineGridController {
       const naturalAfter = this.naturalMargin(element, computed?.marginBlockEnd ?? computed?.marginBottom, NATURAL_MARGIN_AFTER_PROPERTY);
       const top = (rect.top - pageRect.top) / scale;
       const bottom = (rect.bottom - pageRect.top) / scale;
-      const firstBaseline = baselineFor(element, kind, pageRect, scale, root.metrics, root.pageContent.ownerDocument.defaultView ?? window);
+      const firstBaseline = baselineFor(
+        element,
+        kind,
+        pageRect,
+        scale,
+        root.metrics,
+        root.pageContent.ownerDocument.defaultView ?? window,
+        root.view,
+      );
       measurements.push({
         element,
         kind,
@@ -513,7 +669,7 @@ export class BaselineGridController {
         previousExit = Math.max(previousExit, measurement.bottom);
         continue;
       }
-      if (this.isFloatImage(measurement)) {
+      if (this.isFloatImage(root, measurement)) {
         corrections.set(measurement.element, { before: 0, after: 0, reason: 'baseline' });
         continue;
       }
@@ -531,7 +687,12 @@ export class BaselineGridController {
       }
       const naturalBottom = this.naturalBottom(root, measurement);
       const movedBottom = naturalBottom + before + (tableRowDeltas.get(measurement.element) ?? 0);
-      const after = kind === 'editor-line' ? 0 : exitTailToGrid(movedBottom, root.lattice);
+      const isLiveEditorLine = root.view === 'live-preview' && measurement.element.hasClass('cm-line');
+      const after = isLiveEditorLine
+        ? 0
+        : root.view === 'live-preview'
+          ? this.liveExitTail(root, measurement, movedBottom, measurements)
+          : exitTailToGrid(movedBottom, root.lattice);
       const reason = before !== 0
         ? measurement.flowIndex === 0 ? 'prefix-exit' : measurement.pageIndex > 0 ? 'page-entry' : 'baseline'
         : kind === 'editor-widget' ? 'widget-exit' : 'block-exit';
@@ -542,8 +703,37 @@ export class BaselineGridController {
   }
 
   private naturalBottom(root: RootRuntime, measurement: RhythmMeasurement): number {
-    const atomic = isAtomicKind(measurement.kind);
-    return measurement.bottom - (atomic ? 0 : measurement.existingAfterCorrection) + measurement.marginAfter;
+    // The trailing correction is written as an actual flow margin. Margins
+    // are not part of getBoundingClientRect(), so only the leading margin
+    // moves the measured border box. The natural trailing margin remains part
+    // of the occupied boundary used to place the next flow item.
+    return measurement.bottom - measurement.existingBeforeCorrection + measurement.marginAfter;
+  }
+
+  /**
+   * A Live Preview gap/widget is followed by a CodeMirror line whose first
+   * baseline is offset from its border-box top. Its tail therefore has to end
+   * on the lattice translated by that next-line offset, rather than on a raw
+   * paper line. This is what keeps a virtualized gap from re-entering with a
+   * body baseline half a row away.
+   */
+  private liveExitTail(
+    root: RootRuntime,
+    measurement: RhythmMeasurement,
+    movedBottom: number,
+    currentMeasurements: RhythmMeasurement[],
+  ): number {
+    const byElement = new Map(currentMeasurements.map((candidate) => [candidate.element, candidate]));
+    for (let index = measurement.flowIndex + 1; index < root.flowItems.length; index += 1) {
+      const next = byElement.get(root.flowItems[index]!) ?? root.measurements.get(root.flowItems[index]!);
+      if (next?.firstBaseline === undefined) continue;
+      const baselineOffset = next.firstBaseline - next.top;
+      return nextGridDelta(movedBottom, {
+        ...root.lattice,
+        origin: root.lattice.origin - baselineOffset,
+      });
+    }
+    return exitTailToGrid(movedBottom, root.lattice);
   }
 
   private prefixBoundary(root: RootRuntime, first: HTMLElement | null): number {
@@ -565,9 +755,14 @@ export class BaselineGridController {
     return boundary;
   }
 
-  private isFloatImage(measurement: RhythmMeasurement): boolean {
-    return measurement.kind === 'image' &&
-      (measurement.element.ownerDocument.defaultView?.getComputedStyle(measurement.element).float ?? 'none') !== 'none';
+  private isFloatImage(root: RootRuntime, measurement: RhythmMeasurement): boolean {
+    if (measurement.kind !== 'image') return false;
+    const target = flowTarget(measurement.element, root.view);
+    const candidates = target.matches('img')
+      ? [target]
+      : [...target.querySelectorAll<HTMLElement>('img')];
+    return candidates.some((candidate) =>
+      (candidate.ownerDocument.defaultView?.getComputedStyle(candidate).float ?? 'none') !== 'none');
   }
 
   private writeCorrections(
@@ -581,28 +776,153 @@ export class BaselineGridController {
       const correction = corrections.get(measurement.element);
       if (!correction) continue;
       const element = measurement.element;
+      if (root.view === 'live-preview' && element.hasClass('cm-line')) {
+        // CodeMirror owns ordinary line DOM. Static compiler rules establish
+        // its unit-height, margin-free footprint; headings and code lines are
+        // included here because they are still CodeMirror-owned line boxes.
+        // Dynamic ownership belongs only to widgets and virtual gaps.
+        element.classList.remove(BASELINE_GRID_ITEM_CLASS, BASELINE_GRID_ATOMIC_CLASS, BASELINE_GRID_INTENTIONAL_CLASS);
+        element.removeAttribute(OWNER_PROPERTY);
+        delete element.dataset.templarBaselineKind;
+        element.style.removeProperty(BASELINE_BEFORE_PROPERTY);
+        element.style.removeProperty(BASELINE_AFTER_PROPERTY);
+        element.style.removeProperty('margin-block-end');
+        continue;
+      }
       element.addClass(BASELINE_GRID_ITEM_CLASS);
-      element.dataset[OWNER_PROPERTY.replace(/^data-/, '')] = 'true';
+      // DOMStringMap keys use camelCase; the HTML attribute is explicit here
+      // so this remains valid in Chromium as well as the test DOM realm.
+      element.setAttribute(OWNER_PROPERTY, 'true');
       element.dataset.templarBaselineKind = measurement.kind;
       if (isAtomicKind(measurement.kind)) element.addClass(BASELINE_GRID_ATOMIC_CLASS);
       else element.removeClass(BASELINE_GRID_ATOMIC_CLASS);
       if (measurement.intentional) element.addClass(BASELINE_GRID_INTENTIONAL_CLASS);
       else element.removeClass(BASELINE_GRID_INTENTIONAL_CLASS);
-      if (measurement.kind === 'editor-line') {
-        element.style.removeProperty(BASELINE_BEFORE_PROPERTY);
-        element.style.removeProperty(BASELINE_AFTER_PROPERTY);
-        continue;
-      }
       const before = `${String(round(correction.before))}px`;
       const after = `${String(round(Math.max(0, correction.after)))}px`;
       if (element.style.getPropertyValue(BASELINE_BEFORE_PROPERTY) !== before) element.style.setProperty(BASELINE_BEFORE_PROPERTY, before);
       if (element.style.getPropertyValue(BASELINE_AFTER_PROPERTY) !== after) element.style.setProperty(BASELINE_AFTER_PROPERTY, after);
+      // Obsidian's el-* wrappers can have an auto-sized flex item box. An
+      // empty ::after pseudo-element reports the desired block-size but is not
+      // included in that wrapper's flow geometry. Write the occupied tail as
+      // an explicit margin so layout and getBoundingClientRect agree.
+      const flowTail = `${String(round(measurement.marginAfter + Math.max(0, correction.after)))}px`;
+      if (element.style.getPropertyValue('margin-block-end') !== flowTail) {
+        element.style.setProperty('margin-block-end', flowTail, 'important');
+      }
       if (Math.abs(correction.before) > 0.001 || Math.abs(correction.after) > 0.001) corrected += 1;
     }
     if (state) {
       state.stats.writePasses += 1;
       state.stats.nodesCorrected += corrected;
     }
+  }
+
+  /**
+   * A rendered list item can be a fractional CSS pixel taller than its
+   * declared line-height when inline formatting (links, emphasis, images,
+   * or a fallback font) participates in the line box. That fractional excess
+   * otherwise moves every following item between ruled lines. Shift each
+   * item's visual line box to the fixed lattice while leaving list flow and
+   * wrapping untouched; the list owner's outer tail still controls the next
+   * page-flow block.
+   */
+  private writeListLineCorrections(root: RootRuntime, measurements: RhythmMeasurement[]): void {
+    if (root.view !== 'reading') return;
+    const pageRect = root.pageContent.getBoundingClientRect();
+    const scale = root.geometryScale > 0 ? root.geometryScale : 1;
+    const view = root.pageContent.ownerDocument.defaultView;
+    const lists = new Set<HTMLElement>();
+    for (const measurement of measurements) {
+      if (measurement.kind === 'list') {
+        const list = flowTarget(measurement.element, root.view);
+        if (list.matches('ul, ol')) lists.add(list);
+      } else if (isAtomicKind(measurement.kind)) {
+        const owner = flowTarget(measurement.element, root.view);
+        owner.querySelectorAll<HTMLElement>('ul, ol').forEach((list) => lists.add(list));
+      }
+    }
+    for (const list of lists) {
+      for (const item of list.querySelectorAll<HTMLElement>('li')) {
+        const rect = item.getBoundingClientRect();
+        if (rect.width <= 0 && rect.height <= 0) {
+          item.removeClass(BASELINE_GRID_LIST_ITEM_CLASS);
+          item.style.removeProperty(LIST_SHIFT_PROPERTY);
+          continue;
+        }
+        const existing = parsePixels(item.style.getPropertyValue(LIST_SHIFT_PROPERTY));
+        const target = item.querySelector<HTMLElement>(':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > pre, :scope > code') ?? item;
+        const targetRect = target.getBoundingClientRect();
+        const targetStyle = view?.getComputedStyle(target);
+        const naturalBaseline = (targetRect.top - pageRect.top) / scale - existing +
+          parsePixels(targetStyle?.paddingTop) +
+          parsePixels(targetStyle?.borderTopWidth) +
+          metricForElement(target, root.metrics).baseline;
+        const shift = nearestGridDelta(naturalBaseline, root.lattice);
+        item.addClass(BASELINE_GRID_LIST_ITEM_CLASS);
+        item.style.setProperty(LIST_SHIFT_PROPERTY, `${String(round(shift))}px`);
+      }
+    }
+  }
+
+  /**
+   * Composite containers own their outer flow edge, but their descendants
+   * still contain user-visible text lines. Inline formatting inside a
+   * blockquote/callout can make an individual paragraph's border box land a
+   * fractional pixel away from the fixed lattice even when the container's
+   * first line is correct. Shift only that inner visual line box; it is
+   * position-relative, so the container's measured height and following flow
+   * remain unchanged.
+   */
+  private writeCompositeTextCorrections(
+    root: RootRuntime,
+    measurements: RhythmMeasurement[],
+    clearStale: boolean,
+  ): void {
+    if (root.view !== 'reading') return;
+    const pageRect = root.pageContent.getBoundingClientRect();
+    const scale = root.geometryScale > 0 ? root.geometryScale : 1;
+    const view = root.pageContent.ownerDocument.defaultView;
+    const activeTargets = new Set<HTMLElement>();
+    for (const measurement of measurements) {
+      if (measurement.kind !== 'composite') continue;
+      const semantic = flowTarget(measurement.element, root.view);
+      const targets = compositeTextTargets(semantic);
+      for (const target of targets) {
+        activeTargets.add(target);
+        const rect = target.getBoundingClientRect();
+        if (rect.width <= 0 && rect.height <= 0) {
+          this.clearCompositeTextCorrection(target);
+          continue;
+        }
+        const existing = compositeTextShift(target);
+        const computed = view?.getComputedStyle(target);
+        // The target rect already includes the composite owner's current
+        // leading correction. Remove only the target's previous visual shift;
+        // subtracting the outer correction as well applies the same phase
+        // correction twice on every subsequent pass.
+        const naturalBaseline = (rect.top - pageRect.top) / scale - existing +
+          parsePixels(computed?.paddingTop) +
+          parsePixels(computed?.borderTopWidth) +
+          metricForElement(target, root.metrics).baseline;
+        const delta = nearestGridDelta(naturalBaseline, root.lattice);
+        const shift = Math.abs(delta) <= root.lattice.tolerance ? 0 : round(delta);
+        target.addClass(COMPOSITE_TEXT_CLASS);
+        target.style.setProperty(COMPOSITE_TEXT_SHIFT_PROPERTY, `${String(shift)}px`);
+      }
+    }
+    // A block can change from composite to atomic/text after an async
+    // renderer completes. Remove only this controller's stale inner markers.
+    if (clearStale) {
+      root.pageContent.querySelectorAll<HTMLElement>(`.${COMPOSITE_TEXT_CLASS}`).forEach((target) => {
+        if (!activeTargets.has(target)) this.clearCompositeTextCorrection(target);
+      });
+    }
+  }
+
+  private clearCompositeTextCorrection(element: HTMLElement): void {
+    element.classList.remove(COMPOSITE_TEXT_CLASS);
+    element.style.removeProperty(COMPOSITE_TEXT_SHIFT_PROPERTY);
   }
 
   /**
@@ -615,10 +935,11 @@ export class BaselineGridController {
     const deltas = new Map<HTMLElement, number>();
     const scale = root.geometryScale > 0 ? root.geometryScale : 1;
     for (const measurement of measurements) {
-      if (!measurement.element.matches('table')) continue;
+      const table = flowTarget(measurement.element, root.view);
+      if (!table.matches('table')) continue;
       let existingTotal = 0;
       let nextTotal = 0;
-      for (const row of measurement.element.querySelectorAll<HTMLTableRowElement>('tr')) {
+      for (const row of table.querySelectorAll<HTMLTableRowElement>('tr')) {
         const rect = row.getBoundingClientRect();
         if (rect.height <= 0) continue;
         const existing = parsePixels(row.style.getPropertyValue('--templar-grid-row-after'));
@@ -671,11 +992,74 @@ export class BaselineGridController {
     element.removeClass(BASELINE_GRID_ITEM_CLASS, BASELINE_GRID_ATOMIC_CLASS, BASELINE_GRID_INTENTIONAL_CLASS);
     delete element.dataset.templarBaselineKind;
     delete element.dataset.templarBaselineId;
-    delete element.dataset.templarBaselineOwner;
+    element.removeAttribute(OWNER_PROPERTY);
     element.style.removeProperty(BASELINE_BEFORE_PROPERTY);
     element.style.removeProperty(BASELINE_AFTER_PROPERTY);
     element.style.removeProperty(NATURAL_MARGIN_BEFORE_PROPERTY);
     element.style.removeProperty(NATURAL_MARGIN_AFTER_PROPERTY);
+    element.style.removeProperty('margin-block-end');
+    element.removeClass(BASELINE_GRID_LIST_ITEM_CLASS);
+    element.style.removeProperty(LIST_SHIFT_PROPERTY);
+    this.clearCompositeTextCorrection(element);
+  }
+
+  /**
+   * Metadata/properties rendered before CodeMirror are not editor lines, but
+   * their variable height can leave the first editable line between ruled
+   * rows. A small margin on that prefix is safe for CodeMirror's height map;
+   * writing a margin or class on a `.cm-line` is not.
+   */
+  private writeLivePrefixCorrection(root: RootRuntime, measurements: RhythmMeasurement[]): boolean {
+    if (root.view !== 'live-preview' || !root.prefixElement) return false;
+    const firstText = measurements.find((measurement) => measurement.firstBaseline !== undefined);
+    if (!firstText || measurements.some((measurement) => measurement.flowIndex < firstText.flowIndex &&
+      measurement.kind !== 'editor-line' && measurement.kind !== 'blank-space')) {
+      this.clearLivePrefixCorrection(root);
+      return false;
+    }
+
+    const prefix = root.prefixElement;
+    const existingShift = parsePixels(prefix.style.getPropertyValue(PREFIX_SHIFT_PROPERTY));
+    const naturalBaseline = firstText.firstBaseline! - existingShift;
+    const nextShift = round(nearestGridDelta(naturalBaseline, root.lattice));
+    const changed = Math.abs(existingShift - nextShift) > CORRECTION_STABILITY_EPSILON;
+    const view = root.pageContent.ownerDocument.defaultView;
+    if (!prefix.style.getPropertyValue(PREFIX_NATURAL_MARGIN_PROPERTY)) {
+      const computed = view?.getComputedStyle(prefix);
+      const natural = nonNegative(parsePixels(computed?.marginBlockEnd ?? computed?.marginBottom));
+      prefix.style.setProperty(PREFIX_NATURAL_MARGIN_PROPERTY, `${String(round(natural))}px`);
+    }
+    prefix.classList.add(PREFIX_CLASS);
+    prefix.style.setProperty(PREFIX_SHIFT_PROPERTY, `${String(nextShift)}px`);
+    return changed;
+  }
+
+  private clearLivePrefixCorrection(root: RootRuntime): void {
+    const prefix = root.prefixElement;
+    if (!prefix) return;
+    prefix.classList.remove(PREFIX_CLASS);
+    prefix.style.removeProperty(PREFIX_SHIFT_PROPERTY);
+    prefix.style.removeProperty(PREFIX_NATURAL_MARGIN_PROPERTY);
+  }
+
+  private prefixElementFor(pageContent: HTMLElement, parent: HTMLElement, view: BaselineView): HTMLElement | null {
+    if (view !== 'live-preview') return null;
+    const container = parent.parentElement?.parentElement === pageContent
+      ? parent.parentElement
+      : parent.parentElement === pageContent ? parent : null;
+    if (!container || container.parentElement !== pageContent) return null;
+    const children = Array.from(pageContent.children);
+    const containerIndex = children.indexOf(container);
+    if (containerIndex < 0) return null;
+    const prefixSelectors = '.metadata-container, .mod-frontmatter, .mod-header, .mod-ui, .markdown-preview-pusher, .inline-title';
+    const candidates = children
+      .slice(0, containerIndex)
+      .filter(isHTMLElement)
+      .filter((element) => element.matches(prefixSelectors));
+    return candidates.reverse().find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 || rect.height > 0;
+    }) ?? null;
   }
 
   private markNonConverged(state: ObservationState, element: HTMLElement): void {
@@ -719,6 +1103,18 @@ export class BaselineGridController {
       element.style.removeProperty('--templar-editor-line-tail');
     });
     contentEl.querySelectorAll<HTMLElement>('img').forEach((image) => image.style.removeProperty('--templar-image-snap'));
+    contentEl.querySelectorAll<HTMLElement>('[style]').forEach((element) => {
+      element.classList.remove(BASELINE_GRID_LIST_ITEM_CLASS);
+      element.style.removeProperty(LIST_SHIFT_PROPERTY);
+    });
+    contentEl.querySelectorAll<HTMLElement>(`.${PREFIX_CLASS}`).forEach((element) => {
+      element.classList.remove(PREFIX_CLASS);
+      element.style.removeProperty(PREFIX_SHIFT_PROPERTY);
+      element.style.removeProperty(PREFIX_NATURAL_MARGIN_PROPERTY);
+    });
+    contentEl.querySelectorAll<HTMLElement>(`.${COMPOSITE_TEXT_CLASS}`).forEach((element) => {
+      this.clearCompositeTextCorrection(element);
+    });
     this.overlay.clear(contentEl);
   }
 }

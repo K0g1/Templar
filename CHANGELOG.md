@@ -4,6 +4,14 @@ All notable changes follow semantic versioning.
 
 ## Unreleased
 
+## 1.2.0-beta.3 — 2026-08-27
+
+- Replaced child-derived paper-origin reconciliation with one fixed absolute baseline lattice shared by Reading View and Live Preview.
+- Added a single `BaselineGridController` with explicit flow ownership, two-pass measurement/write settling, dirty resize handling, and no scroll rescans.
+- Corrected text, headings, lists, blockquotes, callouts, tables, code, dividers, images, embeds, blank-line spacers, and rendered widgets without decorating ordinary CodeMirror lines.
+- Added a structured alignment report/copy command, visible pointer-free SVG debug overlay, canonical torture fixture, mixed 10,000-block performance coverage, and page-template compilation matrix.
+- Hardened Style Rules limits and recovery versioning; preserved beta.2 as an immutable historical release.
+
 ## 1.2.0-beta.2 — 2026-08-27
 
 ### Ruled-line alignment

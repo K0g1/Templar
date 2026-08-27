@@ -18,22 +18,36 @@ ${scope} .markdown-preview-view.templar-page .templar-baseline-grid-item {
   margin-block-start: calc(var(--templar-grid-natural-margin-before, 0px) + var(--templar-grid-before)) !important;
 }
 
-${scope} .markdown-preview-view.templar-page .templar-baseline-grid-item:not(.templar-baseline-grid-atomic) {
-  display: flow-root;
-  margin-block-end: var(--templar-grid-natural-margin-after, 0px) !important;
+/* Flex items have independent vertical margins. This prevents a theme or an
+ * empty frontmatter wrapper from collapsing a correction away before the
+ * fixed lattice can position the next rendered block. */
+${scope} .markdown-preview-view.templar-page .templar-page-content.markdown-preview-section,
+${scope} .markdown-preview-view.templar-page .templar-page-content > .markdown-preview-section {
+  display: flex;
+  flex-direction: column;
 }
 
-${scope} .markdown-preview-view.templar-page .templar-baseline-grid-item:not(.templar-baseline-grid-atomic)::after {
-  block-size: var(--templar-grid-after, 0px);
-  clear: both;
-  content: "";
-  display: block;
-  inline-size: 100%;
-  pointer-events: none;
+${scope} .markdown-preview-view.templar-page .templar-baseline-grid-item:not(.templar-baseline-grid-atomic) {
+  display: flow-root;
 }
 
 ${scope} .markdown-preview-view.templar-page .templar-baseline-grid-item.templar-baseline-grid-atomic {
-  margin-block-end: calc(var(--templar-grid-natural-margin-after, 0px) + var(--templar-grid-after, 0px)) !important;
+  display: flow-root;
+}
+
+${scope} .markdown-preview-view.templar-page .templar-baseline-grid-list-item {
+  /* Inline content can make a list line box fractional; move only its visual
+   * line box so the list's natural wrapping and outer footprint remain intact. */
+  inset-block-start: var(--templar-grid-list-shift, 0px);
+  position: relative;
+}
+
+${scope} .markdown-preview-view.templar-page .templar-baseline-grid-composite-text {
+  /* Inline formatting can give a nested paragraph a fractional border-box
+   * top. Move only that visible text box; the composite's occupied height and
+   * the page-flow owner stay untouched. */
+  inset-block-start: var(--templar-grid-composite-text-shift, 0px);
+  position: relative;
 }
 
 ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line.templar-baseline-grid-item {
@@ -43,8 +57,21 @@ ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line.temp
   padding-block-end: 0 !important;
 }
 
+${scope} .markdown-source-view.mod-cm6 .templar-page .templar-baseline-grid-prefix {
+  margin-block-end: calc(var(--templar-grid-prefix-natural-margin-end, 0px) + var(--templar-grid-prefix-shift, 0px)) !important;
+}
+
+/* CodeMirror may put formatting spans, widget buffers, and rendered inline
+ * decorations in one editable line. Aligning their inline boxes to the line
+ * top prevents a replaced element or a bold span from adding a fractional
+ * half-pixel to the line's height map. The line itself remains CodeMirror
+ * owned: no vertical margin, padding, or controller class is written to it. */
+${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line > * {
+  vertical-align: top !important;
+}
+
 ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .templar-baseline-grid-item.templar-baseline-grid-atomic {
-  margin-block-end: calc(var(--templar-grid-natural-margin-after, 0px) + var(--templar-grid-after, 0px)) !important;
+  display: flow-root;
 }
 
 ${scope} .markdown-preview-view.templar-page .templar-baseline-grid-intentional {

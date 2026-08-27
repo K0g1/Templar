@@ -24,12 +24,14 @@ export function registerCommands(plugin: TemplarPlugin): void {
       const file = plugin.activeFile();
       const available = leaf !== null && file !== null && plugin.frontmatter.hasStyle(file);
       if (available && !checking && leaf) {
-        const report = plugin.renderer.baselineDiagnostic(leaf);
-        if (!report) {
-          new Notice('Ruled-line diagnostic is unavailable until the current page finishes rendering.');
-          return available;
-        }
-        new Notice(formatBaselineDiagnostic(report));
+        runUserAction(async () => {
+          const report = await plugin.renderer.settledBaselineDiagnostic(leaf);
+          if (!report) {
+            new Notice('Ruled-line diagnostic is unavailable until the current page finishes rendering.');
+            return;
+          }
+          new Notice(formatBaselineDiagnostic(report));
+        }, 'Could not run ruled-line diagnostic');
       }
       return available;
     },

@@ -4,7 +4,9 @@ import { measuredGeometryScale } from '../utils/grid';
 import type { PageMetricSet } from './style-compiler';
 import {
   BASELINE_GRID_ITEM_CLASS,
+  classifyFlowElement,
   collectFlowItems,
+  flowTarget,
   flowOwner,
   isAtomicKind,
 } from './rendering/baseline-grid/classifier';
@@ -90,6 +92,10 @@ function parsePixels(value: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function cssValue(element: HTMLElement, property: string, view: Window | null | undefined): string {
+  return view?.getComputedStyle(element).getPropertyValue(property) || element.style.getPropertyValue(property);
+}
+
 function metricForElement(element: HTMLElement, metrics: PageMetricSet): FontMetrics {
   for (const level of [1, 2, 3, 4, 5, 6] as const) {
     if (element.tagName === `H${String(level)}` || element.hasClass(`HyperMD-header-${String(level)}`)) {
@@ -119,11 +125,10 @@ function viewFor(pageContent: HTMLElement): BaselineView {
 }
 
 function latticeFor(pageContent: HTMLElement, unit: number, metrics: PageMetricSet): GridLattice {
-  const style = pageContent.ownerDocument.defaultView?.getComputedStyle(pageContent);
   const origin = parsePixels(
-    style?.getPropertyValue('--templar-grid-origin') ||
-    style?.getPropertyValue('--templar-paper-baseline-position'),
-  ) || parsePixels(style?.paddingTop) + metrics.body.baseline;
+    cssValue(pageContent, '--templar-grid-origin', pageContent.ownerDocument.defaultView) ||
+    cssValue(pageContent, '--templar-paper-baseline-position', pageContent.ownerDocument.defaultView),
+  ) || parsePixels(cssValue(pageContent, 'padding-top', pageContent.ownerDocument.defaultView)) + metrics.body.baseline;
   return { unit, origin, tolerance: 0.4 };
 }
 
@@ -137,14 +142,37 @@ function pageIndex(position: number, pageSpan: number): number {
   return pageSpan > 0 ? Math.max(0, Math.floor(Math.max(0, position) / pageSpan)) : 0;
 }
 
-function baselineTarget(element: HTMLElement, kind: RhythmKind): HTMLElement | null {
-  if (kind === 'list') return element.querySelector<HTMLElement>(':scope > li, :scope li');
+function baselineTarget(element: HTMLElement, kind: RhythmKind, view: BaselineView): HTMLElement | null {
+  const semantic = flowTarget(element, view);
+  if (kind === 'list') return semantic.querySelector<HTMLElement>(':scope > li, :scope li');
   if (kind === 'composite') {
-    if (element.matches('table')) return element.querySelector<HTMLElement>('th, td');
-    return element.querySelector<HTMLElement>('.callout-title, .callout-content p, .callout-content li');
+    if (semantic.matches('table')) return semantic.querySelector<HTMLElement>('th, td');
+    if (semantic.matches('blockquote')) return semantic.querySelector<HTMLElement>('p, li, pre, code');
+    return semantic.querySelector<HTMLElement>('.callout-title, .callout-content p, .callout-content li');
   }
-  if (kind === 'editor-widget') return element.querySelector<HTMLElement>('.cm-line, p, td, th, .callout-title');
-  if (kind === 'atomic' || kind === 'image') return null;
+  if (kind === 'text') {
+    if (semantic.matches('blockquote')) {
+      return semantic.querySelector<HTMLElement>('p, li, pre, code') ?? semantic;
+    }
+    return semantic;
+  }
+  if (kind === 'code') {
+    return semantic.matches('pre')
+      ? semantic.querySelector<HTMLElement>(':scope > code') ?? semantic
+      : semantic;
+  }
+  if (kind === 'editor-widget') return semantic.querySelector<HTMLElement>('.cm-line, p, td, th, .callout-title');
+  if (kind === 'atomic' || kind === 'image' || kind === 'divider') return null;
+  return semantic;
+}
+
+function textCandidateTarget(element: HTMLElement): HTMLElement {
+  if (element.matches('li')) {
+    return element.querySelector<HTMLElement>(
+      ':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > pre, :scope > code',
+    ) ?? element;
+  }
+  if (element.matches('pre')) return element.querySelector<HTMLElement>(':scope > code') ?? element;
   return element;
 }
 
@@ -206,8 +234,7 @@ export function diagnoseBaselineAlignment(
   const firstWindow = firstPageRoot?.ownerDocument.defaultView;
   const unit = parsePixels(
     firstContent && firstWindow
-      ? firstWindow.getComputedStyle(firstContent).getPropertyValue('--templar-grid') ||
-        firstWindow.getComputedStyle(firstPageRoot).getPropertyValue('--templar-grid')
+      ? cssValue(firstContent, '--templar-grid', firstWindow) || cssValue(firstPageRoot, '--templar-grid', firstWindow)
       : '',
   );
   const report: BaselineDiagnosticReport = {
@@ -215,7 +242,7 @@ export function diagnoseBaselineAlignment(
     gridOrigin: 0,
     tolerance,
     viewType: 'unknown',
-    pageMode: pageRoots[0]?.dataset.templarMode ?? 'unknown',
+    pageMode: pageRoots[0]?.dataset.templarMode ?? contentEl.dataset.templarMode ?? 'unknown',
     pageSize: 'unknown',
     pageScale: 1,
     fontFamily: 'unknown',
@@ -257,12 +284,11 @@ export function diagnoseBaselineAlignment(
     const contentRect = pageContent.getBoundingClientRect();
     const viewWindow = pageContent.ownerDocument.defaultView;
     const computedPage = viewWindow?.getComputedStyle(pageRoot);
-    const computedContent = viewWindow?.getComputedStyle(pageContent);
-    const pageSpan = parsePixels(computedContent?.getPropertyValue('--templar-page-span'));
-    const pageHeight = parsePixels(computedContent?.getPropertyValue('--templar-page-height'));
-    const pageWidth = parsePixels(computedContent?.getPropertyValue('--templar-page-width'));
+    const pageSpan = parsePixels(cssValue(pageContent, '--templar-page-span', viewWindow));
+    const pageHeight = parsePixels(cssValue(pageContent, '--templar-page-height', viewWindow));
+    const pageWidth = parsePixels(cssValue(pageContent, '--templar-page-width', viewWindow));
     report.gridOrigin = lattice.origin;
-    report.pageScale = parsePixels(computedContent?.getPropertyValue('--templar-page-scale')) || 1;
+    report.pageScale = parsePixels(cssValue(pageContent, '--templar-page-scale', viewWindow)) || 1;
     report.pageSize = pageWidth > 0 && pageHeight > 0 ? `${String(pageWidth)}×${String(pageHeight)}` : report.pageSize;
     report.fontFamily = computedPage?.fontFamily ?? report.fontFamily;
     report.pagesChecked += 1;
@@ -273,6 +299,7 @@ export function diagnoseBaselineAlignment(
       const itemRect = item.getBoundingClientRect();
       if (itemRect.width <= 0 && itemRect.height <= 0 && !item.hasClass('templar-blank-line-spacer')) continue;
       const kind = rootState?.measurements.get(item)?.kind ??
+        classifyFlowElement(item, view) ??
         (item.hasClass('cm-line') ? 'editor-line' : item.matches('img') ? 'image' : 'atomic');
       const rect = item.getBoundingClientRect();
       const top = (rect.top - contentRect.top) / scale;
@@ -281,10 +308,10 @@ export function diagnoseBaselineAlignment(
       const itemStyle = viewWindow?.getComputedStyle(item);
       report.blocksChecked += 1;
       if (isAtomicKind(kind)) report.widgetsChecked += 1;
-      const floatImage = kind === 'image' &&
-        (itemStyleFloat(item, viewWindow ?? undefined) !== 'none');
-      const owned = item.classList.contains(BASELINE_GRID_ITEM_CLASS) && item.dataset.templarBaselineOwner === 'true';
-      if (!owned && !item.hasClass('templar-blank-line-spacer')) {
+      const floatImage = kind === 'image' && imageIsFloated(item, view, viewWindow ?? undefined);
+      const liveEditorLine = view === 'live-preview' && item.hasClass('cm-line');
+      const owned = liveEditorLine || (item.classList.contains(BASELINE_GRID_ITEM_CLASS) && item.dataset.templarBaselineOwner === 'true');
+      if (!owned && kind !== 'editor-line' && !item.hasClass('templar-blank-line-spacer')) {
         idCounter += 1;
         report.failures.push(failureFor(item, view, 'ownership', top, top, itemPage, Math.round(top / unit), 1, `baseline-${String(idCounter)}`));
       }
@@ -292,23 +319,35 @@ export function diagnoseBaselineAlignment(
         idCounter += 1;
         report.failures.push(failureFor(item, view, 'ownership', top, top, itemPage, Math.round(top / unit), 1, `baseline-${String(idCounter)}`));
       }
-      const requiresEntry = !floatImage && kind !== 'editor-line' &&
+      const requiresEntry = liveEditorLine || (!floatImage && kind !== 'editor-line' && kind !== 'blank-space' &&
         !(view === 'live-preview' && isAtomicKind(kind)) &&
-        !(kind === 'image' && rootState?.style.baseline.snapImages === false);
-      const entryValue = kind === 'image' || isAtomicKind(kind)
-        ? top
-        : (() => {
-          const target = baselineTarget(item, kind);
-          if (!target) return top;
-          const targetRect = target.getBoundingClientRect();
-          const targetStyle = viewWindow?.getComputedStyle(target);
-          return (targetRect.top - contentRect.top) / scale + parsePixels(targetStyle?.paddingTop) + parsePixels(targetStyle?.borderTopWidth) + metricForElement(target, metrics).baseline;
-        })();
+        !(kind === 'image' && rootState?.style.baseline.snapImages === false));
+      const entryValue = (() => {
+        // Atomic composites still own rendered text: validate their first
+        // semantic baseline rather than the wrapper's border-box top. Images,
+        // dividers, and editor widgets have no text baseline and fall back to
+        // their outer entry position.
+        const target = baselineTarget(item, kind, view);
+        if (!target || kind === 'image' || kind === 'divider' || kind === 'editor-widget') return top;
+        const targetRect = target.getBoundingClientRect();
+        const targetStyle = viewWindow?.getComputedStyle(target);
+        return (targetRect.top - contentRect.top) / scale + parsePixels(targetStyle?.paddingTop) + parsePixels(targetStyle?.borderTopWidth) + metricForElement(target, metrics).baseline;
+      })();
       const entry = expectedGridPosition(entryValue, lattice);
       const entryError = distanceToGrid(entryValue, lattice);
       if ((requiresEntry || kind === 'editor-line') && entryError > tolerance) {
         idCounter += 1;
-        report.failures.push(failureFor(item, view, 'block-entry', entryValue, entry.expected, itemPage, entry.row, entryError, `baseline-${String(idCounter)}`));
+        report.failures.push(failureFor(
+          item,
+          view,
+          liveEditorLine ? 'editor-line' : 'block-entry',
+          entryValue,
+          entry.expected,
+          itemPage,
+          entry.row,
+          entryError,
+          `baseline-${String(idCounter)}`,
+        ));
       }
       const correctionBefore = parsePixels(item.style.getPropertyValue('--templar-grid-before'));
       const correctionAfter = parsePixels(item.style.getPropertyValue('--templar-grid-after'));
@@ -324,10 +363,20 @@ export function diagnoseBaselineAlignment(
         }
         continue;
       }
-      if (kind === 'editor-line' || floatImage) continue;
+      if (liveEditorLine || kind === 'editor-line' || floatImage || item.matches('.inline-title')) continue;
       const exitValue = bottom + parsePixels(itemStyle?.marginBlockEnd ?? itemStyle?.marginBottom);
-      const exit = expectedGridPosition(exitValue, lattice);
-      const exitError = distanceToGrid(exitValue, lattice);
+      const nextBaselineOffset = view === 'live-preview' && isAtomicKind(kind)
+        ? followingBaselineOffset(flowItems, item, rootState, metrics)
+        : undefined;
+      // A terminal .cm-gap represents source that CodeMirror has not mounted.
+      // It has no rendered successor whose phase can be judged, so its raw
+      // block edge is not a user-visible alignment contract.
+      if (item.matches('.cm-gap') && nextBaselineOffset === undefined) continue;
+      const exitLattice = nextBaselineOffset !== undefined
+        ? { ...lattice, origin: lattice.origin - nextBaselineOffset }
+        : lattice;
+      const exit = expectedGridPosition(exitValue, exitLattice);
+      const exitError = distanceToGrid(exitValue, exitLattice);
       report.maxBlockExitError = Math.max(report.maxBlockExitError, exitError);
       if (exitError > tolerance) {
         idCounter += 1;
@@ -348,10 +397,25 @@ export function diagnoseBaselineAlignment(
       .filter((element) => !element.hasClass('HyperMD-frontmatter'))
       .filter((element) => !element.closest('.metadata-container, .mod-frontmatter, .mod-ui, .templar-blank-line-spacer'));
     for (const element of textCandidates) {
+      const owner = flowOwner(element, view);
+      const ownerKind = owner && owner !== element
+        ? rootState?.measurements.get(owner)?.kind ?? classifyFlowElement(owner, view)
+        : null;
+      // Composite owners (tables, callouts, blockquotes) own the layout
+      // correction, but their visible text still has to be checked. Nested
+      // renderer-owned atomic content is deliberately excluded so an embed
+      // controller cannot be mistaken for a second host-note correction.
+      if (ownerKind && ownerKind !== 'composite' && isAtomicKind(ownerKind)) continue;
       const rect = element.getBoundingClientRect();
-      const style = viewWindow?.getComputedStyle(element);
-      const metric = metricForElement(element, metrics);
-      const measured = (rect.top - contentRect.top) / scale + parsePixels(style?.paddingTop) + parsePixels(style?.borderTopWidth) + metric.baseline;
+      // List-item boxes can contain a paragraph, code block, or heading whose
+      // line box is offset by a fractional marker/inline formatter. The
+      // controller corrects that semantic first line, so the diagnostic must
+      // measure the same target instead of treating the li border box as text.
+      const target = textCandidateTarget(element);
+      const targetRect = target.getBoundingClientRect();
+      const style = viewWindow?.getComputedStyle(target);
+      const metric = metricForElement(target, metrics);
+      const measured = (targetRect.top - contentRect.top) / scale + parsePixels(style?.paddingTop) + parsePixels(style?.borderTopWidth) + metric.baseline;
       const result = expectedGridPosition(measured, lattice);
       const error = distanceToGrid(measured, lattice);
       report.textChecked += 1;
@@ -395,8 +459,35 @@ export function diagnoseBaselineAlignment(
   return report;
 }
 
-function itemStyleFloat(element: HTMLElement, view: Window | undefined): string {
-  return view?.getComputedStyle(element).float ?? 'none';
+function imageIsFloated(element: HTMLElement, viewType: BaselineView, view: Window | undefined): boolean {
+  const target = flowTarget(element, viewType);
+  const candidates = target.matches('img')
+    ? [target]
+    : [...target.querySelectorAll<HTMLElement>('img')];
+  return candidates.some((candidate) => (view?.getComputedStyle(candidate).float ?? 'none') !== 'none');
+}
+
+function followingBaselineOffset(
+  flowItems: HTMLElement[],
+  item: HTMLElement,
+  rootState: BaselineGridRootState | undefined,
+  metrics: PageMetricSet,
+): number | undefined {
+  const index = flowItems.indexOf(item);
+  for (let nextIndex = index + 1; nextIndex < flowItems.length; nextIndex += 1) {
+    const next = flowItems[nextIndex]!;
+    const measurement = rootState?.measurements.get(next);
+    if (measurement?.firstBaseline !== undefined) return measurement.firstBaseline - measurement.top;
+    const kind = classifyFlowElement(next, 'live-preview');
+    if (!kind) continue;
+    const target = baselineTarget(next, kind, 'live-preview');
+    if (!target) continue;
+    const nextRect = next.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const style = next.ownerDocument.defaultView?.getComputedStyle(target);
+    return (targetRect.top - nextRect.top) + parsePixels(style?.paddingTop) + parsePixels(style?.borderTopWidth) + metricForElement(target, metrics).baseline;
+  }
+  return undefined;
 }
 
 export function formatBaselineDiagnostic(report: BaselineDiagnosticReport): string {

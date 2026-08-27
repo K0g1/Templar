@@ -201,12 +201,32 @@ export class PageRenderer {
       : null;
   }
 
+  /**
+   * Wait for Obsidian's virtualized Reading View/widgets to finish a layout
+   * turn before exposing a diagnostic. A synchronous refresh remains useful
+   * to callers, but a command run immediately after scrolling can otherwise
+   * report the intermediate DOM that Obsidian is still replacing.
+   */
+  public async settledBaselineDiagnostic(leaf: WorkspaceLeaf): Promise<BaselineDiagnosticReport | null> {
+    let report: BaselineDiagnosticReport | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await this.waitForBaselineFrames(leaf, 2);
+      report = this.baselineDiagnostic(leaf);
+      if (!report || report.nonConvergedElements.length > 0) continue;
+      await this.waitForBaselineFrames(leaf, 2);
+      const stable = this.baselineDiagnostic(leaf);
+      if (!stable || stable.nonConvergedElements.length === 0) return stable;
+      report = stable;
+    }
+    return report;
+  }
+
   public toggleBaselineDebugOverlay(leaf: WorkspaceLeaf): boolean {
     return this.baselineGrid.toggleDebugOverlay(leaf);
   }
 
   public async copyBaselineDiagnostic(leaf: WorkspaceLeaf): Promise<BaselineDiagnosticReport | null> {
-    const report = this.baselineDiagnostic(leaf);
+    const report = await this.settledBaselineDiagnostic(leaf);
     if (!report) return null;
     const document = this.styledViews.get(leaf)?.contentEl.ownerDocument;
     if (!document) throw new Error('The current styled note no longer has an owner document.');
@@ -316,6 +336,21 @@ export class PageRenderer {
         this.baselineGrid.refresh(leaf);
       }
     });
+  }
+
+  private async waitForBaselineFrames(leaf: WorkspaceLeaf, count: number): Promise<void> {
+    const document = this.styledViews.get(leaf)?.contentEl.ownerDocument;
+    const view = document?.defaultView;
+    if (!view) return;
+    for (let index = 0; index < count; index += 1) {
+      await new Promise<void>((resolve) => {
+        if (view.requestAnimationFrame) {
+          view.requestAnimationFrame(() => resolve());
+        } else {
+          view.setTimeout(resolve, 0);
+        }
+      });
+    }
   }
 
   private prepareViewRoots(contentEl: HTMLElement): void {

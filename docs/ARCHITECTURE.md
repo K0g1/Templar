@@ -1,6 +1,6 @@
 # Architecture
 
-For the current alpha snapshot, complete command/settings inventory, source map, release runbook, and known-limitations handoff, see [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). This document remains the detailed runtime and ownership contract.
+For the current beta snapshot, complete command/settings inventory, source map, release runbook, and known-limitations handoff, see [`DEVELOPER_REFERENCE.md`](DEVELOPER_REFERENCE.md). This document remains the detailed runtime and ownership contract.
 
 ## Design goals
 
@@ -36,9 +36,9 @@ compilePageStyle()
       ▼
 one scoped <style> in one Markdown view
       │
-      ├─ measured paper origin
-      ├─ image/variable-block grid compensation
-      └─ PageLayoutService (paged only)
+      ├─ fixed baseline lattice + Reading/Live adapters
+      ├─ classified block/widget corrections and diagnostics
+      └─ PageLayoutService (paged only; same lattice)
 ```
 
 Library templates enter the same path after being copied into a note. `PreviewSessionService` installs a leaf-local renderer override, so try-on and inspector drafts use this exact production path without changing frontmatter or other panes showing the same file.
@@ -67,7 +67,7 @@ Renderer settled state ── PrintService ── temporary print scope → host
 
 It must remain orchestration code. Parsing, compilation, persistence, and complex UI belong elsewhere.
 
-Renderer ownership is explicit: `PageRenderer` orchestrates leaf refreshes; `ReadingWhitespaceController` owns Reading section/spacer state; `ImageSnapController`, `PaperOriginController`, and `VariableBlockRhythmController` own their observer lifecycles and clean the roots they configured.
+Renderer ownership is explicit: `PageRenderer` orchestrates leaf refreshes; `ReadingWhitespaceController` owns Reading section/spacer state; one `BaselineGridController` owns the fixed lattice, Reading and Live Preview adapters, measurements, corrections, observers, debug overlay, and cleanup; `PageLayoutService` owns paged scale and page fitting.
 
 ## Data model
 
@@ -138,13 +138,13 @@ The style element is a direct child of the leaf's content root and is removed wh
 - Caches family/size/weight/line-height/device-scale combinations with a bounded LRU policy.
 - Measures body, H1–H6, and fenced-code typography separately.
 
-The compiler provides a safe fallback origin, then `PageRenderer` measures the first real rhythmic text target in each attached content root and writes `--templar-paper-baseline-position` for that root. Source and Live Preview use the first ordinary CodeMirror line outside frontmatter, rules, tables, code boundaries, and renderer widgets; Reading uses the first visible heading, paragraph, list item, or code line outside Properties/frontmatter and variable-height blocks. The target's DOM position, border/padding, font-specific alphabetic baseline, CSS zoom, and grid unit define the repeating paper phase. Properties panes, inline titles, and note-specific top structure can therefore change height without shifting text relative to the ruling. While a virtual scroller has moved away from the document start, the renderer retains the established origin instead of re-anchoring to the first currently attached block. A ruled stroke begins at the measured alphabetic baseline and paints downward, keeping ordinary glyph bodies above the line while allowing descenders to cross it.
+The compiler derives one absolute lattice origin from the page's configured top padding and measured body baseline, emitting `--templar-grid-origin`. `BaselineGridController` never measures a child to redefine that phase and never listens to scroll position. Reading and Live Preview each classify their own top-level flow owners; the controller measures first baselines and occupied tails, writes corrections in a second pass, and repeats until the absolute correction map settles. Properties/frontmatter UI and renderer-owned descendants are excluded from note ownership. A ruled stroke begins at the fixed baseline lattice and paints downward, keeping ordinary glyph bodies above the line while allowing descenders to cross it.
 
 Paper and watermark pseudo-elements sit at negative z-indices inside an isolated `.templar-page-content` stacking context. This keeps them behind note content while preventing the Reading-view page background from covering pattern and margin layers.
 
 Every paper pattern serializes parallel `background-image`, `background-size`, `background-position`, and `background-repeat` lists. Optional margin lines are inserted as a complete non-repeating layer rather than relying on CSS list-value repetition. Diagonal and cross-hatch tiles use centered edge-to-edge strokes, hex uses six anchored edge layers, and scallop uses two staggered outline layers; this prevents missing directions, corner specks, and layer-repeat drift.
 
-The rhythm compiler never emits a fractional-grid block offset in a gridded mode: strict reserves one extra grid row, balanced reserves none, and list items explicitly inherit the body line-height with theme list padding neutralized. Consequently, every following block remains congruent with the paper pattern.
+The rhythm compiler never emits a fractional-grid block offset in a gridded mode: strict reserves one extra grid row, balanced reserves none, and list items explicitly inherit the body line-height with theme list padding neutralized. `BaselineGridController` then applies absolute before/after corrections to Reading owners, list-line visual shifts for fractional markers, and inner composite-text shifts where inline formatting changes a nested line box. Consequently, every following block remains congruent with the fixed paper pattern.
 
 Live Preview treats CodeMirror line geometry as an editor-owned measurement contract. Generated CSS never adds vertical margins to `.cm-line` elements: ordinary block spacing remains a Reading View concern, while Live Preview headings express their visual space as border-box padding that CodeMirror can measure. This keeps pointer coordinates, the visible glyph line, and CodeMirror's height map congruent even around headings and long source blank-line runs.
 
@@ -180,7 +180,7 @@ Focused ownership primitives live under `src/services/rendering/`: `OwnedStyleHo
 
 A `ResizeObserver` measures rendered image boxes. In strict/balanced gridded modes, it includes the configured block-start/block-end margins and adds only the missing bottom space needed to make the complete image footprint a grid multiple. Original image files are untouched.
 
-The same renderer owns a generalized rhythm observer for variable-height output. It watches one outer layout owner per table, Mermaid/code-block result, callout, embed, iframe, video, audio, canvas, or corresponding CodeMirror widget. Its natural footprint is the precise border box plus external block margins, with any previous Templar-owned tail subtracted. Wrappers receive a trailing pseudo-element; direct replaced/table elements extend their captured natural end margin. Both strategies add `ceil(outer footprint / unit) * unit - outer footprint` without resizing content. Reading walks to the candidate's direct renderer-owned child of the whole-note `.markdown-preview-section`; it never observes that document root or frontmatter UI. Live Preview uses the containing table/embed widget. Resize entries are frame-coalesced and values within a small sub-pixel tolerance of a grid boundary add no row. This prevents feedback loops while keeping subsequent Markdown on the same ruled phase. Explicit source blank-line spacers remain separate children after this compensation and therefore still contribute their full requested rows. Mutations discover replaced async widgets, resizes update only the active owners, and leaf cleanup cancels pending frames, disconnects all observers, and removes every generated class/property.
+The same controller owns a generalized rhythm observer for variable-height output. It watches one outer layout owner per table, Mermaid/code-block result, callout, embed, iframe, video, audio, canvas, or corresponding CodeMirror widget. Its natural footprint is the precise border box plus external block margins, with any previous Templar-owned tail subtracted. Trailing rhythm is written as an explicit occupied margin so Obsidian's `el-*` wrappers and table/replaced-element geometry report the same boundary; no pseudo-element is used to fake flow height. Reading walks to the candidate's direct renderer-owned child of the whole-note `.markdown-preview-section`; it never observes that document root or frontmatter UI. Live Preview uses the containing table/embed widget or virtual gap, while ordinary `.cm-line` elements remain entirely CodeMirror-owned. Resize entries are frame-coalesced and values within a small sub-pixel tolerance of a grid boundary add no row. This prevents feedback loops while keeping subsequent Markdown on the same ruled phase. Explicit source blank-line spacers remain separate children after this compensation and therefore still contribute their full requested rows. Mutations discover replaced async widgets, resizes update only the active owners, and leaf cleanup cancels pending frames, disconnects all observers, and removes every generated class/property.
 
 Templar defines a complete callout palette, so the callout adapter also normalizes `mix-blend-mode` to `normal` inside the isolated paper surface. Host themes may otherwise blend dark callout content into a light page until it disappears even though the DOM remains visible. Template and per-type callout colors remain authoritative.
 
