@@ -13,6 +13,10 @@ import {
 import {
   DEFAULT_PAGE_OPTIONS,
 } from '../../templates/defaults';
+import {
+  MAX_RULE_CONDITIONS,
+  MAX_STYLE_RULES,
+} from '../../constants';
 import type {
   StyleRule,
   StyleRuleCondition,
@@ -42,6 +46,8 @@ export class StyleRulesModal extends Modal {
     this.contentEl.empty();
     this.contentEl.createEl('p', { text: 'Rules apply only to unstyled notes. When multiple rules match, the first matching rule is used.' });
     const add = this.contentEl.createEl('button', { cls: 'mod-cta', text: 'Add rule' });
+    add.disabled = this.plugin.settings.styleRules.length >= MAX_STYLE_RULES;
+    if (add.disabled) add.title = `The maximum of ${String(MAX_STYLE_RULES)} style rules has been reached.`;
     add.addEventListener('click', () => new StyleRuleEditorModal(this.plugin, null, () => this.render()).open());
     const list = this.contentEl.createDiv({ cls: 'templar-rules-list' });
     this.plugin.settings.styleRules.forEach((rule, index) => {
@@ -200,6 +206,8 @@ class StyleRuleEditorModal extends Modal {
     const conditions = this.contentEl.createDiv({ cls: 'templar-rule-conditions' });
     this.rule.conditions.forEach((condition, index) => this.renderCondition(conditions, condition, index));
     const add = this.contentEl.createEl('button', { text: 'Add condition' });
+    add.disabled = this.rule.conditions.length >= MAX_RULE_CONDITIONS;
+    if (add.disabled) add.title = `The maximum of ${String(MAX_RULE_CONDITIONS)} conditions per rule has been reached.`;
     add.addEventListener('click', () => { this.rule.conditions.push({ type: 'tag', tag: '' }); this.render(); });
     const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
     const cancel = actions.createEl('button', { text: 'Cancel' }); cancel.addEventListener('click', () => this.close());
@@ -238,6 +246,8 @@ class StyleRuleEditorModal extends Modal {
 
   private async save(): Promise<void> {
     if (!this.rule.name.trim() || this.rule.conditions.length === 0) throw new Error('Give the rule a name and at least one condition.');
+    if (this.rule.conditions.length > MAX_RULE_CONDITIONS) throw new Error(`Templar supports at most ${String(MAX_RULE_CONDITIONS)} conditions per style rule.`);
+    if (this.index === null && this.plugin.settings.styleRules.length >= MAX_STYLE_RULES) throw new Error(`Templar supports at most ${String(MAX_STYLE_RULES)} style rules.`);
     const empty = this.rule.conditions.some((condition) => condition.type === 'folder' ? !condition.folder.trim() : condition.type === 'tag' ? !condition.tag.trim() : condition.type === 'filename' ? !condition.value.trim() : !condition.property.trim());
     if (empty) throw new Error('Complete every condition before saving.');
     await this.plugin.updateSettings((draft) => {

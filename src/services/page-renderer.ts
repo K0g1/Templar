@@ -23,8 +23,10 @@ import { ReadingWhitespaceController } from './rendering/reading-whitespace-cont
 import { OwnedStyleHost } from './rendering/style-host';
 import {
   diagnoseBaselineAlignment,
+  serializeBaselineDiagnostic,
   type BaselineDiagnosticReport,
 } from './baseline-diagnostic';
+import { writeTextToClipboard } from '../utils/clipboard';
 
 interface StyledView {
   contentEl: HTMLElement;
@@ -197,6 +199,19 @@ export class PageRenderer {
         stats: this.baselineGrid.stats(leaf),
       })
       : null;
+  }
+
+  public toggleBaselineDebugOverlay(leaf: WorkspaceLeaf): boolean {
+    return this.baselineGrid.toggleDebugOverlay(leaf);
+  }
+
+  public async copyBaselineDiagnostic(leaf: WorkspaceLeaf): Promise<BaselineDiagnosticReport | null> {
+    const report = this.baselineDiagnostic(leaf);
+    if (!report) return null;
+    const document = this.styledViews.get(leaf)?.contentEl.ownerDocument;
+    if (!document) throw new Error('The current styled note no longer has an owner document.');
+    await writeTextToClipboard(serializeBaselineDiagnostic(report), document);
+    return report;
   }
 
   public registerReadingSection(

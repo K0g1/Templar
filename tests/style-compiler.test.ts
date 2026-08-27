@@ -23,16 +23,11 @@ describe('structured style compiler', () => {
       'test',
       metrics,
     );
-    expect(result.css).toContain('--templar-baseline-position: 81px');
-    expect(result.css).toContain('--templar-editor-baseline-position: 81px');
     expect(result.css).toContain(
       '--templar-grid-origin: 81px',
     );
     expect(result.css).toContain(
-      '--templar-paper-baseline-position: var(--templar-grid-origin)',
-    );
-    expect(result.css).toContain(
-      'background-position: 0 0, 0 var(--templar-paper-baseline-position)',
+      'background-position: 0 0, 0 var(--templar-grid-origin)',
     );
     expect(result.css).toContain('line-height: 30px');
   });
@@ -54,10 +49,10 @@ describe('structured style compiler', () => {
     ).css;
 
     expect(dotCss).toContain(
-      'background-position: calc(min(96px, 18%) - 14px) calc(var(--templar-paper-baseline-position) - 14px)',
+      'background-position: calc(min(96px, 18%) - 14px) calc(var(--templar-grid-origin) - 14px)',
     );
     expect(graphCss).toContain(
-      'background-position: min(96px, 18%) var(--templar-paper-baseline-position)',
+      'background-position: min(96px, 18%) var(--templar-grid-origin)',
     );
     expect(graphCss).toContain(
       '.templar-page :is(p, li, .HyperMD-paragraph, .HyperMD-list-line, .HyperMD-quote)',

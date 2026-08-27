@@ -22,7 +22,7 @@ function harness(): ManualObserverHarness {
   const mutation = { callback: (() => undefined) as MutationCallback, observed: [] as Element[], disconnects: 0 };
   class TestResizeObserver {
     public constructor(callback: ResizeObserverCallback) {
-      resize.callback = (entries) => callback(entries, this);
+      resize.callback = (entries) => { callback(entries, this); };
     }
     public observe(element: Element): void { resize.observed.push(element); }
     public unobserve(element: Element): void { resize.observed.splice(resize.observed.indexOf(element), 1); }
@@ -93,8 +93,7 @@ describe('BaselineGridController', () => {
     const leaf = {} as WorkspaceLeaf;
     controller.configure(leaf, { contentEl: dom.root, style: testStyle(), metrics: testMetrics() });
     const before = controller.stats(leaf)!;
-    const eventConstructor = owner.window.Event as unknown as { new (type: string): Event };
-    dom.root.dispatchEvent(new eventConstructor('scroll'));
+    dom.root.dispatchEvent(new Event('scroll'));
     expect(controller.stats(leaf)).toEqual(before);
     expect(dom.content.style.getPropertyValue('--templar-grid-origin')).toBe('81px');
     expect(dom.content.style.getPropertyValue('--templar-paper-baseline-position')).toBe('');

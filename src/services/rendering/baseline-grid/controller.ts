@@ -36,6 +36,7 @@ const NATURAL_MARGIN_BEFORE_PROPERTY = '--templar-grid-natural-margin-before';
 const NATURAL_MARGIN_AFTER_PROPERTY = '--templar-grid-natural-margin-after';
 const OWNER_PROPERTY = 'data-templar-baseline-owner';
 const DEFAULT_TOLERANCE = 0.4;
+const MAX_SETTLE_PASSES = 8;
 
 interface RootRuntime extends BaselineGridRootState {
   geometryScale: number;
@@ -232,7 +233,8 @@ export class BaselineGridController {
       needsFullScan: true,
       settlePasses: 0,
       debug: false,
-      mutationObserver: new realm.MutationObserver(() => {
+      mutationObserver: new realm.MutationObserver((records) => {
+        if (!records.some((record) => this.mutationAffectsFlow(record))) return;
         state.stats.mutationObserverCallbacks += 1;
         state.needsFullScan = true;
         this.schedule(leaf);
@@ -332,6 +334,11 @@ export class BaselineGridController {
     const dirty = [...state.dirty];
     state.dirty.clear();
     if (dirty.length === 0) return;
+    state.settlePasses += 1;
+    if (state.settlePasses > MAX_SETTLE_PASSES) {
+      for (const element of dirty) this.markNonConverged(state, element);
+      return;
+    }
     state.stats.dirtyScans += 1;
     const rootsToProcess = new Set<RootRuntime>();
     for (const element of dirty) {
@@ -343,7 +350,8 @@ export class BaselineGridController {
         .filter(([, element]) => dirty.includes(element))
         .map(([index]) => index);
       const start = Math.max(0, Math.min(...indices, root.flowItems.length - 1));
-      this.processRoot(root, start);
+      const changed = this.processRoot(root, start, start + 1);
+      if (!changed) state.settlePasses = 0;
     }
     if (state.debug) for (const root of rootsToProcess) this.overlay.render(this.debugSnapshot(root));
   }
@@ -419,21 +427,27 @@ export class BaselineGridController {
     state.observedTargets = targets;
   }
 
-  private processRoot(root: RootRuntime, startIndex: number): void {
-    const measurements = this.measureRoot(root, startIndex);
-    if (measurements.length === 0) return;
+  private processRoot(root: RootRuntime, startIndex: number, endIndex = root.flowItems.length): boolean {
+    const measurements = this.measureRoot(root, startIndex, endIndex);
+    if (measurements.length === 0) return false;
     const tableRowDeltas = this.prepareTableRows(root, measurements);
     const corrections = this.computeCorrections(root, measurements, startIndex, tableRowDeltas);
+    const changed = measurements.some((measurement) => {
+      const previous = root.corrections.get(measurement.element);
+      const next = corrections.get(measurement.element);
+      return previous?.before !== next?.before || previous?.after !== next?.after || previous?.reason !== next?.reason;
+    });
     this.writeCorrections(root, measurements, corrections);
     for (const measurement of measurements) root.measurements.set(measurement.element, measurement);
     for (const [element, correction] of corrections) root.corrections.set(element, correction);
+    return changed;
   }
 
-  private measureRoot(root: RootRuntime, startIndex: number): RhythmMeasurement[] {
+  private measureRoot(root: RootRuntime, startIndex: number, endIndex = root.flowItems.length): RhythmMeasurement[] {
     const pageRect = root.pageContent.getBoundingClientRect();
     const scale = root.geometryScale > 0 ? root.geometryScale : 1;
     const measurements: RhythmMeasurement[] = [];
-    for (let index = startIndex; index < root.flowItems.length; index += 1) {
+    for (let index = startIndex; index < Math.min(endIndex, root.flowItems.length); index += 1) {
       const element = root.flowItems[index]!;
       const kind = classifyFlowElement(element, root.view);
       if (!kind) continue;
@@ -537,14 +551,16 @@ export class BaselineGridController {
     const scale = root.geometryScale > 0 ? root.geometryScale : 1;
     let boundary = root.style.layout.paddingTop;
     if (!first) return boundary;
+    const firstRect = first.getBoundingClientRect();
     const constructor = first.ownerDocument.defaultView?.HTMLElement;
-    for (let sibling = first.previousElementSibling; sibling; sibling = sibling.previousElementSibling) {
-      if (!constructor || !sibling.instanceOf(constructor)) continue;
-      const candidate = sibling;
-      if (candidate.matches('.metadata-container, .mod-frontmatter, .mod-header, .mod-ui, .inline-title')) {
-        const rect = candidate.getBoundingClientRect();
-        boundary = Math.max(boundary, (rect.bottom - pageRect.top) / scale + parsePixels(root.pageContent.ownerDocument.defaultView?.getComputedStyle(candidate).marginBottom));
-      }
+    const candidates = root.pageContent.querySelectorAll<HTMLElement>(
+      ':scope > .metadata-container, :scope > .mod-frontmatter, :scope > .mod-header, :scope > .mod-ui',
+    );
+    for (const candidate of candidates) {
+      if (!constructor || !candidate.instanceOf(constructor) || candidate === first || candidate.contains(first)) continue;
+      const rect = candidate.getBoundingClientRect();
+      if (rect.bottom > firstRect.top + root.lattice.tolerance * scale) continue;
+      boundary = Math.max(boundary, (rect.bottom - pageRect.top) / scale + parsePixels(root.pageContent.ownerDocument.defaultView?.getComputedStyle(candidate).marginBottom));
     }
     return boundary;
   }
@@ -631,7 +647,7 @@ export class BaselineGridController {
     for (const [index, element] of root.flowItems.entries()) {
       const kind = classifyFlowElement(element, root.view);
       if (!kind) continue;
-      const measurement = root.measurements.get(element) ?? this.measureRoot(root, index)[0];
+      const measurement = root.measurements.get(element) ?? this.measureRoot(root, index, index + 1)[0];
       if (!measurement) continue;
       const correction = root.corrections.get(element);
       const x = Math.max(8, root.pageContent.offsetWidth - 12);
@@ -660,6 +676,29 @@ export class BaselineGridController {
     element.style.removeProperty(BASELINE_AFTER_PROPERTY);
     element.style.removeProperty(NATURAL_MARGIN_BEFORE_PROPERTY);
     element.style.removeProperty(NATURAL_MARGIN_AFTER_PROPERTY);
+  }
+
+  private markNonConverged(state: ObservationState, element: HTMLElement): void {
+    const root = state.roots.find((candidate) => candidate.flowItems.includes(element));
+    const index = root?.flowItems.indexOf(element) ?? 0;
+    const id = elementId(element, Math.max(0, index));
+    if (!state.stats.nonConvergedElements.includes(id)) state.stats.nonConvergedElements.push(id);
+  }
+
+  private mutationAffectsFlow(record: MutationRecord): boolean {
+    if (record.type === 'characterData') return true;
+    if (record.target.nodeType === 1) {
+      const target = record.target as Element;
+      if (target.matches('.templar-baseline-debug-overlay, .templar-baseline-debug-overlay *') ||
+        target.closest('.templar-baseline-debug-overlay')) return false;
+    }
+    const nodes = [...record.addedNodes, ...record.removedNodes];
+    if (nodes.length === 0) return true;
+    return nodes.some((node) => {
+      if (node.nodeType !== 1) return true;
+      const element = node as Element;
+      return !element.matches('.templar-baseline-debug-overlay, .templar-baseline-debug-overlay *');
+    });
   }
 
   private cleanupOwnedDom(contentEl: HTMLElement): void {

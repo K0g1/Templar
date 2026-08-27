@@ -43,9 +43,13 @@ ${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .cm-line.temp
   padding-block-end: 0 !important;
 }
 
+${scope} .markdown-source-view.mod-cm6 .templar-page .cm-content > .templar-baseline-grid-item.templar-baseline-grid-atomic {
+  margin-block-end: calc(var(--templar-grid-natural-margin-after, 0px) + var(--templar-grid-after, 0px)) !important;
+}
+
 ${scope} .markdown-preview-view.templar-page .templar-baseline-grid-intentional {
   display: block;
-  height: calc(var(--templar-body-line-height) * var(--templar-blank-lines, 1)) !important;
+  height: calc(var(--templar-grid-unit) * var(--templar-blank-lines, 1)) !important;
   margin: 0 !important;
   min-height: 0 !important;
   padding: 0 !important;

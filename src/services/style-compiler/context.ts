@@ -47,7 +47,7 @@ export function createStyleCompilerContext(
     paddingRight,
     paperPattern: patternDeclarations(
       style,
-      'var(--templar-paper-baseline-position)',
+      'var(--templar-grid-origin)',
       paddingLeft,
     ),
     codePadding: gridded

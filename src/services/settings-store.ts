@@ -1,6 +1,6 @@
 import type { TemplarSettings } from '../types';
 import { clone } from '../utils/value';
-import { normalizeSettings } from '../templates/settings';
+import { assertStyleRuleLimits, normalizeSettings } from '../templates/settings';
 
 /**
  * Owns the durable boundary for plugin settings.
@@ -24,6 +24,7 @@ export class SettingsStore {
     const run = this.tail.then(async () => {
       const draft = clone(this.current);
       const result = mutate(draft);
+      assertStyleRuleLimits(draft);
       const candidate = normalizeSettings(draft);
       // Never hand the live object to an adapter that might retain or mutate
       // it while the transaction is still being committed.

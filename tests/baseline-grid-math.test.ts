@@ -49,6 +49,12 @@ describe('absolute baseline-grid math', () => {
     expect(44 + nearestLegalGridDelta(44, 45, grid)).toBeGreaterThanOrEqual(45);
   });
 
+  it('advances across multiple occupied rows when the boundary is far ahead', () => {
+    const grid = lattice(24, 6);
+    expect(nearestLegalGridDelta(10, 80, grid)).toBe(92);
+    expect(10 + nearestLegalGridDelta(10, 80, grid)).toBe(102);
+  });
+
   it('computes block tails from absolute bottom phase rather than height phase', () => {
     const grid = lattice(30, 7.25);
     const bottom = grid.origin + (4 * grid.unit) + 17.3;

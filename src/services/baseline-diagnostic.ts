@@ -2,7 +2,12 @@ import { TEMPLAR_CONTENT_CLASS, TEMPLAR_PAGE_CLASS } from '../constants';
 import type { FontMetrics } from '../types';
 import { measuredGeometryScale } from '../utils/grid';
 import type { PageMetricSet } from './style-compiler';
-import { collectFlowItems, isAtomicKind } from './rendering/baseline-grid/classifier';
+import {
+  BASELINE_GRID_ITEM_CLASS,
+  collectFlowItems,
+  flowOwner,
+  isAtomicKind,
+} from './rendering/baseline-grid/classifier';
 import { distanceToGrid, type GridLattice } from './rendering/baseline-grid/math';
 import type { BaselineGridRootState, BaselineGridStats, BaselineView, RhythmKind } from './rendering/baseline-grid/types';
 
@@ -63,6 +68,7 @@ export interface BaselineDiagnosticReport {
   rafCallbacks: number;
   failureCount: number;
   failures: BaselineDiagnosticFailure[];
+  nonConvergedElements: string[];
   /** Beta2 alias. */
   unit: number;
 }
@@ -74,7 +80,7 @@ export interface BaselineDiagnosticOptions {
 }
 
 const TEXT_SELECTOR = [
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'pre > code',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', '.inline-title', 'p', 'li', 'pre > code',
   'th', 'td', '.callout-title', '.callout-content > p', '.callout-content li',
   '.cm-content > .cm-line',
 ].join(',');
@@ -196,8 +202,13 @@ export function diagnoseBaselineAlignment(
   const rootStates = resolvedOptions.roots ?? [];
   const rootByPageContent = new Map(rootStates.map((root) => [root.pageContent, root]));
   const firstPageRoot = pageRoots[0];
+  const firstContent = firstPageRoot?.querySelector<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`);
+  const firstWindow = firstPageRoot?.ownerDocument.defaultView;
   const unit = parsePixels(
-    firstPageRoot?.querySelector<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`)?.ownerDocument.defaultView?.getComputedStyle(firstPageRoot).getPropertyValue('--templar-grid') ?? '',
+    firstContent && firstWindow
+      ? firstWindow.getComputedStyle(firstContent).getPropertyValue('--templar-grid') ||
+        firstWindow.getComputedStyle(firstPageRoot).getPropertyValue('--templar-grid')
+      : '',
   );
   const report: BaselineDiagnosticReport = {
     gridUnit: unit,
@@ -226,6 +237,7 @@ export function diagnoseBaselineAlignment(
     rafCallbacks: resolvedOptions.stats?.rafCallbacks ?? 0,
     failureCount: 0,
     failures: [],
+    nonConvergedElements: [...(resolvedOptions.stats?.nonConvergedElements ?? [])],
     unit,
   };
   if (unit <= 0) return report;
@@ -240,6 +252,7 @@ export function diagnoseBaselineAlignment(
     const view = viewFor(pageContent);
     views.add(view);
     const lattice = rootByPageContent.get(pageContent)?.lattice ?? latticeFor(pageContent, unit, metrics);
+    const rootState = rootByPageContent.get(pageContent);
     const scale = geometryScale(pageContent);
     const contentRect = pageContent.getBoundingClientRect();
     const viewWindow = pageContent.ownerDocument.defaultView;
@@ -257,16 +270,31 @@ export function diagnoseBaselineAlignment(
     const pageSpanValue = pageSpan > 0 ? pageSpan : pageHeight;
 
     for (const item of flowItems) {
-      if (!visible(item) && !item.hasClass('templar-blank-line-spacer')) continue;
-      const kind = rootByPageContent.get(pageContent)?.measurements.get(item)?.kind ??
+      const itemRect = item.getBoundingClientRect();
+      if (itemRect.width <= 0 && itemRect.height <= 0 && !item.hasClass('templar-blank-line-spacer')) continue;
+      const kind = rootState?.measurements.get(item)?.kind ??
         (item.hasClass('cm-line') ? 'editor-line' : item.matches('img') ? 'image' : 'atomic');
       const rect = item.getBoundingClientRect();
       const top = (rect.top - contentRect.top) / scale;
       const bottom = (rect.bottom - contentRect.top) / scale;
       const itemPage = pageIndex(top, pageSpanValue);
+      const itemStyle = viewWindow?.getComputedStyle(item);
       report.blocksChecked += 1;
       if (isAtomicKind(kind)) report.widgetsChecked += 1;
-      const itemStyle = viewWindow?.getComputedStyle(item);
+      const floatImage = kind === 'image' &&
+        (itemStyleFloat(item, viewWindow ?? undefined) !== 'none');
+      const owned = item.classList.contains(BASELINE_GRID_ITEM_CLASS) && item.dataset.templarBaselineOwner === 'true';
+      if (!owned && !item.hasClass('templar-blank-line-spacer')) {
+        idCounter += 1;
+        report.failures.push(failureFor(item, view, 'ownership', top, top, itemPage, Math.round(top / unit), 1, `baseline-${String(idCounter)}`));
+      }
+      if (rootState && flowOwner(item, view) !== item && view === 'live-preview') {
+        idCounter += 1;
+        report.failures.push(failureFor(item, view, 'ownership', top, top, itemPage, Math.round(top / unit), 1, `baseline-${String(idCounter)}`));
+      }
+      const requiresEntry = !floatImage && kind !== 'editor-line' &&
+        !(view === 'live-preview' && isAtomicKind(kind)) &&
+        !(kind === 'image' && rootState?.style.baseline.snapImages === false);
       const entryValue = kind === 'image' || isAtomicKind(kind)
         ? top
         : (() => {
@@ -278,9 +306,9 @@ export function diagnoseBaselineAlignment(
         })();
       const entry = expectedGridPosition(entryValue, lattice);
       const entryError = distanceToGrid(entryValue, lattice);
-      if (entryError > tolerance) {
+      if ((requiresEntry || kind === 'editor-line') && entryError > tolerance) {
         idCounter += 1;
-        report.failures.push(failureFor(item, view, kind === 'editor-line' ? 'editor-line' : 'block-entry', entryValue, entry.expected, itemPage, entry.row, entryError, `baseline-${String(idCounter)}`));
+        report.failures.push(failureFor(item, view, 'block-entry', entryValue, entry.expected, itemPage, entry.row, entryError, `baseline-${String(idCounter)}`));
       }
       const correctionBefore = parsePixels(item.style.getPropertyValue('--templar-grid-before'));
       const correctionAfter = parsePixels(item.style.getPropertyValue('--templar-grid-after'));
@@ -296,6 +324,7 @@ export function diagnoseBaselineAlignment(
         }
         continue;
       }
+      if (kind === 'editor-line' || floatImage) continue;
       const exitValue = bottom + parsePixels(itemStyle?.marginBlockEnd ?? itemStyle?.marginBottom);
       const exit = expectedGridPosition(exitValue, lattice);
       const exitError = distanceToGrid(exitValue, lattice);
@@ -304,6 +333,14 @@ export function diagnoseBaselineAlignment(
         idCounter += 1;
         report.failures.push(failureFor(item, view, 'block-exit', exitValue, exit.expected, itemPage, exit.row, exitError, `baseline-${String(idCounter)}`));
       }
+    }
+
+    const ownedItems = new Set(flowItems);
+    for (const owned of pageContent.querySelectorAll<HTMLElement>(`.${BASELINE_GRID_ITEM_CLASS}`)) {
+      if (ownedItems.has(owned) || owned.hasClass('templar-blank-line-spacer')) continue;
+      const rect = owned.getBoundingClientRect();
+      idCounter += 1;
+      report.failures.push(failureFor(owned, view, 'ownership', rect.top - contentRect.top, rect.top - contentRect.top, pageIndex((rect.top - contentRect.top) / scale, pageSpanValue), Math.round((rect.top - contentRect.top) / scale / unit), 1, `baseline-${String(idCounter)}`));
     }
 
     const textCandidates = [...pageContent.querySelectorAll<HTMLElement>(TEXT_SELECTOR)]
@@ -348,9 +385,18 @@ export function diagnoseBaselineAlignment(
     }
   }
   report.viewType = views.size === 1 ? [...views][0]! : views.size > 1 ? 'mixed' : 'unknown';
+  for (const id of report.nonConvergedElements) {
+    idCounter += 1;
+    const page = firstPageRoot?.querySelector<HTMLElement>(`.${TEMPLAR_CONTENT_CLASS}`) ?? contentEl;
+    report.failures.push(failureFor(page, report.viewType === 'mixed' || report.viewType === 'unknown' ? 'reading' : report.viewType, 'non-convergence', 0, 0, 0, 0, 1, id));
+  }
   report.meanBaselineError = baselineSamples > 0 ? totalBaselineError / baselineSamples : 0;
   report.failureCount = report.failures.length;
   return report;
+}
+
+function itemStyleFloat(element: HTMLElement, view: Window | undefined): string {
+  return view?.getComputedStyle(element).float ?? 'none';
 }
 
 export function formatBaselineDiagnostic(report: BaselineDiagnosticReport): string {

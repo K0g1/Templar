@@ -101,6 +101,22 @@ export function normalizeStyleRules(value: unknown): StyleRule[] {
   });
 }
 
+/**
+ * Enforce the authored settings limits at the durable boundary.
+ *
+ * Normalization intentionally remains tolerant for data loaded from disk, but
+ * user mutations must never silently discard authored rules or conditions.
+ */
+export function assertStyleRuleLimits(settings: Pick<TemplarSettings, 'styleRules'>): void {
+  if (settings.styleRules.length > MAX_STYLE_RULES) {
+    throw new Error(`Templar supports at most ${String(MAX_STYLE_RULES)} style rules.`);
+  }
+  const oversized = settings.styleRules.findIndex((rule) => rule.conditions.length > MAX_RULE_CONDITIONS);
+  if (oversized >= 0) {
+    throw new Error(`Templar supports at most ${String(MAX_RULE_CONDITIONS)} conditions per style rule.`);
+  }
+}
+
 function normalizeIds(value: unknown, maximum: number): string[] {
   return [...new Set(stringArray(value, []).map((id) => id.trim()).filter(Boolean))]
     .slice(0, maximum);

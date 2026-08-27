@@ -1,6 +1,7 @@
 import type { App, TFile } from 'obsidian';
 import {
   CURRENT_TEMPLAR_FORMAT_VERSION,
+  CURRENT_SETTINGS_DATA_VERSION,
   MAX_RECOVERY_RAW_BYTES,
   RECOVERY_FOLDER,
   RECOVERY_RECORD_VERSION,
@@ -75,7 +76,7 @@ export class RecoveryService {
       createdAt: new Date().toISOString(),
       pluginVersion: this.pluginVersion,
       sourceSchemaVersion: null,
-      currentSupportedSchemaVersion: CURRENT_TEMPLAR_FORMAT_VERSION,
+      currentSupportedSchemaVersion: CURRENT_SETTINGS_DATA_VERSION,
       reason,
       raw,
     }, 'settings');

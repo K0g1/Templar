@@ -89,10 +89,10 @@ export function nearestLegalGridDelta(
   const current = finite(position, origin);
   const minimum = finite(minimumPosition, Number.NEGATIVE_INFINITY);
   const nearestRow = Math.round((current - origin) / unit);
-  let target = origin + nearestRow * unit;
-  if (target < minimum) {
-    target += unit;
-  }
+  const minimumRow = Number.isFinite(minimum)
+    ? Math.ceil((minimum - origin) / unit)
+    : Number.NEGATIVE_INFINITY;
+  const target = origin + Math.max(nearestRow, minimumRow) * unit;
   return target - current;
 }
 

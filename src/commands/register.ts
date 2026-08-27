@@ -35,6 +35,40 @@ export function registerCommands(plugin: TemplarPlugin): void {
     },
   });
   registerCommand(plugin, {
+    id: 'copy-detailed-ruled-line-diagnostic',
+    name: 'Copy detailed ruled-line alignment diagnostic',
+    checkCallback: (checking) => {
+      const leaf = plugin.activeMarkdownLeaf();
+      const file = plugin.activeFile();
+      const available = leaf !== null && file !== null && plugin.frontmatter.hasStyle(file);
+      if (available && !checking && leaf) {
+        runUserAction(async () => {
+          const report = await plugin.renderer.copyBaselineDiagnostic(leaf);
+          if (!report) {
+            new Notice('Detailed ruled-line diagnostic is unavailable until the current page finishes rendering.');
+            return;
+          }
+          new Notice(`Copied detailed ruled-line diagnostic (${String(report.failureCount)} issues).`);
+        }, 'Could not copy ruled-line diagnostic');
+      }
+      return available;
+    },
+  });
+  registerCommand(plugin, {
+    id: 'toggle-ruled-line-debug-overlay',
+    name: 'Toggle ruled-line debug overlay',
+    checkCallback: (checking) => {
+      const leaf = plugin.activeMarkdownLeaf();
+      const file = plugin.activeFile();
+      const available = leaf !== null && file !== null && plugin.frontmatter.hasStyle(file);
+      if (available && !checking && leaf) {
+        const enabled = plugin.renderer.toggleBaselineDebugOverlay(leaf);
+        new Notice(enabled ? 'Ruled-line debug overlay enabled.' : 'Ruled-line debug overlay disabled.');
+      }
+      return available;
+    },
+  });
+  registerCommand(plugin, {
     id: 'open-templar-recovery',
     name: 'Open Templar recovery for current note',
     checkCallback: (checking) => {
