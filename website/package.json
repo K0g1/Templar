@@ -10,7 +10,7 @@
     "build": "npm run generate && astro build && node scripts/verify-content.mjs && node scripts/verify-built-links.mjs && node scripts/merge-sitemap.mjs && node scripts/write-404.mjs"
   },
   "dependencies": {
-    "@astrojs/starlight": "0.41.7",
+    "@astrojs/starlight": "0.41.10",
     "astro": "7.2.1",
     "sharp": "0.35.3"
   },
